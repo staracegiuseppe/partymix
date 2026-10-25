@@ -5,11 +5,12 @@ Ultimo aggiornamento: 2026-10-25. Solo ciò che è stato davvero eseguito.
 ## Eseguito
 | Verifica | Esito |
 |---|---|
-| Test automatici (`npm test`): coda, curve, automix con orologio finto, adattatore YouTube, caricamento playlist, impostazioni, scorciatoie, trascinamento, seek, testi, sincronizzazione playlist, proiettore | 137 test superati |
+| Test automatici (`npm test`): coda, curve, automix con orologio finto, adattatore YouTube, caricamento playlist, impostazioni, scorciatoie, trascinamento, seek, testi, sincronizzazione playlist, proiettore | 147 test superati |
 | macOS (Apple Silicon), app Tauri reale: playlist `PLfBfxMb0qlFw` (65 brani) caricata, automix avviato, crossfade riuscito, brano successivo preparato, nessun errore 153 | OK |
 | macOS: finestra proiettore su secondo schermo (2 monitor rilevati), microfono attivo, forme e testo sincronizzato mostrati | OK |
-| macOS: build di rilascio, `PartyMix AI_0.1.0_aarch64.dmg` (3,7 MB) | Generato; installazione da DMG non ancora provata a mano |
+| macOS: build di rilascio, `PartyMix AI_0.1.0_aarch64.dmg` (3,7 MB) | Generato con `hdiutil` (lo script grafico di Tauri si blocca in attesa di Finder) e verificato come valido; installazione da DMG non ancora provata a mano |
 | Revisione finale indipendente del codice: 5 problemi importanti trovati e corretti con test (rete assente, comandi premuti mentre il deck libero è prestato, Stop sull'ultimo brano, pausa in crossfade, comando proiettore su Windows) | Corretti |
+| Allineamento manuale dei testi (tocco su una riga, azzeramento) per versioni karaoke | OK nel browser; non provato con un karaoke reale sul proiettore |
 | Aggiornamento playlist con automix in corso (deck libero prestato e brano successivo ripreparato) | OK nel browser; i casi "nuovi/rimossi" sono coperti da test, non da una playlist reale modificata |
 
 ## Non eseguito
