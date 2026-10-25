@@ -11,6 +11,8 @@ export type YtPlayerLike = {
   setVolume(v: number): void;
   getCurrentTime(): number;
   getDuration(): number;
+  cuePlaylist?(a: { listType: 'playlist'; list: string }): void;
+  getPlaylist?(): string[];
 };
 
 export function mapYtError(code: number): { kind: 'unplayable' | 'retry'; reason: string } {
@@ -49,10 +51,24 @@ export class YouTubeDeck implements Deck {
     this.wantPlay = false;
     this.retries = 0;
     this.settle(new Error('Caricamento sostituito'));
+    return this.cueWith(() => this.player.cueVideoById(videoId));
+  }
+
+  /** Cues a whole playlist on this player and returns its video ids (YouTube exposes up to ~200). */
+  async readPlaylist(listId: string): Promise<string[]> {
+    this.videoId = '';
+    this.wantPlay = false;
+    this.retries = 0;
+    this.settle(new Error('Caricamento sostituito'));
+    await this.cueWith(() => this.player.cuePlaylist?.({ listType: 'playlist', list: listId }));
+    return this.player.getPlaylist?.() ?? [];
+  }
+
+  private cueWith(cue: () => void): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => this.settle(new Error('Timeout di caricamento')), LOAD_TIMEOUT_MS);
       this.pending = { resolve, reject, timeout };
-      this.player.cueVideoById(videoId);
+      cue();
     });
   }
 

@@ -17,3 +17,12 @@ export function parsePlaylistInput(text: string): ParsedInput {
   if (VIDEO_ID.test(v)) return { kind: 'video', videoId: v };
   return { kind: 'invalid' };
 }
+
+/** The video id in a link, even when the link also carries a playlist id. */
+export function videoIdFromUrl(text: string): string | undefined {
+  let url: URL;
+  try { url = new URL(text.trim()); } catch { return undefined; }
+  if (!HOSTS.has(url.hostname)) return undefined;
+  const v = url.hostname === 'youtu.be' ? url.pathname.slice(1) : url.searchParams.get('v') ?? '';
+  return VIDEO_ID.test(v) ? v : undefined;
+}
