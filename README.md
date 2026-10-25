@@ -24,7 +24,7 @@ Funziona su **macOS** e **Windows** (app Tauri 2: leggera, circa 10 MB). Niente 
 | Barra sotto il titolo | Trascinala per spostarti avanti e indietro nel brano in onda |
 | Coda | Trascina le righe per cambiare ordine (anche **Su/Giù**), **Blocca** impedisce di saltare un brano, **Casuale**, **Ripeti** |
 | Aggiorna ora / Aggiornamento automatico | Rilegge la playlist su YouTube: i brani nuovi finiscono in coda, quelli tolti spariscono (mai quello in onda né i brani aggiunti a mano). Automatico ogni 2/5/10/30 minuti o solo manuale |
-| Testo | Mostra il testo sincronizzato; **Anticipa/Ritarda 0,5 s** corregge versioni diverse dall'originale |
+| Testo | Mostra il testo (sincronizzato, di una versione con durata diversa, o con tempi stimati: lo dice sempre); **Anticipa/Ritarda 0,5 s** corregge versioni diverse dall'originale |
 
 Scorciatoie (con l'app in primo piano): `→` prossimo · `Spazio` pausa/riprendi · `S` ferma · `M` transizione immediata · `↑`/`↓` volume.
 
@@ -35,7 +35,7 @@ Vedi [docs/LIMITI-YOUTUBE.md](docs/LIMITI-YOUTUBE.md). In sintesi: crossfade di 
 
 ## Privacy
 - Il microfono serve solo a far muovere le forme: l'audio viene analizzato in tempo reale, **non registrato né salvato**.
-- Per i testi l'app invia titolo e artista a [LRCLIB](https://lrclib.net); per titoli e copertine interroga l'oEmbed di YouTube. Nessun account, nessuna chiave API.
+- Per i testi l'app invia titolo e artista a [LRCLIB](https://lrclib.net) (testi con i tempi) e, se non basta, a [lyrics.ovh](https://lyrics.ovh) (solo testo); per titoli e copertine interroga l'oEmbed di YouTube. Nessun account, nessuna chiave API.
 
 ## Note legali
 I testi appartengono ai rispettivi autori: mostrarli su un proiettore in pubblico può richiedere licenze. Lo stesso vale per la musica nelle feste pubbliche. Verifica cosa serve per il tuo evento.
@@ -43,7 +43,7 @@ I testi appartengono ai rispettivi autori: mostrarli su un proiettore in pubblic
 ## Sviluppo
 ```bash
 npm install
-npm test                    # 108 test (logica, automix, YouTube, testi, UI)
+npm test                    # 137 test (logica, automix, YouTube, testi, UI)
 npx tauri dev               # avvia l'app
 npx tauri build --bundles dmg   # su macOS; su Windows: npx tauri build
 ```

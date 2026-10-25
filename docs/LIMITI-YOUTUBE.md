@@ -12,7 +12,7 @@ PartyMix AI usa solo il **player ufficiale incorporato (IFrame API)**. Non scari
 ## Limitato
 - **Playlist**: solo pubbliche o non in elenco; YouTube espone al massimo circa 200 video per playlist.
 - **Brani non incorporabili**: alcuni proprietari non permettono la riproduzione fuori da YouTube (errori 101/150). L'app li segnala e consente di sostituirli a mano.
-- **Testi**: dipendono dal database LRCLIB; un'esecuzione dal vivo o un remix può avere tempi diversi dall'originale (correggi con Anticipa/Ritarda).
+- **Testi**: cercati in più fonti (LRCLIB con tempi, poi lyrics.ovh). Tre casi, sempre dichiarati: *sincronizzato* (tempi veri), *durata diversa dal video* (tempi di un'altra versione, da correggere con Anticipa/Ritarda), *tempi stimati* (testo senza tempi distribuito sulla durata del brano: indicativo, non esatto). Se nessuna fonte ha il brano, il testo non compare.
 - **Forme sul proiettore**: seguono il suono della stanza tramite il microfono, quindi reagiscono anche a voci e rumore. L'audio di sistema (loopback) non è supportato.
 - **Windows**: vedi [VERIFICHE.md](VERIFICHE.md).
 
