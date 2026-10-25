@@ -112,3 +112,24 @@ describe('YouTubeDeck.seekTo', () => {
     expect(calls).toEqual(['seek:0:true', 'seek:199:true']);
   });
 });
+
+describe('YouTubeDeck load errors and retry cleanup', () => {
+  it('tags errors so callers can tell unplayable videos from network trouble', async () => {
+    const { d } = mk();
+    const unplayable = d.load('a'); d.handleError(150);
+    await expect(unplayable).rejects.toMatchObject({ kind: 'unplayable' });
+    const d2 = mk().d;
+    const exhausted = d2.load('b');
+    for (let i = 0; i < 4; i++) d2.handleError(5);
+    await expect(exhausted).rejects.toMatchObject({ kind: 'network' });
+  });
+  it('cancels a pending retry when a new video is loaded', () => {
+    const p = new FakePlayer();
+    const cleared: number[] = [];
+    const d = new YouTubeDeck(p, { setTimer: () => 77, clearTimer: (id) => cleared.push(id) });
+    d.load('a').catch(() => {});
+    d.handleError(5);
+    d.load('b').catch(() => {});
+    expect(cleared).toEqual([77]);
+  });
+});

@@ -28,12 +28,16 @@ export type AutomixDeps = {
   setTimer: (fn: () => void, ms: number) => number;
   clearTimer: (id: number) => void;
   log: typeof Log;
+  /** Network state; when offline, load failures are retried instead of marking tracks unplayable. */
+  online?: () => boolean;
 };
 
 const TICK_MS = 250;
 const LOAD_TIMEOUT_MS = 5000;
 const MANUAL_MIX_S = 8;
 const SPARE_MIN_REMAINING_S = 30;
+const RETRY_MS = 5000;
+const isUnplayable = (e: unknown) => (e as { kind?: string } | undefined)?.kind === 'unplayable';
 const SPARE_TIMEOUT_MS = 12000;
 
 export class Automix {
@@ -73,7 +77,9 @@ export class Automix {
     if (this.st === 'playing' || this.st === 'preparing') {
       const on = this.d.decks[this.active];
       if (!(on.duration() > 0) || on.duration() - on.position() < SPARE_MIN_REMAINING_S) return { ok: false, reason: 'Il brano sta per finire' };
-    } else if (this.st !== 'paused') {
+    } else if (this.st === 'paused') {
+      if (this.pausedFrom === 'crossfading') return { ok: false, reason: 'Transizione in pausa' };
+    } else {
       return { ok: false, reason: 'Automix non attivo' };
     }
     const pending = this.pending;
@@ -90,9 +96,12 @@ export class Automix {
     } finally {
       if (timer !== undefined) this.d.clearTimer(timer);
       this.borrowed = false;
-      if (this.st === 'playing' || this.st === 'preparing' || this.st === 'paused') { this.pending = pending; this.prepare(); }
+      if (this.st === 'playing' || this.st === 'preparing' || this.st === 'paused') { this.pending ??= pending; this.prepare(); }
     }
   }
+
+  /** Video id of the track prepared on the spare deck (undefined when none). */
+  upcomingId(): string | undefined { return this.preparedId; }
 
   nextStatus(): NextState { return this.nextState; }
 
@@ -121,6 +130,11 @@ export class Automix {
       } catch (e) {
         if (tok !== this.token) return;
         this.d.log('warn', 'deck.load_failed', { videoId: cur.videoId, error: String(e) });
+        if (!isUnplayable(e) && !(this.d.online?.() ?? true)) {
+          await new Promise<void>((r) => this.d.setTimer(r, RETRY_MS));
+          if (tok !== this.token) return;
+          continue;
+        }
         this.d.queue.markUnplayable(cur.videoId);
         if (!this.d.queue.advance()) { this.goIdle('queue.exhausted'); return; }
         continue;
@@ -184,6 +198,7 @@ export class Automix {
   private switchWhenReady(ms: number): void {
     if (this.nextState === 'ready') this.beginMix(ms);
     else if (this.nextState === 'loading') this.pending = { ms };
+    else if (this.d.queue.peekNext()) this.pending = { ms }; // next track is not prepared yet (spare deck lent, still starting): do it as soon as it is
     else this.goIdle('queue.end');
   }
 
@@ -215,6 +230,10 @@ export class Automix {
       (e) => {
         if (tok !== this.token) return;
         this.d.log('warn', 'deck.prepare_failed', { videoId: track.videoId, error: String(e) });
+        if (!isUnplayable(e) && !(this.d.online?.() ?? true)) {
+          this.d.setTimer(() => { if (tok === this.token) this.prepare(); }, RETRY_MS);
+          return;
+        }
         this.d.queue.markUnplayable(track.videoId);
         this.prepare();
       },
@@ -316,7 +335,7 @@ export class Automix {
     if (this.nextState === 'ready') { this.beginMix(mixSec * 1000); return; }
     this.st = 'preparing';
     this.dueSince ??= n;
-    if (n - this.dueSince >= LOAD_TIMEOUT_MS) {
+    if (n - this.dueSince >= LOAD_TIMEOUT_MS && (this.d.online?.() ?? true)) {
       if (this.preparedId) {
         this.d.log('warn', 'deck.prepare_timeout', { videoId: this.preparedId });
         this.d.queue.markUnplayable(this.preparedId);
@@ -330,6 +349,7 @@ export class Automix {
     this.token++;
     this.clearTick();
     this.resetNext();
+    this.d.decks.forEach((k) => k.stop());
     this.st = 'idle';
     this.d.log('info', 'automix.idle', { reason });
   }

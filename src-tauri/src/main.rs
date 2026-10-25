@@ -13,7 +13,7 @@ fn list_displays(app: tauri::AppHandle) -> Vec<String> {
 }
 
 #[tauri::command]
-fn open_projector(app: tauri::AppHandle, display: Option<String>) -> Result<(), String> {
+async fn open_projector(app: tauri::AppHandle, display: Option<String>) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("projector") {
         return w.set_focus().map_err(|e| e.to_string());
     }

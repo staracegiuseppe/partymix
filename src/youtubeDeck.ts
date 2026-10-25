@@ -28,6 +28,9 @@ export function mapYtError(code: number): { kind: 'unplayable' | 'retry'; reason
   }
 }
 
+export type LoadErrorKind = 'unplayable' | 'timeout' | 'network' | 'superseded';
+const loadError = (message: string, kind: LoadErrorKind) => Object.assign(new Error(message), { kind });
+
 const RETRY_DELAYS_MS = [1000, 3000, 7000];
 const LOAD_TIMEOUT_MS = 15000;
 
@@ -41,6 +44,7 @@ export class YouTubeDeck implements Deck {
   private videoId = '';
   private wantPlay = false;
   private retries = 0;
+  private retryTimer?: number;
   private pending?: { resolve: () => void; reject: (e: Error) => void; timeout: ReturnType<typeof setTimeout> };
   private endedCb: () => void = () => {};
   private errorCb: (code: number) => void = () => {};
@@ -51,7 +55,8 @@ export class YouTubeDeck implements Deck {
     this.videoId = videoId;
     this.wantPlay = false;
     this.retries = 0;
-    this.settle(new Error('Caricamento sostituito'));
+    this.cancelRetry();
+    this.settle(loadError('Caricamento sostituito', 'superseded'));
     return this.cueWith(() => this.player.cueVideoById({ videoId, startSeconds: 0.05 })); // 0 is treated as 'unset' and YouTube resumes from the last watched position
   }
 
@@ -60,14 +65,15 @@ export class YouTubeDeck implements Deck {
     this.videoId = '';
     this.wantPlay = false;
     this.retries = 0;
-    this.settle(new Error('Caricamento sostituito'));
+    this.cancelRetry();
+    this.settle(loadError('Caricamento sostituito', 'superseded'));
     await this.cueWith(() => this.player.cuePlaylist?.({ listType: 'playlist', list: listId }));
     return this.player.getPlaylist?.() ?? [];
   }
 
   private cueWith(cue: () => void): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => this.settle(new Error('Timeout di caricamento')), LOAD_TIMEOUT_MS);
+      const timeout = setTimeout(() => this.settle(loadError('Timeout di caricamento', 'timeout')), LOAD_TIMEOUT_MS);
       this.pending = { resolve, reject, timeout };
       cue();
     });
@@ -90,7 +96,7 @@ export class YouTubeDeck implements Deck {
   currentVideoId(): string { return this.videoId; }
   play(): void { this.wantPlay = true; this.player.playVideo(); }
   pause(): void { this.wantPlay = false; this.player.pauseVideo(); }
-  stop(): void { this.wantPlay = false; this.player.stopVideo(); }
+  stop(): void { this.wantPlay = false; this.cancelRetry(); this.player.stopVideo(); }
   setVolume(v: number): void { this.player.setVolume(Math.round(Math.min(100, Math.max(0, v)))); }
   position(): number { return this.player.getCurrentTime() || 0; }
   duration(): number { return this.player.getDuration() || 0; }
@@ -110,11 +116,16 @@ export class YouTubeDeck implements Deck {
     log('warn', 'youtube.error', { code, videoId: this.videoId, reason: m.reason });
     if (m.kind === 'retry' && this.retries < RETRY_DELAYS_MS.length) {
       const delay = RETRY_DELAYS_MS[this.retries++];
-      this.timers.setTimer(() => this.reload(), delay);
+      this.retryTimer = this.timers.setTimer(() => { this.retryTimer = undefined; this.reload(); }, delay);
       return;
     }
-    this.settle(new Error(m.reason));
+    this.settle(loadError(m.reason, m.kind === 'unplayable' ? 'unplayable' : 'network'));
     this.errorCb(code);
+  }
+
+  private cancelRetry(): void {
+    if (this.retryTimer !== undefined) this.timers.clearTimer(this.retryTimer);
+    this.retryTimer = undefined;
   }
 
   private reload(): void {

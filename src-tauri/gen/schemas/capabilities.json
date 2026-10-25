@@ -1,1 +1,1 @@
-{"main":{"identifier":"main","description":"Finestre di PartyMix servite da localhost","remote":{"urls":["http://localhost:*"]},"local":true,"windows":["main","projector"],"permissions":["core:default","allow-list-displays","allow-open-projector","allow-close-projector"]}}
+{"main":{"identifier":"main","description":"Finestre di PartyMix servite da localhost","remote":{"urls":["http://localhost:9527"]},"local":true,"windows":["main","projector"],"permissions":["core:default","allow-list-displays","allow-open-projector","allow-close-projector"]}}

@@ -58,6 +58,7 @@ function makeAutomix(): Automix {
     setTimer: (fn, ms) => window.setTimeout(fn, ms),
     clearTimer: (id) => window.clearTimeout(id),
     log,
+    online: () => navigator.onLine,
   });
 }
 
@@ -76,6 +77,16 @@ async function probe(videoId: string): Promise<{ ok: boolean; reason?: string }>
   try { await decks[1].load(videoId); return { ok: true }; } catch (e) { return { ok: false, reason: (e as Error).message }; }
 }
 
+/** Reads a playlist's video ids without interrupting the music: while the party runs it uses the spare deck. */
+async function readIds(id: string): Promise<string[]> {
+  if (am && am.state() !== 'idle') {
+    const r = await am.withSpareDeck((d) => (d as YouTubeDeck).readPlaylist(id));
+    if (!r.ok) throw new Error(`${r.reason}: aspetta qualche secondo o ferma l'automix`);
+    return r.value;
+  }
+  return decks![0].readPlaylist(id);
+}
+
 const ui = buildConsole(document.getElementById('app')!, {
   async loadPlaylist(text) {
     const parsed = parsePlaylistInput(text);
@@ -84,7 +95,7 @@ const ui = buildConsole(document.getElementById('app')!, {
     ui.loadBtn.disabled = true;
     try {
       ui.setStatus('Leggo la playlist…');
-      const ids = parsed.kind === 'playlist' ? await decks[0].readPlaylist(parsed.listId) : [parsed.videoId];
+      const ids = parsed.kind === 'playlist' ? await readIds(parsed.listId) : [parsed.videoId];
       if (ids.length === 0) { ui.setStatus('La playlist è vuota o non è pubblica.', true); return; }
       ui.setStatus(`Carico i dettagli di ${ids.length} brani…`);
       const tracks = await buildTracks(ids, oembedMeta, 5);
@@ -168,9 +179,14 @@ async function refreshPlaylist(manual: boolean): Promise<void> {
       ids = await decks[0].readPlaylist(listId);
     }
     lastAttempt = Date.now();
-    const d = diffPlaylist(queue.all(), ids, replaced);
-    if (d.added.length) for (const t of await buildTracks(d.added, oembedMeta, 5)) queue.add(t);
-    const removed = d.removed.filter((id) => queue.remove(id)).length;
+    const q = queue;
+    const d = diffPlaylist(q.all(), ids, replaced);
+    const fresh = d.added.length ? await buildTracks(d.added, oembedMeta, 5) : [];
+    if (queue !== q) return; // another playlist was loaded meanwhile
+    for (const t of fresh) q.add(t);
+    // never pull tracks out from under a running crossfade or the one already prepared
+    const busy = am?.state() === 'crossfading';
+    const removed = busy ? 0 : d.removed.filter((id) => id !== am?.upcomingId() && q.remove(id)).length;
     const hhmm = new Date().toTimeString().slice(0, 5);
     ui.setRefreshInfo(d.added.length || removed ? `Aggiornata alle ${hhmm}: ${d.added.length} nuovi, ${removed} rimossi.` : `Aggiornata alle ${hhmm}: nessuna novità.`);
     log('info', 'playlist.refreshed', { added: d.added.length, removed });

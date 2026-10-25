@@ -37,10 +37,13 @@ class FakeDeck implements Deck {
   private endTimer?: number;
   endCb: () => void = () => {};
   errCb: (c: number) => void = () => {};
+  failLoad = new Map<string, 'unplayable' | 'timeout'>();
   constructor(private clock: Clock, private neverLoad = new Set<string>(), private dur = 60) {}
   load(id: string) {
     this.loads.push(id); this.id = id; this.pos = 0; this.halt();
     if (this.neverLoad.has(id)) return new Promise<void>(() => {});
+    const fail = this.failLoad.get(id);
+    if (fail) return Promise.reject(Object.assign(new Error('boom'), { kind: fail }));
     return new Promise<void>((r) => this.clock.setTimer(() => r(), 0));
   }
   private halt() { if (this.playing) this.pos = this.position(); this.playing = false; if (this.endTimer) this.clock.clearTimer(this.endTimer); this.endTimer = undefined; }
@@ -69,11 +72,12 @@ function setup(opts: { ids?: string[]; profile?: Profile; master?: number; never
   const queue = new Queue((opts.ids ?? ['A', 'B', 'C']).map(tr));
   let profile: Profile = opts.profile ?? 'standard';
   let master = opts.master ?? 100;
+  let online = true;
   const am = new Automix({
     decks, queue, profile: () => profile, masterVolume: () => master,
-    now: () => clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer, log: () => {},
+    now: () => clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer, log: () => {}, online: () => online,
   });
-  return { clock, decks, queue, am, setProfile: (p: Profile) => (profile = p), setMaster: (m: number) => (master = m) };
+  return { clock, decks, queue, am, setOnline: (v: boolean) => (online = v), setProfile: (p: Profile) => (profile = p), setMaster: (m: number) => (master = m) };
 }
 
 describe('Automix', () => {
@@ -275,5 +279,59 @@ describe('Automix.withSpareDeck', () => {
     expect(r.ok).toBe(false);
     await s.clock.advance(500);
     expect(s.am.nextStatus()).toBe('ready');
+  });
+});
+
+
+describe('Automix review fixes', () => {
+  it('Next pressed while the spare deck is lent is not lost: the mix happens once the next track is ready again', async () => {
+    const s = setup({ dur: 200 });
+    s.am.start(); await s.clock.advance(500);
+    let release!: () => void;
+    const job = s.am.withSpareDeck(() => new Promise<void>((r) => { release = r; }));
+    s.am.next();
+    expect(s.am.state()).not.toBe('idle');
+    release(); await job; await s.clock.advance(1_000);
+    expect(s.am.activeDeck()).toBe(1);
+    expect(s.am.state()).toBe('playing');
+  });
+  it('Next on the last track stops the music instead of leaving an orphan deck playing', async () => {
+    const s = setup({ ids: ['A'], dur: 200 });
+    s.am.start(); await s.clock.advance(1_000);
+    s.am.next();
+    expect(s.am.state()).toBe('idle');
+    expect(s.decks[0].playing || s.decks[1].playing).toBe(false);
+  });
+  it('refuses to lend the incoming deck when paused in the middle of a crossfade', async () => {
+    const s = setup({ dur: 200 });
+    s.am.start(); await s.clock.advance(500);
+    s.am.mixNow(); await s.clock.advance(2_000);
+    s.am.pause();
+    expect((await s.am.withSpareDeck(async () => 1)).ok).toBe(false);
+  });
+  it('a real "unplayable" error marks the track at once', async () => {
+    const s = setup();
+    s.decks[1].failLoad.set('B', 'unplayable');
+    s.am.start(); await s.clock.advance(500);
+    expect(s.queue.all()[1].status).toBe('unplayable');
+  });
+  it('a load failure while offline never marks the track and is retried when the network is back', async () => {
+    const s = setup();
+    s.setOnline(false);
+    s.decks[1].failLoad.set('B', 'timeout');
+    s.am.start(); await s.clock.advance(20_000);
+    expect(s.queue.all()[1].status).toBe('ok');
+    const attempts = s.decks[1].loads.filter((x) => x === 'B').length;
+    expect(attempts).toBeGreaterThan(1);
+    s.decks[1].failLoad.clear(); s.setOnline(true);
+    await s.clock.advance(10_000);
+    expect(s.am.nextStatus()).toBe('ready');
+    expect(s.queue.all()[1].status).toBe('ok');
+  });
+  it('a next track that is slow to load while offline is not skipped when the mix is due', async () => {
+    const s = setup({ never: ['B'] });
+    s.setOnline(false);
+    s.am.start(); await s.clock.advance(58_000);
+    expect(s.queue.all()[1].status).toBe('ok');
   });
 });

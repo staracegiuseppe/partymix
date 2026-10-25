@@ -3,6 +3,6 @@
   "identifier": "main",
   "description": "Finestre di PartyMix servite da localhost",
   "windows": ["main", "projector"],
-  "remote": { "urls": ["http://localhost:*"] },
+  "remote": { "urls": ["http://localhost:9527"] },
   "permissions": ["core:default", "allow-list-displays", "allow-open-projector", "allow-close-projector"]
 }
