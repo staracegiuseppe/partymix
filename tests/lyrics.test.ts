@@ -1,4 +1,4 @@
-import { fetchLyrics, guessArtistTitle, lineIndexAt, parseLrc } from '../src/lyrics';
+import { estimateLines, fetchLyrics, guessArtistTitle, lineIndexAt, parseLrc } from '../src/lyrics';
 
 const json = (status: number, body: unknown) => Promise.resolve({ ok: status < 300, status, json: () => Promise.resolve(body) } as Response);
 const route = (map: Record<string, () => Promise<Response>>) =>
@@ -68,7 +68,9 @@ describe('fetchLyrics', () => {
   });
   it('returns plain text when there is no sync, and nothing for instrumentals', async () => {
     const plain = route({ '/api/get': () => json(200, { plainLyrics: 'solo testo', syncedLyrics: null, duration: 200, instrumental: false }) });
-    expect(await fetchLyrics('A - B', 'x', 200, plain)).toEqual({ plain: 'solo testo' });
+    const r = await fetchLyrics('A - B', 'x', 200, plain);
+    expect(r?.estimated).toBe(true);
+    expect(r?.synced?.map((l) => l.text)).toEqual(['solo testo']);
     const inst = route({ '/api/get': () => json(200, { instrumental: true, duration: 200 }) });
     expect(await fetchLyrics('A - B', 'x', 200, inst)).toBeNull();
   });
@@ -92,5 +94,63 @@ describe('snapshotAt', () => {
   it('skips empty instrumental gaps when choosing the next line to show', () => {
     const gap = [{ t: 5, text: 'uno' }, { t: 8, text: '' }, { t: 20, text: 'due' }];
     expect(snapshotAt(gap, 9)).toEqual({ prev: 'uno', cur: '', next: 'due' });
+  });
+});
+
+describe('fetchLyrics: more sources and tolerance', () => {
+  const hit = (duration: number, extra = {}) => ({ syncedLyrics: '[00:01.00] ciao', plainLyrics: 'ciao', duration, instrumental: false, ...extra });
+  it('accepts a synced version with a different length but marks it approximate', async () => {
+    const f = route({ '/api/get': () => json(404, {}), '/api/search': () => json(200, [hit(222)]) });
+    const r = await fetchLyrics('El Alfa - 4K (Letra/Lyrics)', 'x', 205, f);
+    expect(r?.synced?.[0].text).toBe('ciao');
+    expect(r?.approx).toBe(true);
+    expect(r?.source).toBe('LRCLIB');
+  });
+  it('does not mark a close version as approximate', async () => {
+    const f = route({ '/api/get': () => json(404, {}), '/api/search': () => json(200, [hit(203)]) });
+    expect((await fetchLyrics('A - B', 'x', 200, f))?.approx).toBeFalsy();
+  });
+  it('rejects versions that are far too different', async () => {
+    const f = route({ '/api/get': () => json(404, {}), '/api/search': () => json(200, [hit(330)]), 'lyrics.ovh': () => json(404, {}) });
+    expect(await fetchLyrics('A - B', 'x', 200, f)).toBeNull();
+  });
+  it('falls back to lyrics.ovh and spreads the plain text over the song as estimated lines', async () => {
+    const f = route({
+      '/api/get': () => json(404, {}), '/api/search': () => json(200, []),
+      'lyrics.ovh': () => json(200, { lyrics: '[El Alfa]\nPrr, yao\n\nSegunda línea\n[Coro]\nTercera' }),
+    });
+    const r = await fetchLyrics('El Alfa - 4K', 'x', 200, f);
+    expect(r?.source).toBe('lyrics.ovh');
+    expect(r?.estimated).toBe(true);
+    expect(r?.synced?.map((l) => l.text)).toEqual(['Prr, yao', 'Segunda línea', 'Tercera']);
+  });
+  it('tries the track alone when the artist guess finds nothing', async () => {
+    const f = ((async (url: string) => {
+      const u = decodeURIComponent(String(url));
+      if (u.includes('/api/search') && u.includes('q=4K') && !u.includes('Alfa')) return json(200, [hit(200)]);
+      return json(404, {});
+    }) as unknown) as typeof fetch;
+    const r = await fetchLyrics('Canale Strano - 4K', 'x', 200, f);
+    expect(r?.synced?.[0].text).toBe('ciao');
+  });
+  it('survives non-array search answers', async () => {
+    const f = route({ '/api/get': () => json(404, {}), '/api/search': () => json(200, {}), 'lyrics.ovh': () => json(404, {}) });
+    expect(await fetchLyrics('A - B', 'x', 200, f)).toBeNull();
+  });
+});
+
+describe('estimateLines', () => {
+  it('spreads lines inside the song, in order, weighted by length', () => {
+    const l = estimateLines('corta\nuna riga molto più lunga della prima\nfine', 200);
+    expect(l).toHaveLength(3);
+    expect(l[0].t).toBeGreaterThan(0);
+    expect(l[2].t).toBeLessThan(200);
+    expect(l[0].t).toBeLessThan(l[1].t);
+    expect(l[1].t).toBeLessThan(l[2].t);
+  });
+  it('drops [section] tags and blank lines, and handles empty text', () => {
+    expect(estimateLines('[Verso 1]\n\nciao\n[Coro]', 100).map((x) => x.text)).toEqual(['ciao']);
+    expect(estimateLines('', 100)).toEqual([]);
+    expect(estimateLines('ciao', 0)).toEqual([]);
   });
 });

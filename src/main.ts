@@ -210,9 +210,8 @@ function lyricsVM(): ViewModel['lyrics'] {
   const l = lyricsCache.get(id);
   if (l === 'loading' || l === undefined) return { ...empty, status: 'Cerco il testo…' };
   if (!l) return { ...empty, status: 'Testo non trovato per questo brano.' };
-  if (l.plain) return { ...empty, status: 'Testo senza tempi (non si può seguire a ritmo): non viene mostrato sul proiettore.', plain: l.plain };
   const offset = lyricsOffsets.get(id) ?? 0;
-  return { ...empty, ...snapshotAt(l.synced!, d.position(), offset), offset, canShift: true, status: 'Testo da LRCLIB, sincronizzato con il brano in onda.' };
+  return { ...empty, ...snapshotAt(l.synced!, d.position(), offset), offset, canShift: true, status: l.estimated ? `Testo da ${l.source}: tempi stimati dalla durata (non esatti), correggi con Anticipa/Ritarda.` : l.approx ? `Testo da ${l.source}: versione con durata diversa dal video, controlla i tempi e correggi con Anticipa/Ritarda.` : `Testo da ${l.source}, sincronizzato con il brano in onda.` };
 }
 
 function publishLyrics(ly: ViewModel['lyrics']) {

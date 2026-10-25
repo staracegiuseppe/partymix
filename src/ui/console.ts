@@ -205,7 +205,7 @@ export function buildConsole(root: HTMLElement, a: Actions) {
   function update(vm: ViewModel) {
     const ly = vm.lyrics;
     lyStatus.textContent = ly.status;
-    lyPrev.textContent = ly.prev; lyCur.textContent = ly.cur || (ly.status.startsWith('Testo da') ? '♪' : ''); lyNext.textContent = ly.next;
+    lyPrev.textContent = ly.prev; lyCur.textContent = ly.cur || (ly.canShift ? '♪' : ''); lyNext.textContent = ly.next;
     lyPlain.textContent = ly.plain ?? ''; lyPlain.classList.toggle('hidden', !ly.plain);
     lyEarly.disabled = lyLate.disabled = !ly.canShift;
     lyOffset.textContent = ly.canShift ? `Spostamento: ${ly.offset > 0 ? '+' : ''}${ly.offset.toFixed(1).replace('.', ',')} s` : '';
