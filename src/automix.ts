@@ -41,6 +41,7 @@ export class Automix {
   private mixIn: DeckIdx = 1;
   private nextState: NextState = 'none';
   private token = 0;
+  private preparedId?: string;
   private timer?: number;
   private lastNow = 0;
   private mixElapsed = 0;
@@ -154,6 +155,7 @@ export class Automix {
 
   private resetNext(): void {
     this.nextState = 'none';
+    this.preparedId = undefined;
     this.pending = undefined;
     this.dueSince = undefined;
   }
@@ -161,8 +163,9 @@ export class Automix {
   private prepare(): void {
     const tok = ++this.token;
     const track = this.d.queue.peekNext();
-    if (!track) { this.nextState = 'none'; return; }
+    if (!track) { this.nextState = 'none'; this.preparedId = undefined; return; }
     this.nextState = 'loading';
+    this.preparedId = track.videoId;
     const inIdx = (1 - this.active) as DeckIdx;
     this.d.decks[inIdx].load(track.videoId).then(
       () => {
@@ -205,7 +208,7 @@ export class Automix {
     this.d.decks[out].stop();
     this.d.decks[out].setVolume(0);
     this.applied[out] = 0;
-    this.d.queue.advance();
+    if (this.preparedId) this.d.queue.advanceTo(this.preparedId); else this.d.queue.advance();
     this.active = this.mixIn;
     this.mixIn = out;
     this.st = 'playing';
@@ -263,6 +266,12 @@ export class Automix {
     }
     if (this.st !== 'playing' && this.st !== 'preparing') return;
     this.applyVolumes();
+    // The user may have reordered the queue: keep the prepared deck in sync with what is really next.
+    if (this.d.queue.peekNext()?.videoId !== this.preparedId) {
+      this.dueSince = undefined;
+      this.d.log('info', 'automix.next_changed', { videoId: this.d.queue.peekNext()?.videoId });
+      this.prepare();
+    }
     const deck = this.d.decks[this.active];
     const dur = deck.duration();
     const mixSec = profileSeconds(this.d.profile());
@@ -273,10 +282,9 @@ export class Automix {
     this.st = 'preparing';
     this.dueSince ??= n;
     if (n - this.dueSince >= LOAD_TIMEOUT_MS) {
-      const t = this.d.queue.peekNext();
-      if (t) {
-        this.d.log('warn', 'deck.prepare_timeout', { videoId: t.videoId });
-        this.d.queue.markUnplayable(t.videoId);
+      if (this.preparedId) {
+        this.d.log('warn', 'deck.prepare_timeout', { videoId: this.preparedId });
+        this.d.queue.markUnplayable(this.preparedId);
       }
       this.dueSince = undefined;
       this.prepare();
@@ -308,8 +316,7 @@ export class Automix {
       else this.switchWhenReady(0);
       return;
     }
-    const bad = this.d.queue.peekNext();
-    if (bad) this.d.queue.markUnplayable(bad.videoId);
+    if (this.preparedId) this.d.queue.markUnplayable(this.preparedId);
     if (this.st === 'crossfading') {
       this.d.decks[this.mixIn].stop();
       this.st = 'playing';

@@ -75,3 +75,7 @@ details li { margin: 6px 0; } details li span { color: var(--muted); display: bl
 .opts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 @media (max-width: 1000px) { .decks, .lower { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.item[draggable=true] { cursor: grab; }
+.item.dragging { opacity: .4; }
+.item.over { box-shadow: 0 -3px 0 0 var(--b); }

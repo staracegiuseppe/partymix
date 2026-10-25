@@ -99,3 +99,16 @@ describe('Queue extras', () => {
     expect(q.currentIndex()).toBe(1);
   });
 });
+
+describe('Queue.advanceTo', () => {
+  it('jumps to the named track even if it is not next', () => {
+    const q = new Queue([t('a'), t('b'), t('c')]);
+    expect(q.advanceTo('c')?.videoId).toBe('c');
+    expect(q.current()?.videoId).toBe('c');
+    expect(ids(q.history())).toEqual(['a', 'c']);
+  });
+  it('falls back to advance when the track is gone', () => {
+    const q = new Queue([t('a'), t('b')]);
+    expect(q.advanceTo('zzz')?.videoId).toBe('b');
+  });
+});

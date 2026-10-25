@@ -214,3 +214,33 @@ describe('Automix status for the UI', () => {
     expect(decks[0].vol).toBe(40);
   });
 });
+
+describe('Automix follows queue reordering', () => {
+  it('reloads the next deck when the next track is changed', async () => {
+    const s = setup();
+    s.am.start(); await s.clock.advance(500);
+    expect(s.decks[1].loads).toEqual(['B']);
+    s.queue.move(2, 1);
+    await s.clock.advance(500);
+    expect(s.decks[1].loads).toEqual(['B', 'C']);
+    expect(s.am.nextStatus()).toBe('ready');
+    s.am.mixNow(); await s.clock.advance(9_000);
+    expect(s.queue.current()?.videoId).toBe('C');
+    expect(s.decks[1].id).toBe('C');
+  });
+  it('a reorder during a crossfade does not change the track being mixed in', async () => {
+    const s = setup();
+    s.am.start(); await s.clock.advance(500);
+    s.am.mixNow(); await s.clock.advance(2_000);
+    s.queue.move(2, 1);
+    await s.clock.advance(9_000);
+    expect(s.queue.current()?.videoId).toBe('B');
+    expect(s.decks[1].id).toBe('B');
+    expect(s.am.state()).toBe('playing');
+  });
+  it('does not keep reloading when nothing changed', async () => {
+    const s = setup();
+    s.am.start(); await s.clock.advance(5_000);
+    expect(s.decks[1].loads).toEqual(['B']);
+  });
+});

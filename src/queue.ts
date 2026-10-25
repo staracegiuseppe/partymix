@@ -54,6 +54,15 @@ export class Queue {
     return this.order[i];
   }
 
+  /** Makes the given track current (it was mixed in even if the queue was reordered meanwhile); falls back to advance(). */
+  advanceTo(videoId: string): Track | undefined {
+    const i = this.order.findIndex((t) => t.videoId === videoId && playable(t));
+    if (i < 0) return this.advance();
+    this.pos = i;
+    this.hist.push(this.order[i]);
+    return this.order[i];
+  }
+
   skipNext(): Track | undefined {
     const cur = this.current();
     return cur?.locked ? cur : this.advance();

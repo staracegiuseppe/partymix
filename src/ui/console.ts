@@ -21,6 +21,12 @@ export type Actions = {
   shuffleNow(): void;
   addVideo(text: string): Promise<string>;
   replace(oldVideoId: string, text: string): Promise<{ ok: boolean; message: string }>;
+  openProjector(): Promise<void>;
+  closeProjector(): void;
+  setDisplay(name: string): void;
+  setMic(id: string): void;
+  setMicSensitivity(v: number): void;
+  refreshInputs(): Promise<{ id: string; label: string }[]>;
 };
 
 export type DeckVM = { title: string; artist: string; thumb?: string; elapsed: number; duration: number; role: 'live' | 'out' | 'ready' | 'loading' | 'idle'; volume: number; duck: boolean };
@@ -117,7 +123,21 @@ export function buildConsole(root: HTMLElement, a: Actions) {
   const problems = h('ul', { class: 'problems' });
   const unav = h('details', {}, h('summary', {}, 'Non disponibile con YouTube'),
     h('ul', {}, ...UNAVAILABLE_WITH_YOUTUBE.map((u) => h('li', {}, u.name, h('span', {}, u.why)))));
-  const side = h('div', { class: 'side' }, warnPanel,
+  const dispSel = h('select', { 'aria-label': 'Schermo del proiettore', onChange: () => a.setDisplay(dispSel.value) });
+  const dispRow = h('div', { class: 'row hidden' }, h('label', {}, 'Schermo'), dispSel);
+  const micSel = h('select', { 'aria-label': 'Ingresso audio', onChange: () => a.setMic(micSel.value) }, h('option', { value: '' }, 'Predefinito'));
+  const micBtn = h('button', { onClick: async () => { setInputs(await a.refreshInputs(), micSel.value); } }, 'Cerca ingressi');
+  const sens = h('input', { type: 'range', min: '0.2', max: '4', step: '0.1', 'aria-label': 'Sensibilità del microfono', onInput: () => a.setMicSensitivity(+sens.value) });
+  const projMsg = h('div', { class: 'status' });
+  const projPanel = h('section', { class: 'panel' }, h('h3', {}, 'Proiettore'),
+    h('div', { class: 'artist', style: 'margin-bottom:8px' }, 'Le forme seguono il suono della stanza tramite il microfono. Non viene registrato nulla.'),
+    h('div', { class: 'btns' },
+      h('button', { onClick: async () => { projMsg.textContent = ''; try { await a.openProjector(); } catch (e) { projMsg.textContent = `Non riesco ad aprire il proiettore: ${(e as Error).message}`; } } }, 'Apri proiettore'),
+      h('button', { onClick: () => a.closeProjector() }, 'Chiudi proiettore')),
+    dispRow,
+    h('div', { class: 'row' }, h('label', {}, 'Ingresso'), micSel), h('div', { class: 'row' }, micBtn),
+    h('div', { class: 'row' }, h('label', {}, 'Sensibilità'), sens), projMsg);
+  const side = h('div', { class: 'side' }, warnPanel, projPanel,
     h('section', { class: 'panel' }, h('h3', {}, 'Già suonati'), histList),
     h('section', { class: 'panel' }, h('h3', {}, 'Stato e problemi'), problems),
     h('section', { class: 'panel' }, unav));
@@ -129,6 +149,8 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     h('div', { class: 'decks' }, dA.card, mixer, dB.card),
     h('div', { class: 'lower' }, queuePanel, side)));
 
+  let dragFrom = -1;
+  const clearOver = () => queueList.querySelectorAll('.over').forEach((n) => n.classList.remove('over'));
   const memo = new Map<string, string>();
   const replMsg = new Map<string, { ok: boolean; text: string }>();
   const once = (key: string, sig: string, fn: () => void) => { if (memo.get(key) !== sig) { memo.set(key, sig); fn(); } };
@@ -168,7 +190,16 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     repeatBtn.textContent = { off: 'Ripeti: no', all: 'Ripeti: tutta la playlist', one: 'Ripeti: questo brano' }[vm.repeat];
 
     once('queue', JSON.stringify(vm.queue), () => {
-      queueList.replaceChildren(...vm.queue.map((r, i) => h('div', { class: 'item' + (r.current ? ' cur' : '') + (r.bad ? ' bad' : '') },
+      queueList.replaceChildren(...vm.queue.map((r, i) => h('div', {
+        class: 'item' + (r.current ? ' cur' : '') + (r.bad ? ' bad' : ''),
+        draggable: 'true',
+        title: 'Trascina per cambiare ordine',
+        onDragstart: (e: DragEvent) => { dragFrom = i; (e.currentTarget as HTMLElement).classList.add('dragging'); if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(i)); } },
+        onDragover: (e: DragEvent) => { if (dragFrom < 0) return; e.preventDefault(); clearOver(); if (i !== dragFrom) (e.currentTarget as HTMLElement).classList.add('over'); },
+        onDragleave: (e: DragEvent) => (e.currentTarget as HTMLElement).classList.remove('over'),
+        onDrop: (e: DragEvent) => { e.preventDefault(); const from = dragFrom; dragFrom = -1; clearOver(); if (from >= 0 && from !== i) a.move(from, i); },
+        onDragend: (e: DragEvent) => { dragFrom = -1; clearOver(); (e.currentTarget as HTMLElement).classList.remove('dragging'); },
+      },
         h('span', { class: 'artist' }, String(i + 1)),
         h('span', { class: 't' }, r.title + (r.artist ? ` — ${r.artist}` : ''), r.current ? h('span', { class: 'tag' }, 'in onda') : null, r.locked ? h('span', { class: 'tag' }, 'bloccato') : null, r.bad ? h('span', { class: 'tag' }, 'non riproducibile') : null),
         h('span', { class: 'acts' },
@@ -197,10 +228,20 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     });
   }
 
+  function setDisplays(names: string[], selected?: string) {
+    dispRow.classList.toggle('hidden', names.length === 0);
+    dispSel.replaceChildren(...names.map((n) => h('option', { value: n, selected: n === selected }, n)));
+    if (names.length && !selected) a.setDisplay(dispSel.value);
+  }
+  function setInputs(list: { id: string; label: string }[], selected?: string) {
+    micSel.replaceChildren(h('option', { value: '' }, 'Predefinito'), ...list.map((d) => h('option', { value: d.id, selected: d.id === selected }, d.label)));
+  }
+  function setSensitivity(v: number) { sens.value = String(v); }
+
   function setStatus(msg: string, error = false) {
     status.textContent = msg;
     status.className = 'status' + (error ? ' error' : '');
   }
 
-  return { mounts: [dA.mount, dB.mount] as [HTMLElement, HTMLElement], update, setStatus, linkInput: link, loadBtn };
+  return { mounts: [dA.mount, dB.mount] as [HTMLElement, HTMLElement], update, setStatus, setDisplays, setInputs, setSensitivity, linkInput: link, loadBtn };
 }

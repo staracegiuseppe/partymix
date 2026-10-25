@@ -7,6 +7,8 @@ import { Queue, Track } from './queue';
 import { loadSettings, saveSettings } from './settings';
 import { buildConsole, DeckVM, ViewModel } from './ui/console';
 import { bindShortcuts } from './ui/shortcuts';
+import { closeProjector, hasNativeDisplays, listDisplays, openProjector } from './projector/launcher';
+import { listInputs } from './projector/mic';
 import { createYouTubeDeck, YouTubeDeck } from './youtubeDeck';
 
 const store: Storage | undefined = (() => { try { return window.localStorage; } catch { return undefined; } })();
@@ -122,7 +124,15 @@ const ui = buildConsole(document.getElementById('app')!, {
     if (r.ok && r.track) queue.replace(oldId, r.track);
     return { ok: r.ok, message: r.message };
   },
+  openProjector: () => openProjector(settings.projectorDisplay),
+  closeProjector: () => void closeProjector(),
+  setDisplay: (n) => { settings.projectorDisplay = n; save(); },
+  setMic: (id) => { settings.micDeviceId = id || undefined; save(); },
+  setMicSensitivity: (v) => { settings.micSensitivity = v; save(); },
+  refreshInputs: () => listInputs(),
 });
+ui.setSensitivity(settings.micSensitivity);
+if (hasNativeDisplays()) void listDisplays().then((n) => ui.setDisplays(n, settings.projectorDisplay)).catch(() => {});
 
 function deckVM(i: 0 | 1): DeckVM {
   const d = decks?.[i];
@@ -184,3 +194,5 @@ bindShortcuts(window, {
   }
   log('info', 'app.ready');
 })();
+
+if (import.meta.env.VITE_BEACON) void import('./selftest').then((m) => m.run());
