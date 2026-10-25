@@ -9,7 +9,7 @@ const fire = (el: Element, type: string) => {
 };
 const deck = { title: '', artist: '', elapsed: 0, duration: 0, role: 'idle' as const, volume: 100, duck: false };
 const vm = (n: number): ViewModel => ({
-  lyrics: { status: '', prev: '', cur: '', next: '', offset: 0, show: true, canShift: false },
+  lyrics: { status: '', prev: '', cur: '', next: '', offset: 0, speed: 1, show: true, canShift: false, lines: [], index: -1 },
   state: 'idle', active: 0, ready: true, decks: [deck, deck], mix: 0, master: 80, profile: 'standard', shuffle: false, repeat: 'off',
   queue: Array.from({ length: n }, (_, i) => ({ id: 'v' + i, title: 'T' + i, artist: '', bad: false, locked: false, current: false })),
   history: [], problems: [],
@@ -82,5 +82,23 @@ describe('seek bar', () => {
     expect(seek).not.toHaveBeenCalled();
     bar.dispatchEvent(new Event('change', { bubbles: true }));
     expect(seek).toHaveBeenCalledWith(0, 90);
+  });
+});
+
+
+describe('lyrics lines as sync points', () => {
+  it('clicking a line tells the controller which line is being sung now', () => {
+    document.body.innerHTML = '<div id="root"></div>';
+    const anchorLyrics = vi.fn();
+    const actions = new Proxy({ anchorLyrics }, { get: (t, k) => (k in t ? (t as never)[k] : vi.fn()) }) as unknown as Actions;
+    const ui = buildConsole(document.getElementById('root')!, actions);
+    const v = vm(1);
+    v.lyrics = { ...v.lyrics, canShift: true, lines: ['uno', 'due', 'tre'], index: 1, status: 'Testo da LRCLIB' };
+    ui.update(v);
+    const rows = [...document.querySelectorAll('.lylist button')];
+    expect(rows.map((r) => r.textContent)).toEqual(['uno', 'due', 'tre']);
+    expect(rows[1].classList.contains('now')).toBe(true);
+    (rows[2] as HTMLButtonElement).click();
+    expect(anchorLyrics).toHaveBeenCalledWith(2);
   });
 });

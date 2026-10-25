@@ -86,3 +86,7 @@ input.seek:disabled { opacity: .35; }
 .ly { min-height: 1.4em; color: var(--muted); }
 .ly.cur { color: var(--text); font-size: clamp(1.2rem, 2vw, 1.8rem); font-weight: 800; min-height: 1.6em; }
 .plain { max-height: 220px; overflow: auto; white-space: pre-wrap; color: var(--muted); font: inherit; margin: 8px 0; }
+
+.lylist { display: grid; max-height: 260px; overflow: auto; gap: 2px; margin: 8px 0; position: relative; }
+.lylist button { text-align: left; background: transparent; border: 0; border-radius: 8px; padding: .3em .6em; color: var(--muted); }
+.lylist button.now { background: #1f2a4d; color: var(--text); font-weight: 700; outline: 1px solid var(--b); }

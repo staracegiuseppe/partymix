@@ -31,12 +31,14 @@ export type Actions = {
   refreshNow(): void;
   setAutoRefresh(minutes: number): void;
   shiftLyrics(deltaSeconds: number): void;
+  anchorLyrics(lineIndex: number): void;
+  resetLyricsAlign(): void;
   setShowLyrics(on: boolean): void;
 };
 
 export type DeckVM = { title: string; artist: string; thumb?: string; elapsed: number; duration: number; role: 'live' | 'out' | 'ready' | 'loading' | 'idle'; volume: number; duck: boolean };
 export type QueueRowVM = { id: string; title: string; artist: string; bad: boolean; locked: boolean; current: boolean };
-export type LyricsVM = { status: string; prev: string; cur: string; next: string; plain?: string; offset: number; show: boolean; canShift: boolean };
+export type LyricsVM = { status: string; prev: string; cur: string; next: string; plain?: string; offset: number; speed: number; show: boolean; canShift: boolean; lines: string[]; index: number };
 export type ViewModel = {
   lyrics: LyricsVM;
   state: AutomixState;
@@ -162,8 +164,11 @@ export function buildConsole(root: HTMLElement, a: Actions) {
   const lyEarly = h('button', { onClick: () => a.shiftLyrics(0.5) }, 'Anticipa 0,5 s');
   const lyLate = h('button', { onClick: () => a.shiftLyrics(-0.5) }, 'Ritarda 0,5 s');
   const lyShow = h('input', { type: 'checkbox', 'aria-label': 'Mostra il testo sul proiettore', onChange: () => a.setShowLyrics(lyShow.checked) });
-  const lyricsPanel = h('section', { class: 'panel' }, h('h3', {}, 'Testo'), lyStatus, lyPrev, lyCur, lyNext, lyPlain,
-    h('div', { class: 'row' }, lyEarly, lyLate, lyOffset),
+  const lyList = h('div', { class: 'lylist hidden' });
+  const lyHint = h('div', { class: 'artist hidden' }, 'Il testo non combacia (versione karaoke, live…)? Tocca nell’elenco la riga che si sta cantando adesso. Con due tocchi, uno all’inizio e uno più avanti, si adatta anche la velocità.');
+  const lyReset = h('button', { onClick: () => a.resetLyricsAlign() }, 'Azzera allineamento');
+  const lyricsPanel = h('section', { class: 'panel' }, h('h3', {}, 'Testo'), lyStatus, lyPrev, lyCur, lyNext, lyPlain, lyHint, lyList,
+    h('div', { class: 'row' }, lyEarly, lyLate, lyReset), h('div', { class: 'row' }, lyOffset),
     h('label', { class: 'row' }, lyShow, 'Mostra sul proiettore'));
   const side = h('div', { class: 'side' }, lyricsPanel, warnPanel, projPanel,
     h('section', { class: 'panel' }, h('h3', {}, 'Già suonati'), histList),
@@ -208,7 +213,19 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     lyPrev.textContent = ly.prev; lyCur.textContent = ly.cur || (ly.canShift ? '♪' : ''); lyNext.textContent = ly.next;
     lyPlain.textContent = ly.plain ?? ''; lyPlain.classList.toggle('hidden', !ly.plain);
     lyEarly.disabled = lyLate.disabled = !ly.canShift;
-    lyOffset.textContent = ly.canShift ? `Spostamento: ${ly.offset > 0 ? '+' : ''}${ly.offset.toFixed(1).replace('.', ',')} s` : '';
+    lyOffset.textContent = ly.canShift ? `Spostamento: ${ly.offset > 0 ? '+' : ''}${ly.offset.toFixed(1).replace('.', ',')} s` + (Math.abs(ly.speed - 1) > 0.005 ? ` · velocità ×${ly.speed.toFixed(2).replace('.', ',')}` : '') : '';
+    lyReset.disabled = !ly.canShift;
+    lyHint.classList.toggle('hidden', !ly.canShift);
+    once('lylines', ly.lines.join('\u0001'), () => {
+      lyList.classList.toggle('hidden', ly.lines.length === 0);
+      lyList.replaceChildren(...ly.lines.map((t, i) => h('button', { class: 'lyline', title: 'Si sta cantando questa riga adesso', onClick: () => a.anchorLyrics(i) }, t || '♪')));
+    });
+    once('lyindex', ly.index + '|' + ly.lines.length, () => {
+      const rows = [...lyList.children] as HTMLElement[];
+      rows.forEach((r, i) => r.classList.toggle('now', i === ly.index));
+      const cur = rows[ly.index];
+      if (cur) lyList.scrollTop = Math.max(0, cur.offsetTop - lyList.clientHeight / 2);
+    });
     if (document.activeElement !== lyShow) lyShow.checked = ly.show;
     paintDeck(dA, vm.decks[0]);
     paintDeck(dB, vm.decks[1]);

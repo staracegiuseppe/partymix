@@ -46,3 +46,19 @@ describe('playlist refresh setting', () => {
     expect(loadSettings(mem(JSON.stringify({ playlistRefreshMin: 'x' }))).playlistRefreshMin).toBe(5);
   });
 });
+
+describe('lyrics alignment setting', () => {
+  it('round-trips and validates entries', () => {
+    const store = mem();
+    saveSettings(store, { ...DEFAULT_SETTINGS, lyricsAlign: { abc: { a: 0.8, b: -12 } } });
+    expect(loadSettings(store).lyricsAlign).toEqual({ abc: { a: 0.8, b: -12 } });
+    const raw = JSON.stringify({ lyricsAlign: { ok: { a: 1.1, b: 3 }, bad1: { a: 'x', b: 1 }, bad2: 5, wild: { a: 9, b: 99999 } } });
+    const s = loadSettings(mem(raw));
+    expect(Object.keys(s.lyricsAlign).sort()).toEqual(['ok', 'wild']);
+    expect(s.lyricsAlign.wild.a).toBe(2);
+    expect(s.lyricsAlign.wild.b).toBe(600);
+  });
+  it('defaults to nothing aligned', () => {
+    expect(DEFAULT_SETTINGS.lyricsAlign).toEqual({});
+  });
+});

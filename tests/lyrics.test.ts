@@ -154,3 +154,43 @@ describe('estimateLines', () => {
     expect(estimateLines('ciao', 0)).toEqual([]);
   });
 });
+
+import { alignFromAnchors, IDENTITY, shiftAlign, toLyricTime } from '../src/lyrics';
+
+describe('alignment of lyrics to a different version', () => {
+  it('is the identity with no anchors', () => {
+    expect(alignFromAnchors([])).toEqual(IDENTITY);
+    expect(toLyricTime(IDENTITY, 12)).toBe(12);
+  });
+  it('one anchor moves the lyrics: line at 20 s is sung at 35 s of the video', () => {
+    const al = alignFromAnchors([{ t: 20, p: 35 }]);
+    expect(al).toEqual({ a: 1, b: -15 });
+    expect(toLyricTime(al, 35)).toBe(20);
+    expect(toLyricTime(al, 45)).toBe(30);
+  });
+  it('two anchors also fix the speed: both lines land exactly where they were marked', () => {
+    // original: line at 10 s and at 100 s; in the karaoke they are heard at 30 s and 150 s
+    const al = alignFromAnchors([{ t: 10, p: 30 }, { t: 100, p: 150 }]);
+    expect(toLyricTime(al, 30)).toBeCloseTo(10, 6);
+    expect(toLyricTime(al, 150)).toBeCloseTo(100, 6);
+    expect(al.a).toBeCloseTo(0.75, 6);
+  });
+  it('uses the earliest and the latest anchor even if they were given out of order', () => {
+    const al = alignFromAnchors([{ t: 100, p: 150 }, { t: 10, p: 30 }, { t: 50, p: 90 }]);
+    expect(toLyricTime(al, 30)).toBeCloseTo(10, 6);
+    expect(toLyricTime(al, 150)).toBeCloseTo(100, 6);
+  });
+  it('falls back to a plain shift when two anchors are almost at the same moment or imply an absurd speed', () => {
+    expect(alignFromAnchors([{ t: 10, p: 30 }, { t: 90, p: 31 }])).toEqual({ a: 1, b: 90 - 31 });
+    expect(alignFromAnchors([{ t: 10, p: 30 }, { t: 12, p: 130 }]).a).toBe(1);
+  });
+  it('shiftAlign nudges the offset without touching the speed', () => {
+    expect(shiftAlign({ a: 0.75, b: 3 }, 0.5)).toEqual({ a: 0.75, b: 3.5 });
+  });
+  it('snapshotAt follows an alignment', () => {
+    const lines = [{ t: 10, text: 'uno' }, { t: 20, text: 'due' }];
+    const al = alignFromAnchors([{ t: 10, p: 40 }]);
+    expect(snapshotAt(lines, 41, al).cur).toBe('uno');
+    expect(snapshotAt(lines, 51, al).cur).toBe('due');
+  });
+});

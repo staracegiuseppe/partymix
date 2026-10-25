@@ -108,11 +108,38 @@ export async function fetchLyrics(videoTitle: string, channel: string, durationS
   return lines.length ? { synced: lines, plain, estimated: true, source } : null;
 }
 
+/** Maps video time to song time: songTime = a * position + b. */
+export type Align = { a: number; b: number };
+export const IDENTITY: Align = { a: 1, b: 0 };
+
+export const toLyricTime = (al: Align, position: number): number => al.a * position + al.b;
+export const shiftAlign = (al: Align, delta: number): Align => ({ a: al.a, b: al.b + delta });
+
+/**
+ * Builds an alignment from the moments the user marked ("this line (song time t) is being sung now (video time p)").
+ * One mark moves the lyrics; two marks at least 5 s apart also fix the speed (karaoke versions are often slower or longer).
+ */
+export function alignFromAnchors(anchors: { t: number; p: number }[]): Align {
+  if (anchors.length === 0) return IDENTITY;
+  const sorted = [...anchors].sort((x, y) => x.p - y.p);
+  const first = sorted[0], last = sorted[sorted.length - 1];
+  if (sorted.length >= 2 && last.p - first.p >= 5) {
+    const a = (last.t - first.t) / (last.p - first.p);
+    if (a >= 0.5 && a <= 2) return { a, b: first.t - a * first.p };
+  }
+  return { a: 1, b: last.t - last.p };
+}
+
+/** Index of the line being sung at video time `position` under the given alignment (or plain offset). */
+export function indexFor(lines: LrcLine[], position: number, align: number | Align = 0): number {
+  return typeof align === 'number' ? lineIndexAt(lines, position, align) : lineIndexAt(lines, toLyricTime(align, position));
+}
+
 export type LyricsSnapshot = { prev: string; cur: string; next: string };
 
 /** The three lines to display at `position`. A blank current line means an instrumental gap. */
-export function snapshotAt(lines: LrcLine[], position: number, offset = 0): LyricsSnapshot {
-  const i = lineIndexAt(lines, position, offset);
+export function snapshotAt(lines: LrcLine[], position: number, align: number | Align = 0): LyricsSnapshot {
+  const i = indexFor(lines, position, align);
   const prevLine = [...lines.slice(0, Math.max(0, i))].reverse().find((l) => l.text)?.text ?? '';
   const nextLine = lines.slice(i + 1).find((l) => l.text)?.text ?? '';
   return { prev: prevLine, cur: i >= 0 ? lines[i].text : '', next: nextLine };

@@ -5,7 +5,7 @@ import { buildTracks, oembedMeta, verifyReplacement } from './playlistLoader';
 import { diffPlaylist } from './playlistSync';
 import { parsePlaylistInput } from './playlistUrl';
 import { Queue, Track } from './queue';
-import { fetchLyrics, Lyrics, snapshotAt } from './lyrics';
+import { Align, alignFromAnchors, fetchLyrics, IDENTITY, indexFor, Lyrics, shiftAlign, snapshotAt } from './lyrics';
 import { loadSettings, saveSettings } from './settings';
 import { buildConsole, DeckVM, ViewModel } from './ui/console';
 import { bindShortcuts } from './ui/shortcuts';
@@ -155,7 +155,18 @@ const ui = buildConsole(document.getElementById('app')!, {
   refreshInputs: () => listInputs(),
   refreshNow: () => void refreshPlaylist(true),
   setAutoRefresh: (m) => { settings.playlistRefreshMin = m; save(); },
-  shiftLyrics(d) { if (lyricsDeck) lyricsOffsets.set(lyricsDeck, (lyricsOffsets.get(lyricsDeck) ?? 0) + d); },
+  shiftLyrics(d) { if (lyricsDeck) saveAlign(lyricsDeck, shiftAlign(aligns.get(lyricsDeck) ?? IDENTITY, d)); },
+  anchorLyrics(i) {
+    const id = lyricsDeck, l = id ? lyricsCache.get(id) : undefined;
+    if (!id || !l || l === 'loading' || !l.synced?.[i]) return;
+    const list = anchors.get(id) ?? [];
+    const mark = { t: l.synced[i].t, p: lyricsPosition };
+    const last = list[list.length - 1];
+    if (last && Math.abs(last.p - mark.p) < 3) list[list.length - 1] = mark; else list.push(mark); // a quick second tap corrects the first
+    anchors.set(id, list);
+    saveAlign(id, alignFromAnchors(list));
+  },
+  resetLyricsAlign() { if (lyricsDeck) { anchors.delete(lyricsDeck); saveAlign(lyricsDeck, undefined); } },
   setShowLyrics(on) { settings.showLyrics = on; save(); },
 });
 ui.setSensitivity(settings.micSensitivity);
@@ -205,12 +216,21 @@ window.setInterval(() => {
 
 // --- Lyrics: fetched from LRCLIB for the deck that is currently audible, followed to the playhead. ---
 const lyricsCache = new Map<string, Lyrics | null | 'loading'>();
-const lyricsOffsets = new Map<string, number>();
+const aligns = new Map<string, Align>(Object.entries(settings.lyricsAlign));
+const anchors = new Map<string, { t: number; p: number }[]>();
+let lyricsPosition = 0;
+
+function saveAlign(id: string, al: Align | undefined) {
+  if (al) { aligns.set(id, al); settings.lyricsAlign[id] = al; } else { aligns.delete(id); delete settings.lyricsAlign[id]; }
+  const keys = Object.keys(settings.lyricsAlign);
+  for (const k of keys.slice(0, Math.max(0, keys.length - 200))) delete settings.lyricsAlign[k];
+  save();
+}
 let lyricsDeck: string | undefined;
 let lastPublished = '';
 
 function lyricsVM(): ViewModel['lyrics'] {
-  const empty = { prev: '', cur: '', next: '', offset: 0, show: settings.showLyrics, canShift: false };
+  const empty = { prev: '', cur: '', next: '', offset: 0, speed: 1, show: settings.showLyrics, canShift: false, lines: [] as string[], index: -1 };
   const st = am?.state() ?? 'idle';
   if (!decks || !am || st === 'idle') { lyricsDeck = undefined; return { ...empty, status: 'Il testo comparirà quando parte un brano.' }; }
   const idx = st === 'crossfading' ? (am.mixProgress() > 0.5 ? 1 - am.activeDeck() : am.activeDeck()) : am.activeDeck();
@@ -226,8 +246,13 @@ function lyricsVM(): ViewModel['lyrics'] {
   const l = lyricsCache.get(id);
   if (l === 'loading' || l === undefined) return { ...empty, status: 'Cerco il testo…' };
   if (!l) return { ...empty, status: 'Testo non trovato per questo brano.' };
-  const offset = lyricsOffsets.get(id) ?? 0;
-  return { ...empty, ...snapshotAt(l.synced!, d.position(), offset), offset, canShift: true, status: l.estimated ? `Testo da ${l.source}: tempi stimati dalla durata (non esatti), correggi con Anticipa/Ritarda.` : l.approx ? `Testo da ${l.source}: versione con durata diversa dal video, controlla i tempi e correggi con Anticipa/Ritarda.` : `Testo da ${l.source}, sincronizzato con il brano in onda.` };
+  const al = aligns.get(id) ?? IDENTITY;
+  lyricsPosition = d.position();
+  const lines = l.synced!;
+  const status = l.estimated ? `Testo da ${l.source}: tempi stimati dalla durata (non esatti).`
+    : l.approx ? `Testo da ${l.source}: versione con durata diversa dal video.`
+    : `Testo da ${l.source}, sincronizzato con il brano in onda.`;
+  return { ...empty, ...snapshotAt(lines, lyricsPosition, al), offset: al.b, speed: al.a, canShift: true, lines: lines.map((x) => x.text), index: indexFor(lines, lyricsPosition, al), status: aligns.has(id) ? 'Testo allineato da te a questo video.' : status };
 }
 
 function publishLyrics(ly: ViewModel['lyrics']) {
