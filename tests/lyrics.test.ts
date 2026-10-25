@@ -194,3 +194,44 @@ describe('alignment of lyrics to a different version', () => {
     expect(snapshotAt(lines, 51, al).cur).toBe('due');
   });
 });
+
+describe('fetchLyrics never returns another song', () => {
+  const mk = (trackName: string, artistName: string, duration: number, extra = {}) =>
+    ({ trackName, artistName, duration, syncedLyrics: `[00:01.00] ${trackName}`, plainLyrics: trackName, instrumental: false, ...extra });
+  const title = 'Ricchi e Poveri - Mamma Maria (versione Karaoke Academy Italia)';
+  it('skips a closer-in-length track of the same artist and takes the right title, flagged approximate', async () => {
+    const f = route({
+      '/api/get': () => json(404, {}),
+      '/api/search': () => json(200, [
+        mk('Ricchi E Poveri / Poveri', 'Ricchi E Poveri', 203, { syncedLyrics: null }),
+        mk('Mamma Maria', 'Ricchi E Poveri', 178),
+      ]),
+    });
+    const r = await fetchLyrics(title, 'Karaoke Academy Italia', 210, f);
+    expect(r?.synced?.[0].text).toBe('Mamma Maria');
+    expect(r?.approx).toBe(true);
+  });
+  it('returns nothing (not a wrong song) when only other songs exist', async () => {
+    const f = route({
+      '/api/get': () => json(404, {}),
+      '/api/search': () => json(200, [mk('Poveri', 'Ricchi E Poveri', 203), mk('Sarà perché ti amo', 'Ricchi e Poveri', 210)]),
+      'lyrics.ovh': () => json(404, {}),
+    });
+    expect(await fetchLyrics(title, 'x', 210, f)).toBeNull();
+  });
+  it('matches titles ignoring case, accents, punctuation and an "Artist / " prefix', async () => {
+    const f = route({
+      '/api/get': () => json(404, {}),
+      '/api/search': () => json(200, [mk('Ricchi e Poveri / Mamma Maria', 'RICCHI & POVERI', 175)]),
+    });
+    expect((await fetchLyrics(title, 'x', 175, f))?.synced?.[0].text).toBe('Ricchi e Poveri / Mamma Maria');
+  });
+  it('does not accept a hit by another artist with the same title', async () => {
+    const f = route({
+      '/api/get': () => json(404, {}),
+      '/api/search': () => json(200, [mk('Mamma Maria', 'Coverband Sconosciuta', 175)]),
+      'lyrics.ovh': () => json(404, {}),
+    });
+    expect(await fetchLyrics(title, 'x', 175, f)).toBeNull();
+  });
+});

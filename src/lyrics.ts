@@ -59,11 +59,23 @@ export function estimateLines(plain: string, durationSec: number): LrcLine[] {
   return lines.map((text, i) => { const t = start + (acc / total) * span; acc += weights[i]; return { t, text }; });
 }
 
-type ApiHit = { syncedLyrics?: string | null; plainLyrics?: string | null; duration?: number; instrumental?: boolean };
+type ApiHit = { trackName?: string; artistName?: string; syncedLyrics?: string | null; plainLyrics?: string | null; duration?: number; instrumental?: boolean };
 const LRCLIB = 'https://lrclib.net/api';
 const OVH = 'https://api.lyrics.ovh/v1';
 const CLOSE_S = 8;
-const APPROX_S = 30;
+const APPROX_S = 90; // only applied to hits whose title and artist already match
+
+const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/&/g, ' e ').replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** Same song? The title must appear whole in the hit's title, and the artists must overlap (when both are known). */
+function sameSong(h: ApiHit, artist: string, track: string): boolean {
+  if (h.trackName && !` ${norm(h.trackName)} `.includes(` ${norm(track)} `)) return false;
+  if (h.artistName && artist) {
+    const a = norm(artist), b = norm(h.artistName);
+    if (a && b && !a.includes(b) && !b.includes(a)) return false;
+  }
+  return true;
+}
 
 const asSynced = (h: ApiHit): LrcLine[] => (h.syncedLyrics ? parseLrc(h.syncedLyrics) : []);
 
@@ -91,7 +103,7 @@ export async function fetchLyrics(videoTitle: string, channel: string, durationS
     const list = await getJson(f, `${LRCLIB}/search?q=${encodeURIComponent(q)}`);
     if (Array.isArray(list)) hits.push(...(list as ApiHit[]));
   }
-  const usable = hits.filter((h) => !h.instrumental && (!known || (typeof h.duration === 'number' && diff(h) <= APPROX_S)));
+  const usable = hits.filter((h) => !h.instrumental && sameSong(h, artist, track) && (!known || (typeof h.duration === 'number' && diff(h) <= APPROX_S)));
   const synced = usable.filter((h) => asSynced(h).length).sort((a, b) => diff(a) - diff(b));
   if (synced[0]) return { synced: asSynced(synced[0]), source: 'LRCLIB', approx: known && diff(synced[0]) > CLOSE_S };
 
