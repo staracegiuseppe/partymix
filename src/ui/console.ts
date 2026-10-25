@@ -28,6 +28,8 @@ export type Actions = {
   setMic(id: string): void;
   setMicSensitivity(v: number): void;
   refreshInputs(): Promise<{ id: string; label: string }[]>;
+  refreshNow(): void;
+  setAutoRefresh(minutes: number): void;
   shiftLyrics(deltaSeconds: number): void;
   setShowLyrics(on: boolean): void;
 };
@@ -116,6 +118,10 @@ export function buildConsole(root: HTMLElement, a: Actions) {
   const shuffleBtn = h('button', { 'aria-pressed': 'false', onClick: () => a.setShuffle(shuffleBtn.getAttribute('aria-pressed') !== 'true') }, 'Casuale');
   const shuffleNow = h('button', { title: 'Rimescola i brani che devono ancora suonare', onClick: () => a.shuffleNow() }, 'Rimescola ora');
   const repeatBtn = h('button', { onClick: () => a.setRepeat(repeatBtn.dataset.next as 'off' | 'all' | 'one') });
+  const refreshInfo = h('div', { class: 'status' });
+  const refreshSel = h('select', { 'aria-label': 'Aggiornamento automatico della playlist', onChange: () => a.setAutoRefresh(+refreshSel.value) },
+    ...[[0, 'Solo manuale'], [2, 'Ogni 2 minuti'], [5, 'Ogni 5 minuti'], [10, 'Ogni 10 minuti'], [30, 'Ogni 30 minuti']].map(([v, l]) => h('option', { value: String(v) }, String(l))));
+  const refreshBtn = h('button', { title: 'Controlla su YouTube se la playlist è cambiata', onClick: () => a.refreshNow() }, 'Aggiorna ora');
   const queueList = h('div', { class: 'list' });
   const addLink = h('input', { type: 'text', placeholder: 'Aggiungi un video (link)', 'aria-label': 'Aggiungi un video alla coda' });
   const addMsg = h('div', { class: 'status' });
@@ -123,6 +129,7 @@ export function buildConsole(root: HTMLElement, a: Actions) {
   const queuePanel = h('section', { class: 'panel' },
     h('h3', {}, 'Coda'),
     h('div', { class: 'opts' }, shuffleBtn, shuffleNow, repeatBtn),
+    h('div', { class: 'row' }, refreshBtn, refreshSel), refreshInfo,
     queueList,
     h('div', { class: 'row' }, addLink, addBtn), addMsg,
   );
@@ -269,6 +276,8 @@ export function buildConsole(root: HTMLElement, a: Actions) {
   function setInputs(list: { id: string; label: string }[], selected?: string) {
     micSel.replaceChildren(h('option', { value: '' }, 'Predefinito'), ...list.map((d) => h('option', { value: d.id, selected: d.id === selected }, d.label)));
   }
+  function setRefreshInfo(text: string) { refreshInfo.textContent = text; }
+  function setAutoRefreshValue(min: number) { refreshSel.value = String(min); }
   function setSensitivity(v: number) { sens.value = String(v); }
 
   function setStatus(msg: string, error = false) {
@@ -276,5 +285,5 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     status.className = 'status' + (error ? ' error' : '');
   }
 
-  return { mounts: [dA.mount, dB.mount] as [HTMLElement, HTMLElement], update, setStatus, setDisplays, setInputs, setSensitivity, linkInput: link, loadBtn };
+  return { mounts: [dA.mount, dB.mount] as [HTMLElement, HTMLElement], update, setStatus, setRefreshInfo, setAutoRefreshValue, setDisplays, setInputs, setSensitivity, linkInput: link, loadBtn };
 }

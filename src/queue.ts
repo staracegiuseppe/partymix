@@ -5,6 +5,8 @@ export type Track = {
   thumb?: string;
   durationSec?: number;
   locked?: boolean;
+  /** Added or substituted by the user, so a playlist refresh must never drop it. */
+  manual?: boolean;
   status: 'ok' | 'unplayable' | 'pending';
 };
 
@@ -97,6 +99,15 @@ export class Queue {
     if (i < 0) return;
     this.order[i] = t;
     if (this.pos < 0) this.reset();
+  }
+
+  /** Removes a track from the queue. The track that is playing cannot be removed. */
+  remove(videoId: string): boolean {
+    const i = this.order.findIndex((t) => t.videoId === videoId);
+    if (i < 0 || i === this.pos) return false;
+    this.order.splice(i, 1);
+    if (i < this.pos) this.pos--;
+    return true;
   }
 
   setRepeat(r: 'off' | 'all' | 'one'): void { this.repeat = r; }

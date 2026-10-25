@@ -33,6 +33,8 @@ export type AutomixDeps = {
 const TICK_MS = 250;
 const LOAD_TIMEOUT_MS = 5000;
 const MANUAL_MIX_S = 8;
+const SPARE_MIN_REMAINING_S = 30;
+const SPARE_TIMEOUT_MS = 12000;
 
 export class Automix {
   private st: AutomixState = 'idle';
@@ -42,6 +44,7 @@ export class Automix {
   private nextState: NextState = 'none';
   private token = 0;
   private preparedId?: string;
+  private borrowed = false;
   private timer?: number;
   private lastNow = 0;
   private mixElapsed = 0;
@@ -59,6 +62,37 @@ export class Automix {
 
   state(): AutomixState { return this.st; }
   activeDeck(): DeckIdx { return this.active; }
+
+  /**
+   * Lends the deck that is not on air for a short job (e.g. reading the playlist again).
+   * Refused during a crossfade or when the current track is about to end; afterwards the next track is prepared again.
+   */
+  async withSpareDeck<T>(job: (deck: Deck) => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; reason: string }> {
+    if (this.borrowed) return { ok: false, reason: 'Il deck libero è occupato' };
+    if (this.st === 'crossfading') return { ok: false, reason: 'Transizione in corso' };
+    if (this.st === 'playing' || this.st === 'preparing') {
+      const on = this.d.decks[this.active];
+      if (!(on.duration() > 0) || on.duration() - on.position() < SPARE_MIN_REMAINING_S) return { ok: false, reason: 'Il brano sta per finire' };
+    } else if (this.st !== 'paused') {
+      return { ok: false, reason: 'Automix non attivo' };
+    }
+    const pending = this.pending;
+    this.borrowed = true;
+    this.resetNext();
+    this.token++;
+    let timer: number | undefined;
+    try {
+      const timeout = new Promise<never>((_, rej) => { timer = this.d.setTimer(() => rej(new Error('Tempo scaduto')), SPARE_TIMEOUT_MS); });
+      const value = await Promise.race([job(this.d.decks[(1 - this.active) as DeckIdx]), timeout]);
+      return { ok: true, value };
+    } catch (e) {
+      return { ok: false, reason: (e as Error).message };
+    } finally {
+      if (timer !== undefined) this.d.clearTimer(timer);
+      this.borrowed = false;
+      if (this.st === 'playing' || this.st === 'preparing' || this.st === 'paused') { this.pending = pending; this.prepare(); }
+    }
+  }
 
   nextStatus(): NextState { return this.nextState; }
 
@@ -266,6 +300,7 @@ export class Automix {
     }
     if (this.st !== 'playing' && this.st !== 'preparing') return;
     this.applyVolumes();
+    if (this.borrowed) return;
     // The user may have reordered the queue: keep the prepared deck in sync with what is really next.
     if (this.d.queue.peekNext()?.videoId !== this.preparedId) {
       this.dueSince = undefined;

@@ -2,6 +2,7 @@ import './ui/style.css';
 import { Automix } from './automix';
 import { log, setSinks } from './log';
 import { buildTracks, oembedMeta, verifyReplacement } from './playlistLoader';
+import { diffPlaylist } from './playlistSync';
 import { parsePlaylistInput } from './playlistUrl';
 import { Queue, Track } from './queue';
 import { fetchLyrics, Lyrics, snapshotAt } from './lyrics';
@@ -39,6 +40,10 @@ setSinks([
 
 let decks: [YouTubeDeck, YouTubeDeck] | undefined;
 let queue = new Queue([]);
+let listId: string | undefined;
+const replaced = new Set<string>();
+let refreshing = false;
+let lastAttempt = Date.now();
 let am: Automix | undefined;
 const sliders: [number, number] = [100, 100];
 const ducked: [boolean, boolean] = [false, false];
@@ -84,6 +89,10 @@ const ui = buildConsole(document.getElementById('app')!, {
       ui.setStatus(`Carico i dettagli di ${ids.length} brani…`);
       const tracks = await buildTracks(ids, oembedMeta, 5);
       setQueue(tracks);
+      listId = parsed.kind === 'playlist' ? parsed.listId : undefined;
+      replaced.clear();
+      lastAttempt = Date.now();
+      ui.setRefreshInfo(listId ? 'Playlist appena caricata.' : '');
       settings.playlistText = text; save();
       const bad = tracks.filter((t) => t.status === 'unplayable').length;
       ui.setStatus(`Playlist pronta: ${tracks.length} brani${bad ? `, ${bad} non riproducibili (vedi l'avviso a destra)` : ''}.`);
@@ -118,12 +127,13 @@ const ui = buildConsole(document.getElementById('app')!, {
   async addVideo(text) {
     const r = await verifyReplacement(text, fetch, probe);
     if (!r.ok || !r.track) return r.message;
+    r.track.manual = true;
     if (!am) { setQueue([r.track]); } else { queue.add(r.track); }
     return `Aggiunto: ${titleOf(r.track)}`;
   },
   async replace(oldId, text) {
     const r = await verifyReplacement(text, fetch, probe);
-    if (r.ok && r.track) queue.replace(oldId, r.track);
+    if (r.ok && r.track) { r.track.manual = true; replaced.add(oldId); queue.replace(oldId, r.track); }
     return { ok: r.ok, message: r.message };
   },
   openProjector: () => openProjector(settings.projectorDisplay),
@@ -132,11 +142,50 @@ const ui = buildConsole(document.getElementById('app')!, {
   setMic: (id) => { settings.micDeviceId = id || undefined; save(); },
   setMicSensitivity: (v) => { settings.micSensitivity = v; save(); },
   refreshInputs: () => listInputs(),
+  refreshNow: () => void refreshPlaylist(true),
+  setAutoRefresh: (m) => { settings.playlistRefreshMin = m; save(); },
   shiftLyrics(d) { if (lyricsDeck) lyricsOffsets.set(lyricsDeck, (lyricsOffsets.get(lyricsDeck) ?? 0) + d); },
   setShowLyrics(on) { settings.showLyrics = on; save(); },
 });
 ui.setSensitivity(settings.micSensitivity);
+ui.setAutoRefreshValue(settings.playlistRefreshMin);
 if (hasNativeDisplays()) void listDisplays().then((n) => ui.setDisplays(n, settings.projectorDisplay)).catch(() => {});
+
+// --- Playlist refresh: picks up videos added to or removed from the YouTube playlist. ---
+async function refreshPlaylist(manual: boolean): Promise<void> {
+  if (refreshing) return;
+  if (!listId || !decks) { if (manual) ui.setRefreshInfo('Niente da aggiornare: hai caricato un singolo video.'); return; }
+  refreshing = true;
+  if (manual) ui.setRefreshInfo('Aggiorno la playlist…');
+  try {
+    const running = !!am && am.state() !== 'idle';
+    let ids: string[];
+    if (running) {
+      const r = await am!.withSpareDeck((d) => (d as YouTubeDeck).readPlaylist(listId!));
+      if (!r.ok) { if (manual) ui.setRefreshInfo(`Non in questo momento (${r.reason.toLowerCase()}): riprova tra qualche secondo.`); return; }
+      ids = r.value;
+    } else {
+      ids = await decks[0].readPlaylist(listId);
+    }
+    lastAttempt = Date.now();
+    const d = diffPlaylist(queue.all(), ids, replaced);
+    if (d.added.length) for (const t of await buildTracks(d.added, oembedMeta, 5)) queue.add(t);
+    const removed = d.removed.filter((id) => queue.remove(id)).length;
+    const hhmm = new Date().toTimeString().slice(0, 5);
+    ui.setRefreshInfo(d.added.length || removed ? `Aggiornata alle ${hhmm}: ${d.added.length} nuovi, ${removed} rimossi.` : `Aggiornata alle ${hhmm}: nessuna novità.`);
+    log('info', 'playlist.refreshed', { added: d.added.length, removed });
+  } catch (e) {
+    lastAttempt = Date.now();
+    log('warn', 'playlist.refresh_failed', { error: String(e) });
+    ui.setRefreshInfo(`Aggiornamento non riuscito: ${(e as Error)?.message ?? e}. Riprovo più tardi.`);
+  } finally {
+    refreshing = false;
+  }
+}
+window.setInterval(() => {
+  const m = settings.playlistRefreshMin;
+  if (m > 0 && Date.now() - lastAttempt >= m * 60_000) void refreshPlaylist(false);
+}, 15_000);
 
 // --- Lyrics: fetched from LRCLIB for the deck that is currently audible, followed to the playhead. ---
 const lyricsCache = new Map<string, Lyrics | null | 'loading'>();

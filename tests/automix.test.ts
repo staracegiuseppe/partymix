@@ -244,3 +244,36 @@ describe('Automix follows queue reordering', () => {
     expect(s.decks[1].loads).toEqual(['B']);
   });
 });
+
+describe('Automix.withSpareDeck', () => {
+  it('lends the off-air deck, then prepares the next track again', async () => {
+    const s = setup({ dur: 200 });
+    s.am.start(); await s.clock.advance(1_000);
+    expect(s.decks[1].loads).toEqual(['B']);
+    let lent: unknown;
+    const r = await s.am.withSpareDeck(async (d) => { lent = d; return 42; });
+    expect(r).toEqual({ ok: true, value: 42 });
+    expect(lent).toBe(s.decks[1]);
+    await s.clock.advance(500);
+    expect(s.decks[1].loads).toEqual(['B', 'B']);
+    expect(s.am.nextStatus()).toBe('ready');
+    expect(s.am.state()).toBe('playing');
+  });
+  it('refuses during a crossfade and when the track is about to end', async () => {
+    const s = setup();
+    s.am.start(); await s.clock.advance(500);
+    s.am.mixNow(); await s.clock.advance(1_000);
+    expect((await s.am.withSpareDeck(async () => 1)).ok).toBe(false);
+    await s.clock.advance(10_000);
+    await s.clock.advance(35_000); // 60 s track: less than 30 s left
+    expect((await s.am.withSpareDeck(async () => 1)).ok).toBe(false);
+  });
+  it('reports a failing job and releases the deck', async () => {
+    const s = setup({ dur: 200 });
+    s.am.start(); await s.clock.advance(500);
+    const r = await s.am.withSpareDeck(async () => { throw new Error('rete'); });
+    expect(r.ok).toBe(false);
+    await s.clock.advance(500);
+    expect(s.am.nextStatus()).toBe('ready');
+  });
+});

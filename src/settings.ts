@@ -11,6 +11,8 @@ export type Settings = {
   playlistText?: string;
   locked: string[];
   showLyrics: boolean;
+  /** Minutes between automatic playlist refreshes; 0 = manual only. */
+  playlistRefreshMin: number;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -21,10 +23,12 @@ export const DEFAULT_SETTINGS: Settings = {
   micSensitivity: 1,
   locked: [],
   showLyrics: true,
+  playlistRefreshMin: 5,
 };
 
 const KEY = 'partymix.settings';
 const PROFILES: Profile[] = ['morbida', 'standard', 'energica', 'manuale'];
+export const REFRESH_CHOICES = [0, 2, 5, 10, 30];
 const REPEATS = ['off', 'all', 'one'] as const;
 
 const num = (v: unknown, lo: number, hi: number, d: number) =>
@@ -44,6 +48,7 @@ export function loadSettings(store: Storage): Settings {
       repeat: REPEATS.includes(j.repeat) ? j.repeat : 'off',
       micSensitivity: num(j.micSensitivity, 0.1, 5, DEFAULT_SETTINGS.micSensitivity),
       showLyrics: j.showLyrics !== false,
+      playlistRefreshMin: REFRESH_CHOICES.includes(j.playlistRefreshMin) ? j.playlistRefreshMin : DEFAULT_SETTINGS.playlistRefreshMin,
       locked: Array.isArray(j.locked) ? j.locked.filter((x: unknown): x is string => typeof x === 'string') : [],
     };
     const mic = str(j.micDeviceId), disp = str(j.projectorDisplay), pl = str(j.playlistText);

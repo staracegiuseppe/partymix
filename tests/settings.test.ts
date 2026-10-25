@@ -36,3 +36,13 @@ describe('settings', () => {
     expect(() => saveSettings(bad, DEFAULT_SETTINGS)).not.toThrow();
   });
 });
+
+describe('playlist refresh setting', () => {
+  it('defaults to every 5 minutes, accepts 0 (manual) and rejects odd values', () => {
+    expect(DEFAULT_SETTINGS.playlistRefreshMin).toBe(5);
+    expect(loadSettings(mem(JSON.stringify({ playlistRefreshMin: 0 }))).playlistRefreshMin).toBe(0);
+    expect(loadSettings(mem(JSON.stringify({ playlistRefreshMin: 10 }))).playlistRefreshMin).toBe(10);
+    expect(loadSettings(mem(JSON.stringify({ playlistRefreshMin: 7 }))).playlistRefreshMin).toBe(5);
+    expect(loadSettings(mem(JSON.stringify({ playlistRefreshMin: 'x' }))).playlistRefreshMin).toBe(5);
+  });
+});

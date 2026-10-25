@@ -112,3 +112,27 @@ describe('Queue.advanceTo', () => {
     expect(q.advanceTo('zzz')?.videoId).toBe('b');
   });
 });
+
+describe('Queue.remove', () => {
+  it('removes an upcoming track and keeps the current one', () => {
+    const q = new Queue([t('a'), t('b'), t('c')]);
+    expect(q.remove('b')).toBe(true);
+    expect(ids(q.all())).toEqual(['a', 'c']);
+    expect(q.advance()?.videoId).toBe('c');
+  });
+  it('removing a played track keeps the current position', () => {
+    const q = new Queue([t('a'), t('b'), t('c')]);
+    q.advance(); q.advance();
+    q.remove('a');
+    expect(q.current()?.videoId).toBe('c');
+    expect(q.currentIndex()).toBe(1);
+  });
+  it('refuses to remove the track that is playing', () => {
+    const q = new Queue([t('a'), t('b')]);
+    expect(q.remove('a')).toBe(false);
+    expect(ids(q.all())).toEqual(['a', 'b']);
+  });
+  it('returns false for unknown ids', () => {
+    expect(new Queue([t('a')]).remove('zzz')).toBe(false);
+  });
+});
