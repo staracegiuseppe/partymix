@@ -9,6 +9,7 @@ const fire = (el: Element, type: string) => {
 };
 const deck = { title: '', artist: '', elapsed: 0, duration: 0, role: 'idle' as const, volume: 100, duck: false };
 const vm = (n: number): ViewModel => ({
+  lyrics: { status: '', prev: '', cur: '', next: '', offset: 0, show: true, canShift: false },
   state: 'idle', active: 0, ready: true, decks: [deck, deck], mix: 0, master: 80, profile: 'standard', shuffle: false, repeat: 'off',
   queue: Array.from({ length: n }, (_, i) => ({ id: 'v' + i, title: 'T' + i, artist: '', bad: false, locked: false, current: false })),
   history: [], problems: [],

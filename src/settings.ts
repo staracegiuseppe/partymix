@@ -10,6 +10,7 @@ export type Settings = {
   projectorDisplay?: string;
   playlistText?: string;
   locked: string[];
+  showLyrics: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -19,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   repeat: 'off',
   micSensitivity: 1,
   locked: [],
+  showLyrics: true,
 };
 
 const KEY = 'partymix.settings';
@@ -41,6 +43,7 @@ export function loadSettings(store: Storage): Settings {
       shuffle: j.shuffle === true,
       repeat: REPEATS.includes(j.repeat) ? j.repeat : 'off',
       micSensitivity: num(j.micSensitivity, 0.1, 5, DEFAULT_SETTINGS.micSensitivity),
+      showLyrics: j.showLyrics !== false,
       locked: Array.isArray(j.locked) ? j.locked.filter((x: unknown): x is string => typeof x === 'string') : [],
     };
     const mic = str(j.micDeviceId), disp = str(j.projectorDisplay), pl = str(j.playlistText);

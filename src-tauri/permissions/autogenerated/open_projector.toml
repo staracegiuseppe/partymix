@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-projector"
+description = "Enables the open_projector command without any pre-configured scope."
+commands.allow = ["open_projector"]
+
+[[permission]]
+identifier = "deny-open-projector"
+description = "Denies the open_projector command without any pre-configured scope."
+commands.deny = ["open_projector"]

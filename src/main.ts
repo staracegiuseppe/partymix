@@ -4,6 +4,7 @@ import { log, setSinks } from './log';
 import { buildTracks, oembedMeta, verifyReplacement } from './playlistLoader';
 import { parsePlaylistInput } from './playlistUrl';
 import { Queue, Track } from './queue';
+import { fetchLyrics, Lyrics, snapshotAt } from './lyrics';
 import { loadSettings, saveSettings } from './settings';
 import { buildConsole, DeckVM, ViewModel } from './ui/console';
 import { bindShortcuts } from './ui/shortcuts';
@@ -131,9 +132,46 @@ const ui = buildConsole(document.getElementById('app')!, {
   setMic: (id) => { settings.micDeviceId = id || undefined; save(); },
   setMicSensitivity: (v) => { settings.micSensitivity = v; save(); },
   refreshInputs: () => listInputs(),
+  shiftLyrics(d) { if (lyricsDeck) lyricsOffsets.set(lyricsDeck, (lyricsOffsets.get(lyricsDeck) ?? 0) + d); },
+  setShowLyrics(on) { settings.showLyrics = on; save(); },
 });
 ui.setSensitivity(settings.micSensitivity);
 if (hasNativeDisplays()) void listDisplays().then((n) => ui.setDisplays(n, settings.projectorDisplay)).catch(() => {});
+
+// --- Lyrics: fetched from LRCLIB for the deck that is currently audible, followed to the playhead. ---
+const lyricsCache = new Map<string, Lyrics | null | 'loading'>();
+const lyricsOffsets = new Map<string, number>();
+let lyricsDeck: string | undefined;
+let lastPublished = '';
+
+function lyricsVM(): ViewModel['lyrics'] {
+  const empty = { prev: '', cur: '', next: '', offset: 0, show: settings.showLyrics, canShift: false };
+  const st = am?.state() ?? 'idle';
+  if (!decks || !am || st === 'idle') { lyricsDeck = undefined; return { ...empty, status: 'Il testo comparirà quando parte un brano.' }; }
+  const idx = st === 'crossfading' ? (am.mixProgress() > 0.5 ? 1 - am.activeDeck() : am.activeDeck()) : am.activeDeck();
+  const d = decks[idx as 0 | 1];
+  const id = d.currentVideoId();
+  const track = trackOf(id);
+  lyricsDeck = id || undefined;
+  if (!track || d.duration() <= 0) return { ...empty, status: 'Cerco il testo…' };
+  if (!lyricsCache.has(id)) {
+    lyricsCache.set(id, 'loading');
+    void fetchLyrics(track.title ?? '', track.artist ?? '', d.duration()).then((l) => lyricsCache.set(id, l));
+  }
+  const l = lyricsCache.get(id);
+  if (l === 'loading' || l === undefined) return { ...empty, status: 'Cerco il testo…' };
+  if (!l) return { ...empty, status: 'Testo non trovato per questo brano.' };
+  if (l.plain) return { ...empty, status: 'Testo senza tempi (non si può seguire a ritmo): non viene mostrato sul proiettore.', plain: l.plain };
+  const offset = lyricsOffsets.get(id) ?? 0;
+  return { ...empty, ...snapshotAt(l.synced!, d.position(), offset), offset, canShift: true, status: 'Testo da LRCLIB, sincronizzato con il brano in onda.' };
+}
+
+function publishLyrics(ly: ViewModel['lyrics']) {
+  const msg = JSON.stringify({ on: settings.showLyrics && ly.canShift, prev: ly.prev, cur: ly.cur, next: ly.next });
+  if (msg === lastPublished) return;
+  lastPublished = msg;
+  try { store?.setItem('partymix.lyrics', msg); } catch { /* the projector simply keeps the last line */ }
+}
 
 function deckVM(i: 0 | 1): DeckVM {
   const d = decks?.[i];
@@ -154,7 +192,10 @@ function deckVM(i: 0 | 1): DeckVM {
 
 function viewModel(): ViewModel {
   const cur = queue.currentIndex();
+  const lyrics = lyricsVM();
+  publishLyrics(lyrics);
   return {
+    lyrics,
     state: am?.state() ?? 'idle',
     active: am?.activeDeck() ?? 0,
     ready: !!decks && !!am && !!queue.current(),
@@ -196,4 +237,3 @@ bindShortcuts(window, {
   log('info', 'app.ready');
 })();
 
-if (import.meta.env.VITE_BEACON) void import('./selftest').then((m) => m.run());

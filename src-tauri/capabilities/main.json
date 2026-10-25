@@ -4,5 +4,5 @@
   "description": "Finestre di PartyMix servite da localhost",
   "windows": ["main", "projector"],
   "remote": { "urls": ["http://localhost:*"] },
-  "permissions": ["core:default", "core:window:allow-close"]
+  "permissions": ["core:default", "allow-list-displays", "allow-open-projector", "allow-close-projector"]
 }

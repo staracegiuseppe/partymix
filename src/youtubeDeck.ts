@@ -52,7 +52,7 @@ export class YouTubeDeck implements Deck {
     this.wantPlay = false;
     this.retries = 0;
     this.settle(new Error('Caricamento sostituito'));
-    return this.cueWith(() => this.player.cueVideoById(videoId));
+    return this.cueWith(() => this.player.cueVideoById({ videoId, startSeconds: 0.05 })); // 0 is treated as 'unset' and YouTube resumes from the last watched position
   }
 
   /** Cues a whole playlist on this player and returns its video ids (YouTube exposes up to ~200). */

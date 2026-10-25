@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-close-projector"
+description = "Enables the close_projector command without any pre-configured scope."
+commands.allow = ["close_projector"]
+
+[[permission]]
+identifier = "deny-close-projector"
+description = "Denies the close_projector command without any pre-configured scope."
+commands.deny = ["close_projector"]

@@ -28,11 +28,15 @@ export type Actions = {
   setMic(id: string): void;
   setMicSensitivity(v: number): void;
   refreshInputs(): Promise<{ id: string; label: string }[]>;
+  shiftLyrics(deltaSeconds: number): void;
+  setShowLyrics(on: boolean): void;
 };
 
 export type DeckVM = { title: string; artist: string; thumb?: string; elapsed: number; duration: number; role: 'live' | 'out' | 'ready' | 'loading' | 'idle'; volume: number; duck: boolean };
 export type QueueRowVM = { id: string; title: string; artist: string; bad: boolean; locked: boolean; current: boolean };
+export type LyricsVM = { status: string; prev: string; cur: string; next: string; plain?: string; offset: number; show: boolean; canShift: boolean };
 export type ViewModel = {
+  lyrics: LyricsVM;
   state: AutomixState;
   active: 0 | 1;
   ready: boolean;
@@ -139,12 +143,22 @@ export function buildConsole(root: HTMLElement, a: Actions) {
   const projPanel = h('section', { class: 'panel' }, h('h3', {}, 'Proiettore'),
     h('div', { class: 'artist', style: 'margin-bottom:8px' }, 'Le forme seguono il suono della stanza tramite il microfono. Non viene registrato nulla.'),
     h('div', { class: 'btns' },
-      h('button', { onClick: async () => { projMsg.textContent = ''; try { await a.openProjector(); } catch (e) { projMsg.textContent = `Non riesco ad aprire il proiettore: ${(e as Error).message}`; } } }, 'Apri proiettore'),
+      h('button', { onClick: async () => { projMsg.textContent = ''; try { await a.openProjector(); } catch (e) { projMsg.textContent = `Non riesco ad aprire il proiettore: ${(e as Error)?.message ?? String(e)}`; } } }, 'Apri proiettore'),
       h('button', { onClick: () => a.closeProjector() }, 'Chiudi proiettore')),
     dispRow,
     h('div', { class: 'row' }, h('label', {}, 'Ingresso'), micSel), h('div', { class: 'row' }, micBtn),
     h('div', { class: 'row' }, h('label', {}, 'Sensibilità'), sens), projMsg);
-  const side = h('div', { class: 'side' }, warnPanel, projPanel,
+  const lyStatus = h('div', { class: 'artist' });
+  const lyPrev = h('div', { class: 'ly prev' }), lyCur = h('div', { class: 'ly cur' }), lyNext = h('div', { class: 'ly next' });
+  const lyPlain = h('pre', { class: 'plain hidden' });
+  const lyOffset = h('span', { class: 'artist' });
+  const lyEarly = h('button', { onClick: () => a.shiftLyrics(0.5) }, 'Anticipa 0,5 s');
+  const lyLate = h('button', { onClick: () => a.shiftLyrics(-0.5) }, 'Ritarda 0,5 s');
+  const lyShow = h('input', { type: 'checkbox', 'aria-label': 'Mostra il testo sul proiettore', onChange: () => a.setShowLyrics(lyShow.checked) });
+  const lyricsPanel = h('section', { class: 'panel' }, h('h3', {}, 'Testo'), lyStatus, lyPrev, lyCur, lyNext, lyPlain,
+    h('div', { class: 'row' }, lyEarly, lyLate, lyOffset),
+    h('label', { class: 'row' }, lyShow, 'Mostra sul proiettore'));
+  const side = h('div', { class: 'side' }, lyricsPanel, warnPanel, projPanel,
     h('section', { class: 'panel' }, h('h3', {}, 'Già suonati'), histList),
     h('section', { class: 'panel' }, h('h3', {}, 'Stato e problemi'), problems),
     h('section', { class: 'panel' }, unav));
@@ -182,6 +196,13 @@ export function buildConsole(root: HTMLElement, a: Actions) {
   };
 
   function update(vm: ViewModel) {
+    const ly = vm.lyrics;
+    lyStatus.textContent = ly.status;
+    lyPrev.textContent = ly.prev; lyCur.textContent = ly.cur || (ly.status.startsWith('Testo da') ? '♪' : ''); lyNext.textContent = ly.next;
+    lyPlain.textContent = ly.plain ?? ''; lyPlain.classList.toggle('hidden', !ly.plain);
+    lyEarly.disabled = lyLate.disabled = !ly.canShift;
+    lyOffset.textContent = ly.canShift ? `Spostamento: ${ly.offset > 0 ? '+' : ''}${ly.offset.toFixed(1).replace('.', ',')} s` : '';
+    if (document.activeElement !== lyShow) lyShow.checked = ly.show;
     paintDeck(dA, vm.decks[0]);
     paintDeck(dB, vm.decks[1]);
     const idle = vm.state === 'idle';

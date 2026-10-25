@@ -82,3 +82,7 @@ details li { margin: 6px 0; } details li span { color: var(--muted); display: bl
 
 input.seek { margin: 2px 0 0; height: 22px; accent-color: var(--c, var(--b)); }
 input.seek:disabled { opacity: .35; }
+
+.ly { min-height: 1.4em; color: var(--muted); }
+.ly.cur { color: var(--text); font-size: clamp(1.2rem, 2vw, 1.8rem); font-weight: 800; min-height: 1.6em; }
+.plain { max-height: 220px; overflow: auto; white-space: pre-wrap; color: var(--muted); font: inherit; margin: 8px 0; }

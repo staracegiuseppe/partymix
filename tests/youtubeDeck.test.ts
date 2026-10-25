@@ -37,7 +37,7 @@ describe('YouTubeDeck', () => {
   it('load cues the video and resolves when YouTube reports cued', async () => {
     const { p, d } = mk();
     const done = d.load('abc');
-    expect(p.calls).toContain('cue:abc');
+    expect(p.calls).toContain('cue:abc@0.05');
     d.handleState(5);
     await expect(done).resolves.toBeUndefined();
   });
@@ -81,7 +81,7 @@ describe('YouTubeDeck', () => {
     const { p, d, timers } = mk();
     d.load('abc');
     d.handleError(5); timers.at(-1)!.fn();
-    expect(p.calls).toContain('cue:abc@0');
+    expect(p.calls).toContain('cue:abc@0.05');
     expect(p.calls.some((c) => c.startsWith('load:'))).toBe(false);
   });
   it('reports an unplayable error immediately', () => {
