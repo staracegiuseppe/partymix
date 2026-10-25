@@ -59,6 +59,14 @@ export class Automix {
   state(): AutomixState { return this.st; }
   activeDeck(): DeckIdx { return this.active; }
 
+  nextStatus(): NextState { return this.nextState; }
+
+  /** 0 when no crossfade is running, otherwise 0..1. */
+  mixProgress(): number {
+    if (this.st !== 'crossfading' && !(this.st === 'paused' && this.pausedFrom === 'crossfading')) return 0;
+    return this.mixDur > 0 ? Math.min(1, this.mixElapsed / this.mixDur) : 1;
+  }
+
   start(): void {
     if (this.st !== 'idle') return;
     const tok = ++this.token;

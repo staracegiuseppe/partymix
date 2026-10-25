@@ -73,3 +73,29 @@ describe('Queue', () => {
     expect(ids(q.history())).toEqual(['a']);
   });
 });
+
+describe('Queue extras', () => {
+  it('replace swaps a track in place and keeps the position', () => {
+    const q = new Queue([t('a'), t('b', { status: 'unplayable' }), t('c')]);
+    q.replace('b', t('z'));
+    expect(ids(q.all())).toEqual(['a', 'z', 'c']);
+    expect(q.advance()?.videoId).toBe('z');
+  });
+  it('setRepeat changes behaviour at the end', () => {
+    const q = new Queue([t('a')]);
+    q.setRepeat('all');
+    expect(q.advance()?.videoId).toBe('a');
+  });
+  it('shuffleUpcoming leaves played and current tracks where they are', () => {
+    const q = new Queue([t('a'), t('b'), t('c'), t('d')]);
+    q.advance();
+    q.shuffleUpcoming(() => 0);
+    expect(ids(q.all()).slice(0, 2)).toEqual(['a', 'b']);
+    expect(ids(q.all()).sort()).toEqual(['a', 'b', 'c', 'd']);
+  });
+  it('currentIndex points at the playing track', () => {
+    const q = new Queue([t('a'), t('b')]);
+    q.advance();
+    expect(q.currentIndex()).toBe(1);
+  });
+});

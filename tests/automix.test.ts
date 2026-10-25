@@ -189,3 +189,28 @@ describe('Automix', () => {
     expect(s.am.state()).toBe('idle');
   });
 });
+
+describe('Automix status for the UI', () => {
+  it('reports next-track status and crossfade progress', async () => {
+    const s = setup();
+    expect(s.am.mixProgress()).toBe(0);
+    s.am.start(); await s.clock.advance(500);
+    expect(s.am.nextStatus()).toBe('ready');
+    s.am.mixNow(); await s.clock.advance(4_000);
+    const p = s.am.mixProgress();
+    expect(p).toBeGreaterThan(0.3);
+    expect(p).toBeLessThan(0.8);
+    await s.clock.advance(10_000);
+    expect(s.am.mixProgress()).toBe(0);
+  });
+  it('applies per-deck volume on top of the master volume', async () => {
+    const clock = new Clock();
+    const decks: [FakeDeck, FakeDeck] = [new FakeDeck(clock), new FakeDeck(clock)];
+    const am = new Automix({
+      decks, queue: new Queue([tr('A'), tr('B')]), profile: () => 'standard', masterVolume: () => 80,
+      deckVolume: (i) => (i === 0 ? 0.5 : 1), now: () => clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer, log: () => {},
+    });
+    am.start(); await clock.advance(500);
+    expect(decks[0].vol).toBe(40);
+  });
+});

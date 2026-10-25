@@ -83,6 +83,26 @@ export class Queue {
     }
   }
 
+  replace(oldVideoId: string, t: Track): void {
+    const i = this.order.findIndex((x) => x.videoId === oldVideoId);
+    if (i < 0) return;
+    this.order[i] = t;
+    if (this.pos < 0) this.reset();
+  }
+
+  setRepeat(r: 'off' | 'all' | 'one'): void { this.repeat = r; }
+
+  /** Shuffles the tracks after the current one; played tracks and the current one stay put. */
+  shuffleUpcoming(rng: () => number = Math.random): void {
+    const start = this.pos + 1;
+    for (let i = this.order.length - 1; i > start; i--) {
+      const j = start + Math.floor(rng() * (i - start + 1));
+      [this.order[i], this.order[j]] = [this.order[j], this.order[i]];
+    }
+  }
+
+  currentIndex(): number { return this.pos; }
+
   history(): Track[] { return [...this.hist]; }
   all(): Track[] { return [...this.order]; }
 
