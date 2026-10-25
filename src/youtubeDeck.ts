@@ -80,6 +80,7 @@ export class YouTubeDeck implements Deck {
     if (err) { p.reject(err); } else { p.resolve(); }
   }
 
+  currentVideoId(): string { return this.videoId; }
   play(): void { this.wantPlay = true; this.player.playVideo(); }
   pause(): void { this.wantPlay = false; this.player.pauseVideo(); }
   stop(): void { this.wantPlay = false; this.player.stopVideo(); }
