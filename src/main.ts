@@ -100,6 +100,7 @@ const ui = buildConsole(document.getElementById('app')!, {
   mixNow: () => am?.mixNow(),
   setProfile: (p) => { settings.profile = p; save(); },
   setMaster: (v) => { settings.master = v; save(); },
+  seek: (i, sec) => decks?.[i].seekTo(sec),
   setDeckVolume: (i, v) => { sliders[i] = v; },
   toggleDuck: (i) => { ducked[i] = !ducked[i]; },
   toggleLock(id) {

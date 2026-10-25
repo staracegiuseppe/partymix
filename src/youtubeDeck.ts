@@ -11,6 +11,7 @@ export type YtPlayerLike = {
   setVolume(v: number): void;
   getCurrentTime(): number;
   getDuration(): number;
+  seekTo(seconds: number, allowSeekAhead: boolean): void;
   cuePlaylist?(a: { listType: 'playlist'; list: string }): void;
   getPlaylist?(): string[];
 };
@@ -80,6 +81,12 @@ export class YouTubeDeck implements Deck {
     if (err) { p.reject(err); } else { p.resolve(); }
   }
 
+  /** Moves the playhead. Only meaningful on a deck that is on air. */
+  seekTo(seconds: number): void {
+    const dur = this.duration();
+    const max = dur > 0 ? Math.max(0, dur - 1) : Math.max(0, seconds);
+    this.player.seekTo(Math.min(max, Math.max(0, seconds)), true);
+  }
   currentVideoId(): string { return this.videoId; }
   play(): void { this.wantPlay = true; this.player.playVideo(); }
   pause(): void { this.wantPlay = false; this.player.pauseVideo(); }

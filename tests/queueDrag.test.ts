@@ -50,3 +50,36 @@ describe('queue drag and drop', () => {
     expect(move).not.toHaveBeenCalled();
   });
 });
+
+describe('seek bar', () => {
+  const liveVm = (): ViewModel => {
+    const v = vm(2);
+    v.state = 'playing';
+    v.decks = [{ ...deck, role: 'live', elapsed: 20, duration: 200 }, { ...deck, role: 'ready' }];
+    return v;
+  };
+  const build = () => {
+    document.body.innerHTML = '<div id="root"></div>';
+    const seek = vi.fn();
+    const actions = new Proxy({ seek }, { get: (t, k) => (k in t ? (t as never)[k] : vi.fn()) }) as unknown as Actions;
+    const ui = buildConsole(document.getElementById('root')!, actions);
+    ui.update(liveVm());
+    return { seek, bars: () => [...document.querySelectorAll<HTMLInputElement>('input[aria-label^="Posizione deck"]')] };
+  };
+  it('reflects the playback position and is enabled only on the live deck', () => {
+    const { bars } = build();
+    expect(bars()[0].value).toBe('20');
+    expect(bars()[0].max).toBe('200');
+    expect(bars()[0].disabled).toBe(false);
+    expect(bars()[1].disabled).toBe(true);
+  });
+  it('seeks once when the user releases the slider, not on every drag step', () => {
+    const { seek, bars } = build();
+    const bar = bars()[0];
+    bar.value = '90';
+    bar.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(seek).not.toHaveBeenCalled();
+    bar.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(seek).toHaveBeenCalledWith(0, 90);
+  });
+});

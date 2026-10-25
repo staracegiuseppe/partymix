@@ -2,7 +2,7 @@
 export const beacon = (m: string) => { void fetch('http://127.0.0.1:9600/log?m=' + encodeURIComponent(m), { mode: 'no-cors' }).catch(() => {}); };
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const q = <T extends Element>(s: string) => document.querySelector(s) as T;
-const snap = () => beacon('snap ' + [...document.querySelectorAll('.role,.times,.problems li')].map((e) => e.textContent).join(' | ') + ' || ' + q('.status:nth-of-type(1)').textContent);
+const snap = () => beacon('snap ' + [...document.querySelectorAll('.role,.times,.problems li')].map((e) => e.textContent).join(' | ') + ' || ' + document.querySelectorAll('.status')[1]?.textContent);
 
 export async function run() {
   beacon('selftest start; tauri=' + !!(window as any).__TAURI_INTERNALS__ + ' origin=' + location.origin);

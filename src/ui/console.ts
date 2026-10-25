@@ -12,6 +12,7 @@ export type Actions = {
   mixNow(): void;
   setProfile(p: Profile): void;
   setMaster(v: number): void;
+  seek(i: 0 | 1, seconds: number): void;
   setDeckVolume(i: 0 | 1, v: number): void;
   toggleDuck(i: 0 | 1): void;
   toggleLock(videoId: string): void;
@@ -67,7 +68,13 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     const title = h('div', { class: 'title' });
     const artist = h('div', { class: 'artist' });
     const el = h('span'), rem = h('span');
-    const fill = h('i');
+    let seeking = false;
+    const seek = h('input', { type: 'range', class: 'seek', min: '0', max: '0', step: '1', value: '0', disabled: true, 'aria-label': `Posizione deck ${i ? 'B' : 'A'}`,
+      onPointerdown: () => { seeking = true; }, onKeydown: () => { seeking = true; },
+      onInput: () => { el.textContent = fmtTime(+seek.value); rem.textContent = '-' + fmtTime(+seek.max - +seek.value); },
+      onChange: () => { seeking = false; a.seek(i, +seek.value); },
+      onPointerup: () => { seeking = false; }, onBlur: () => { seeking = false; } });
+    const isSeeking = () => seeking;
     const vol = h('input', { type: 'range', min: '0', max: '100', 'aria-label': `Volume deck ${i ? 'B' : 'A'}`, onInput: () => a.setDeckVolume(i, +vol.value) });
     const duck = h('button', { 'aria-pressed': 'false', title: 'Abbassa il volume di questo deck (ad esempio durante una pubblicità)', onClick: () => a.toggleDuck(i) }, 'Abbassa volume');
     const card = h('section', { class: `panel deck ${i ? 'b' : 'a'}` },
@@ -75,11 +82,11 @@ export function buildConsole(root: HTMLElement, a: Actions) {
       mount,
       h('div', { class: 'meta' }, cover, h('div', { style: 'min-width:0' }, title, artist)),
       h('div', { class: 'times' }, el, rem),
-      h('div', { class: 'bar' }, fill),
+      seek,
       h('div', { class: 'row' }, h('label', {}, 'Volume deck'), vol),
       h('div', { class: 'row' }, duck),
     );
-    return { mount, card, role, cover, title, artist, el, rem, fill, vol, duck };
+    return { mount, card, role, cover, title, artist, el, rem, seek, isSeeking, vol, duck };
   };
   const dA = mkDeck(0), dB = mkDeck(1);
 
@@ -161,9 +168,14 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     d.title.textContent = v.title || '—';
     d.artist.textContent = v.artist || '';
     d.cover.style.backgroundImage = v.thumb ? `url("${v.thumb.replace(/"/g, '')}")` : '';
-    d.el.textContent = fmtTime(v.elapsed);
-    d.rem.textContent = v.duration > 0 ? '-' + fmtTime(v.duration - v.elapsed) : '';
-    d.fill.style.width = v.duration > 0 ? `${Math.min(100, (v.elapsed / v.duration) * 100)}%` : '0%';
+    const canSeek = (v.role === 'live' || v.role === 'out') && v.duration > 0;
+    d.seek.disabled = !canSeek;
+    if (!d.isSeeking()) {
+      d.el.textContent = fmtTime(v.elapsed);
+      d.rem.textContent = v.duration > 0 ? '-' + fmtTime(v.duration - v.elapsed) : '';
+      d.seek.max = String(Math.max(0, Math.floor(v.duration)));
+      d.seek.value = String(Math.floor(v.elapsed));
+    }
     if (document.activeElement !== d.vol) d.vol.value = String(v.volume);
     d.duck.setAttribute('aria-pressed', String(v.duck));
     d.duck.textContent = v.duck ? 'Volume abbassato: ripristina' : 'Abbassa volume';

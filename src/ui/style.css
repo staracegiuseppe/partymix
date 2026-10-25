@@ -79,3 +79,6 @@ details li { margin: 6px 0; } details li span { color: var(--muted); display: bl
 .item[draggable=true] { cursor: grab; }
 .item.dragging { opacity: .4; }
 .item.over { box-shadow: 0 -3px 0 0 var(--b); }
+
+input.seek { margin: 2px 0 0; height: 22px; accent-color: var(--c, var(--b)); }
+input.seek:disabled { opacity: .35; }

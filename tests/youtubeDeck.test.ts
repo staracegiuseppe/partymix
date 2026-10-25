@@ -11,6 +11,7 @@ class FakePlayer implements YtPlayerLike {
   setVolume(v: number) { this.calls.push('vol:' + v); }
   getCurrentTime() { return this.time; }
   getDuration() { return 200; }
+  seekTo() {}
 }
 
 function mk() {
@@ -90,5 +91,24 @@ describe('YouTubeDeck', () => {
     d.handleError(101);
     expect(errs).toEqual([101]);
     expect(timers).toHaveLength(0);
+  });
+});
+
+describe('YouTubeDeck.seekTo', () => {
+  const mkSeek = () => {
+    const calls: string[] = [];
+    const p = { seekTo: (s: number, ahead: boolean) => calls.push(`seek:${s}:${ahead}`), getDuration: () => 200, getCurrentTime: () => 0 } as unknown as YtPlayerLike;
+    return { calls, deck: new YouTubeDeck(p, { setTimer: () => 0, clearTimer: () => {} }) };
+  };
+  it('seeks to the requested second', () => {
+    const { calls, deck } = mkSeek();
+    deck.seekTo(75);
+    expect(calls).toEqual(['seek:75:true']);
+  });
+  it('clamps below zero and past the end', () => {
+    const { calls, deck } = mkSeek();
+    deck.seekTo(-10);
+    deck.seekTo(9999);
+    expect(calls).toEqual(['seek:0:true', 'seek:199:true']);
   });
 });
