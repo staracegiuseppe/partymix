@@ -10,8 +10,28 @@ export type Settings = {
   micSensitivity: number;
   projectorDisplay?: string;
   playlistText?: string;
+  /** The two saved playlist links (empty string = slot not set yet). */
+  playlists: [string, string];
+  /** The names the user gave the two playlists (empty = «Playlist N»). */
+  playlistNames: [string, string];
+  /** Which of the two playlists is in use. */
+  playlistSlot: 0 | 1;
+  /** What the projector shows: shapes and lyrics (karaoke) or the YouTube video itself, big (e.g. Just Dance). */
+  projectorMode: 'karaoke' | 'video';
+  /** The guided setup was shown (finished or skipped), so it does not open by itself again. */
+  welcomed: boolean;
+  /** Look up the lyrics of every song in the background after a playlist is loaded. */
+  karaokeAuto: boolean;
+  /** Listen to the sound that plays and lower the volume when it is a spoken ad. */
+  adGuard: boolean;
+  /** Score needed to count as speech: 3 sensitive, 4 normal, 5 cautious. */
+  adThreshold: number;
+  /** What to do with short tracks (spots) in the playlist: nothing, lower the volume, or move on to the next track. */
+  spotMode: 'off' | 'duck' | 'skip';
   locked: string[];
   showLyrics: boolean;
+  /** The words of the line being sung light up one by one (karaoke style); off = the whole line stays plain. */
+  lyricsHighlight: boolean;
   /** Minutes between automatic playlist refreshes; 0 = manual only. */
   playlistRefreshMin: number;
   /** Per-video lyrics alignment chosen by the user (karaoke and other versions). */
@@ -24,10 +44,20 @@ export const DEFAULT_SETTINGS: Settings = {
   shuffle: false,
   repeat: 'off',
   micSensitivity: 1,
+  welcomed: false,
+  karaokeAuto: true,
+  adGuard: false,
+  adThreshold: 4,
+  spotMode: 'off',
   locked: [],
   showLyrics: true,
+  lyricsHighlight: true,
   playlistRefreshMin: 5,
   lyricsAlign: {},
+  playlists: ['', ''],
+  playlistNames: ['', ''],
+  playlistSlot: 0,
+  projectorMode: 'karaoke',
 };
 
 const KEY = 'partymix.settings';
@@ -53,27 +83,38 @@ function cleanAlign(v: unknown): Record<string, Align> {
 export function loadSettings(store: Storage): Settings {
   try {
     const raw = store.getItem(KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS };
+    if (!raw) return { ...DEFAULT_SETTINGS, playlists: ['', ''], playlistNames: ['', ''] };
     const j = JSON.parse(raw);
-    if (!j || typeof j !== 'object') return { ...DEFAULT_SETTINGS };
+    if (!j || typeof j !== 'object') return { ...DEFAULT_SETTINGS, playlists: ['', ''], playlistNames: ['', ''] };
     const out: Settings = {
       profile: PROFILES.includes(j.profile) ? j.profile : DEFAULT_SETTINGS.profile,
       master: num(j.master, 0, 100, DEFAULT_SETTINGS.master),
       shuffle: j.shuffle === true,
       repeat: REPEATS.includes(j.repeat) ? j.repeat : 'off',
       micSensitivity: num(j.micSensitivity, 0.1, 5, DEFAULT_SETTINGS.micSensitivity),
+      welcomed: j.welcomed === true,
+      karaokeAuto: j.karaokeAuto !== false,
+      adGuard: j.adGuard === true,
+      adThreshold: [3, 4, 5].includes(j.adThreshold) ? j.adThreshold : DEFAULT_SETTINGS.adThreshold,
+      spotMode: j.spotMode === 'duck' || j.spotMode === 'skip' ? j.spotMode : 'off',
       showLyrics: j.showLyrics !== false,
+      lyricsHighlight: j.lyricsHighlight !== false,
       playlistRefreshMin: REFRESH_CHOICES.includes(j.playlistRefreshMin) ? j.playlistRefreshMin : DEFAULT_SETTINGS.playlistRefreshMin,
       lyricsAlign: cleanAlign(j.lyricsAlign),
+      playlists: [0, 1].map((i) => (Array.isArray(j.playlists) && typeof j.playlists[i] === 'string' ? j.playlists[i] : '')) as [string, string],
+      playlistNames: [0, 1].map((i) => (Array.isArray(j.playlistNames) && typeof j.playlistNames[i] === 'string' ? j.playlistNames[i].slice(0, 60) : '')) as [string, string],
+      playlistSlot: j.playlistSlot === 1 ? 1 : 0,
+      projectorMode: j.projectorMode === 'video' ? 'video' : 'karaoke',
       locked: Array.isArray(j.locked) ? j.locked.filter((x: unknown): x is string => typeof x === 'string') : [],
     };
     const mic = str(j.micDeviceId), disp = str(j.projectorDisplay), pl = str(j.playlistText);
     if (mic) out.micDeviceId = mic;
     if (disp) out.projectorDisplay = disp;
     if (pl) out.playlistText = pl;
+    if (pl && !Array.isArray(j.playlists)) out.playlists[0] = pl; // before two playlists existed: the old one becomes Playlist 1
     return out;
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, playlists: ['', ''], playlistNames: ['', ''] };
   }
 }
 

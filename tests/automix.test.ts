@@ -335,3 +335,48 @@ describe('Automix review fixes', () => {
     expect(s.queue.all()[1].status).toBe('ok');
   });
 });
+
+describe('playNow (double click on a queue track)', () => {
+  it('while playing: loads the picked track on the spare deck and fades it in over the current one', async () => {
+    const s = setup({ ids: ['A', 'B', 'C', 'D'] });
+    s.am.start(); await s.clock.advance(1_000);
+    s.am.playNow('D'); await s.clock.advance(100);
+    expect(s.decks[1].loads).toContain('D');
+    expect(s.am.state()).toBe('crossfading');
+    await s.clock.advance(6_000);
+    expect(s.am.state()).toBe('playing');
+    expect(s.queue.current()?.videoId).toBe('D');
+    expect(s.am.activeDeck()).toBe(1);
+    expect(s.queue.peekNext()?.videoId).toBe('B'); // the tracks it jumped over are still to come
+  });
+  it('picks the track even with repeat-one and a locked current track', async () => {
+    const s = setup({ ids: ['A', 'B', 'C'] });
+    s.queue.setRepeat('one'); s.queue.setLocked('A', true);
+    s.am.start(); await s.clock.advance(1_000);
+    s.am.playNow('C'); await s.clock.advance(6_000);
+    expect(s.queue.current()?.videoId).toBe('C');
+  });
+  it('when stopped: starts the party from the picked track', async () => {
+    const s = setup({ ids: ['A', 'B', 'C'] });
+    s.am.playNow('C'); await s.clock.advance(100);
+    expect(s.am.state()).toBe('playing');
+    expect(s.decks[0].loads).toEqual(['C']);
+    expect(s.queue.current()?.videoId).toBe('C');
+  });
+  it('ignores the track that is already playing and tracks that cannot be played', async () => {
+    const s = setup({ ids: ['A', 'B'] });
+    s.queue.markUnplayable('B');
+    s.am.start(); await s.clock.advance(1_000);
+    s.am.playNow('A'); s.am.playNow('B'); await s.clock.advance(500);
+    expect(s.am.state()).toBe('playing');
+    expect(s.queue.current()?.videoId).toBe('A');
+  });
+  it('during a crossfade: finishes it first, then fades to the picked track', async () => {
+    const s = setup({ ids: ['A', 'B', 'C', 'D'] });
+    s.am.start(); await s.clock.advance(1_000);
+    s.am.mixNow(); await s.clock.advance(2_000);
+    expect(s.am.state()).toBe('crossfading');
+    s.am.playNow('D'); await s.clock.advance(6_000);
+    expect(s.queue.current()?.videoId).toBe('D');
+  });
+});

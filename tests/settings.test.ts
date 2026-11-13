@@ -62,3 +62,12 @@ describe('lyrics alignment setting', () => {
     expect(DEFAULT_SETTINGS.lyricsAlign).toEqual({});
   });
 });
+
+describe('spot mode', () => {
+  it('is off by default and accepts only the known modes', () => {
+    expect(DEFAULT_SETTINGS.spotMode).toBe('off');
+    expect(loadSettings(mem(JSON.stringify({ spotMode: 'skip' }))).spotMode).toBe('skip');
+    expect(loadSettings(mem(JSON.stringify({ spotMode: 'duck' }))).spotMode).toBe('duck');
+    expect(loadSettings(mem(JSON.stringify({ spotMode: 'boh' }))).spotMode).toBe('off');
+  });
+});

@@ -24,6 +24,17 @@ input[type=range] { width: 100%; accent-color: var(--b); }
 .status.error { color: var(--err); }
 .load { display: flex; gap: 8px; flex-wrap: wrap; }
 .load input { flex: 1 1 320px; }
+.load .apps-btn { flex: 1 1 100%; }
+.load .slots { flex: 0 0 auto; grid-template-columns: repeat(2, minmax(96px, auto)); }
+.slots button.empty:not([aria-pressed=true]) { opacity: .6; }
+.slots button { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.load .plname { flex: 0 1 200px; min-width: 120px; }
+.load .saved { align-self: center; white-space: nowrap; }
+.load .saved:empty { display: none; }
+.app-picker-btns { display: flex; gap: 10px; margin: 6px 0 4px; }
+.app-picker-btns button { flex: 1 1 0; font-size: 1.15rem; padding: .9em .6em; }
+.app-picker .app-yt b { color: #ff3b3b; }
+.app-picker .app-sp b { color: #1ed760; }
 .decks > * , .lower > * { min-width: 0; }
 .decks { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px) minmax(0, 1fr); gap: 16px; align-items: start; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
@@ -92,7 +103,7 @@ input.seek:disabled { opacity: .35; }
 .lylist button.now { background: #1f2a4d; color: var(--text); font-weight: 700; outline: 1px solid var(--b); }
 
 /* Never scroll sideways: every grid cell may shrink, rows wrap, long text breaks. */
-html, body { overflow-x: hidden; max-width: 100vw; }
+html, body { overflow-x: clip; max-width: 100vw; } /* clip, not hidden: hidden turns body into a scroll container and breaks the sticky sync bar */
 .decks > *, .lower > *, .side > *, .panel { min-width: 0; }
 .row { flex-wrap: wrap; }
 .row input[type=range] { flex: 1 1 120px; min-width: 80px; }
@@ -102,3 +113,79 @@ select { max-width: 100%; min-width: 0; font: inherit; color: var(--text); backg
 .ly, .artist, .status, .msg { overflow-wrap: anywhere; }
 .lylist button { white-space: normal; overflow-wrap: anywhere; }
 .opts { min-width: 0; }
+
+/* Lyrics sync bar: stays at the bottom of the window so it is reachable while watching the videos. */
+.syncbar { position: sticky; bottom: 8px; z-index: 5; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; align-items: center; padding: 10px 16px; box-shadow: 0 -6px 24px #000a; border-color: var(--b); }
+.syncbar .ly.cur { font-size: clamp(1.1rem, 1.8vw, 1.6rem); }
+.syncbar .row { margin-top: 4px; }
+.syncbar .row.speed input[type=range] { flex: 1 1 160px; }
+.syncbar .speedval { font-variant-numeric: tabular-nums; font-weight: 800; min-width: 3.6em; text-align: right; }
+.syncbar .row.speed button { padding: .35em .8em; font-weight: 800; }
+.syncbar .show { display: flex; gap: 6px; align-items: center; min-width: 0; color: var(--text); }
+@media (max-width: 1100px) { .syncbar { grid-template-columns: minmax(0, 1fr); } }
+.syncbar .linestep { flex: 1 1 200px; font-weight: 700; }
+
+/* Compact: keep the bar low so the decks' time and seek bar stay visible. */
+.syncbar { padding: 6px 12px; gap: 12px; }
+.syncbar button { padding: .2em .55em; font-size: .8rem; }
+.syncbar .row { margin-top: 3px; gap: 6px; }
+.syncbar .ly.cur { font-size: clamp(1rem, 1.5vw, 1.35rem); min-height: 1.3em; }
+.syncbar .ly.next { font-size: .85rem; min-height: 1.1em; }
+.syncbar .row.speed label { font-size: .8rem; }
+.syncbar .row.speed button { padding: .1em .6em; }
+.syncbar .artist, .syncbar .show { font-size: .8rem; }
+.pill.sp { color: #1ed760; border-color: #1ed76066; }
+
+/* Tutorial, guided setup and info window. */
+.top-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.top-tools button { padding: .35em .9em; font-size: .9rem; }
+button.primary { background: var(--b); color: #06202a; font-weight: 800; border-color: var(--b); }
+button.primary:hover:not(:disabled) { background: #7ee8ff; }
+button.link { background: transparent; border-color: transparent; color: var(--muted); text-decoration: underline; padding-left: 0; }
+.tour-block { position: fixed; inset: 0; z-index: 90; }
+.tour-hole { position: fixed; z-index: 91; border-radius: 14px; border: 2px solid var(--b); box-shadow: 0 0 0 9999px #05070dcc, 0 0 24px #3ddcff88; pointer-events: none; transition: left .2s, top .2s, width .2s, height .2s; }
+.tour-card { position: fixed; z-index: 92; width: min(360px, calc(100vw - 16px)); background: var(--panel); border: 1px solid var(--b); border-radius: var(--radius); padding: 16px; box-shadow: 0 12px 40px #000c; }
+.tour-count { color: var(--muted); font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; }
+.tour-title { margin: 4px 0 6px; font-size: 1.15rem; letter-spacing: 0; text-transform: none; color: var(--text); }
+.tour-text { margin: 0 0 14px; color: var(--text); line-height: 1.45; }
+.tour-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
+.tour-actions .link { margin-right: auto; }
+.modal { position: fixed; inset: 0; z-index: 95; background: #05070dcc; display: grid; place-items: center; padding: 16px; overflow: auto; }
+.modal-box { width: min(560px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; box-shadow: 0 16px 60px #000d; }
+.modal-box h2 { margin: 0 0 10px; font-size: 1.5rem; }
+.modal-box p { line-height: 1.5; }
+.modal-box .row { margin-top: 12px; }
+.dots { display: flex; gap: 6px; margin-bottom: 14px; }
+.dots i { width: 28px; height: 5px; border-radius: 99px; background: var(--line); }
+.dots i.on { background: var(--b); } .dots i.past { background: #3ddcff66; }
+.tips { margin: 0 0 6px; padding-left: 1.2em; color: var(--muted); line-height: 1.5; }
+.wizard .tour-actions { margin-top: 18px; }
+.wizard-status { min-height: 1.4em; margin-top: 8px; }
+.wizard-hint { min-height: 2.8em; }
+.wizard-final .big-btn { font-size: 1.15rem; padding: .7em 1.3em; }
+.info .credit { margin: 14px 0; padding: 12px 16px; border-radius: 12px; background: #0f1220; border: 1px solid var(--line); }
+.info .credit-name { font-size: 1.4rem; font-weight: 800; color: var(--a); }
+.info .paypal { margin: 4px 0 8px; font-size: 1.05rem; padding: .6em 1.2em; }
+.info .fine { font-size: .8rem; }
+.info h2 b { color: var(--a); }
+
+.modal-box .artist, .tour-card .artist { white-space: normal; overflow: visible; text-overflow: clip; }
+.tour-card { width: min(380px, calc(100vw - 16px)); }
+
+.info .paypal-qr { display: block; margin: 8px auto; max-width: 100%; height: auto; border-radius: 14px; }
+.info .paypal-name { text-align: center; font-size: 1.1rem; color: var(--text); margin-bottom: 6px; }
+.info .paypal-qr { background: #fff; padding: 12px; box-sizing: content-box; }
+
+.kbar { height: 8px; border-radius: 99px; background: #0f1220; overflow: hidden; margin: 10px 0 6px; }
+.kbar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--a), var(--b)); transition: width .3s; }
+.artist.wrap { white-space: normal; overflow: visible; }
+.tag.ok { color: var(--ok); } .tag.soft { color: var(--muted); }
+.syncbar .quicksync { font-weight: 800; border-color: var(--b); }
+.pill.empty { color: var(--muted); border-style: dashed; border-color: var(--b); }
+.adlog { margin-top: 6px; font-size: .8rem; }
+
+.acts .del { color: var(--err); }
+.acts .del.sure { background: var(--err); color: #fff; border-color: var(--err); font-weight: 700; }
+.feedback textarea { width: 100%; box-sizing: border-box; margin: 12px 0 8px; font: inherit; color: var(--text); background: #0f1220; border: 1px solid var(--line); border-radius: 10px; padding: 10px; resize: vertical; }
+.feedback .seg { margin-top: 8px; }
+.feedback .tour-actions { margin-top: 14px; }

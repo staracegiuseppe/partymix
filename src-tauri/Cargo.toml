@@ -1,10 +1,25 @@
 [package]
 name = "partymix-ai"
-version = "0.1.0"
+version = "1.5.4"
 edition = "2021"
+[lib]
+name = "partymix_ai_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-localhost = "2"
 url = "2"
+rustfft = "6"
+
+# Reads Spotify and YouTube pages (the web view cannot: those sites do not allow cross-origin reads).
+# Desktop: the system TLS keeps the build free of C code. Android has no system TLS for native code: rustls with bundled roots.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+# Records what the computer plays (ad detector). Not available to apps on Android.
+cpal = "0.18"
+reqwest = { version = "0.12", default-features = false, features = ["native-tls"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }

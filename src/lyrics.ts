@@ -8,6 +8,8 @@ export type Lyrics = {
   /** Synced version whose length differs from the video: timing may be off. */
   approx?: boolean;
   source?: string;
+  /** Length of the studio track the timings belong to, when the source says. */
+  trackDuration?: number;
 };
 
 const STAMP = /\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
@@ -52,7 +54,7 @@ export function estimateLines(plain: string, durationSec: number): LrcLine[] {
   if (!(durationSec > 0)) return [];
   const lines = plain.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^\[[^\]]*\]$/.test(l));
   if (lines.length === 0) return [];
-  const weights = lines.map((l) => Math.max(12, l.length));
+  const weights = lines.map((l) => Math.max(2, l.split(/\s+/).reduce((n, w) => n + syllables(w), 0)));
   const total = weights.reduce((a, b) => a + b, 0);
   const start = durationSec * 0.07, span = durationSec * 0.86;
   let acc = 0;
@@ -62,10 +64,11 @@ export function estimateLines(plain: string, durationSec: number): LrcLine[] {
 type ApiHit = { trackName?: string; artistName?: string; syncedLyrics?: string | null; plainLyrics?: string | null; duration?: number; instrumental?: boolean };
 const LRCLIB = 'https://lrclib.net/api';
 const OVH = 'https://api.lyrics.ovh/v1';
-const CLOSE_S = 8;
+const GENIUS = 'https://genius.com';
+export const CLOSE_S = 8;
 const APPROX_S = 90; // only applied to hits whose title and artist already match
 
-const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/&/g, ' e ').replace(/[^a-z0-9]+/g, ' ').trim();
+const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/&/g, ' e ').replace(/[^a-z0-9]+/g, ' ').trim();
 
 /** Same song? The title must appear whole in the hit's title, and the artists must overlap (when both are known). */
 function sameSong(h: ApiHit, artist: string, track: string): boolean {
@@ -79,45 +82,178 @@ function sameSong(h: ApiHit, artist: string, track: string): boolean {
 
 const asSynced = (h: ApiHit): LrcLine[] => (h.syncedLyrics ? parseLrc(h.syncedLyrics) : []);
 
-async function getJson(f: typeof fetch, url: string): Promise<unknown | undefined> {
-  try { const r = await f(url); return r.ok ? await r.json() : undefined; } catch { return undefined; }
+/** The source could not answer right now (rate limit, no network): it says nothing about whether the song exists. */
+export class TransientError extends Error {
+  constructor(message: string, readonly retryAfterMs = 0) { super(message); }
 }
 
 /**
- * Looks the song up in several public databases, best first:
- * LRCLIB (synced) with the artist+title and the title alone, then LRCLIB plain text, then lyrics.ovh (plain).
- * Plain text gets estimated timing, labelled as such. Never throws.
+ * Reads JSON. A rate limit or a missing network throws TransientError. A server error (LRCLIB answers 503 when it is busy)
+ * counts as "nothing here" for this one call and is reported through `onServerError`, so findLyrics can tell "busy" from "not found".
  */
-export async function fetchLyrics(videoTitle: string, channel: string, durationSec: number, f: typeof fetch = fetch): Promise<Lyrics | null> {
-  const { artist, track } = guessArtistTitle(videoTitle, channel);
+async function getJson(f: typeof fetch, url: string, onServerError?: () => void): Promise<unknown | undefined> {
+  let r: Response;
+  try { r = await f(url); } catch { throw new TransientError('rete non raggiungibile'); }
+  if (r.status === 429) throw new TransientError('risposta 429', (Number(r.headers?.get?.('retry-after')) || 0) * 1000);
+  if (r.status >= 500) { onServerError?.(); return undefined; }
+  if (!r.ok) return undefined;
+  try { return await r.json(); } catch { return undefined; }
+}
+
+/** A song title as the studio version is listed: no "(feat. …)", "[with …]", "- Remastered", "- Original Soundtrack"… */
+export function cleanTrackTitle(title: string): string {
+  const t = title
+    .replace(/\s*[([][^)\]]*[)\]]/g, ' ')
+    .replace(/\s+[-–]\s+(?:remaster(?:ed)?(?:\s+\d{4})?|\d{4}\s+remaster(?:ed)?|live\b.*|original soundtrack|.*\b(?:version|edit|mix|remix)\b.*|from\b.*)$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return t || title.trim();
+}
+
+/** Artists as Spotify lists them ("A, B & C"): the first one for searching, all of them for matching. */
+export function splitArtists(artists: string): string[] {
+  return artists.split(/\s*(?:,|&|\be\b|\bx\b|\bfeat\.?|\bft\.?)\s*/i).map((a) => a.trim()).filter(Boolean);
+}
+
+export type FetchOpts = {
+  /** Title and artist already come separate and reliable (Spotify): do not try to read "Artist - Title" out of the title. */
+  structured?: boolean;
+  /** Reads a web page that a web view may not read directly (Genius). Without it that source is skipped. */
+  getText?: (url: string) => Promise<string>;
+};
+
+export type FoundLyrics = {
+  synced?: LrcLine[];
+  /** Plain text, when no source had the timings. */
+  plain?: string;
+  source: string;
+  /** Length of the studio track the timings belong to. */
+  trackDuration?: number;
+  /** Synced version whose length differs from the requested one: timing may be off. */
+  approx?: boolean;
+};
+
+/** Genius page → lyrics text. The page has no clean API, so this reads the lyric blocks and drops the page furniture. */
+export function parseGeniusLyrics(html: string): string | undefined {
+  const parts: string[] = [];
+  const start = /<div[^>]*data-lyrics-container="true"[^>]*>/g;
+  let m: RegExpExecArray | null;
+  while ((m = start.exec(html))) {
+    let depth = 1, i = m.index + m[0].length;
+    const tag = /<(\/?)div\b[^>]*>/g;
+    tag.lastIndex = i;
+    for (let t = tag.exec(html); t; t = tag.exec(html)) {
+      depth += t[1] ? -1 : 1;
+      if (depth === 0) { parts.push(html.slice(i, t.index)); break; }
+    }
+  }
+  if (parts.length === 0) return undefined;
+  const text = parts.join('\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&(?:#x27|#39|apos);/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ');
+  const lines = text.split('\n').map((l) => l.replace(/\[\?\]/g, '').replace(/\s+/g, ' ').trim())
+    .filter((l) => !/^\d*\s*Contributors?\b/i.test(l) && !/\bLyrics\s*\[/i.test(l) && !/^(?:See .* Live|Get tickets|You might also like)/i.test(l) && !/^\d*Embed$/i.test(l));
+  const out = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return out.length > 40 ? out : undefined;
+}
+
+async function geniusLyrics(getText: (u: string) => Promise<string>, artists: string[], track: string): Promise<string | undefined> {
+  const wantTrack = norm(track), wantArtists = artists.map(norm).filter(Boolean);
+  try {
+    const raw = await getText(`${GENIUS}/api/search/multi?per_page=5&q=${encodeURIComponent(`${artists[0] ?? ''} ${track}`.trim())}`);
+    const data = JSON.parse(raw) as { response?: { sections?: { hits?: { type?: string; result?: { _type?: string; title?: string; url?: string; primary_artist?: { name?: string } } }[] }[] } };
+    for (const sec of data.response?.sections ?? []) {
+      for (const hit of sec.hits ?? []) {
+        const r = hit.result;
+        if (!r || r._type !== 'song' || !r.url || !r.url.startsWith(`${GENIUS}/`)) continue;
+        const t = norm(r.title ?? ''), a = norm(r.primary_artist?.name ?? '');
+        const titleOk = !!wantTrack && (` ${t} `.includes(` ${wantTrack} `) || ` ${wantTrack} `.includes(` ${t} `));
+        const artistOk = wantArtists.length === 0 || !a || wantArtists.some((w) => w.includes(a) || a.includes(w));
+        if (!titleOk || !artistOk) continue;
+        const text = parseGeniusLyrics(await getText(r.url));
+        if (text) return text;
+      }
+    }
+  } catch (e) {
+    if (/\b(429|5\d\d)\b|rete|network|timeout/i.test(String(e))) throw new TransientError(String(e));
+    /* anything else: this source simply has nothing */
+  }
+  return undefined;
+}
+
+/**
+ * Looks the song up in several sources, best first:
+ * LRCLIB with timings (several spellings of artist and title), then plain text from LRCLIB, lyrics.ovh and Genius.
+ * Returns null when nothing is found; throws TransientError when a source could not answer (so the caller can retry later instead of giving up).
+ */
+export async function findLyrics(videoTitle: string, channel: string, durationSec: number, f: typeof fetch = fetch, opts: FetchOpts = {}): Promise<FoundLyrics | null> {
+  const names = opts.structured
+    ? { artist: splitArtists(channel)[0] ?? channel.trim(), track: cleanTrackTitle(videoTitle) }
+    : guessArtistTitle(videoTitle, channel);
+  const { artist, track } = names;
   if (!track) return null;
+  const allArtists = opts.structured ? splitArtists(channel) : [artist].filter(Boolean);
+  const matchArtist = opts.structured ? channel : artist;
   const known = durationSec > 0;
   const diff = (h: ApiHit) => (known ? Math.abs((h.duration ?? 0) - durationSec) : 0);
 
   const hits: ApiHit[] = [];
+  const enc = encodeURIComponent;
+  let serverErrors = 0, answers = 0;
+  const json = async (url: string) => { const r = await getJson(f, url, () => { serverErrors++; }); answers++; return r; };
   if (known) {
-    const exact = await getJson(f, `${LRCLIB}/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(track)}&duration=${Math.round(durationSec)}`);
+    const exact = await json(`${LRCLIB}/get?artist_name=${enc(artist)}&track_name=${enc(track)}&duration=${Math.round(durationSec)}`);
     if (exact && typeof exact === 'object') hits.push(exact as ApiHit);
   }
-  for (const q of [...new Set([`${artist} ${track}`.trim(), track])]) {
-    const list = await getJson(f, `${LRCLIB}/search?q=${encodeURIComponent(q)}`);
+  const searches = [
+    ...(artist ? [`track_name=${enc(track)}&artist_name=${enc(artist)}`] : []),
+    ...[...new Set([`${artist} ${track}`.trim(), track])].map((q) => `q=${enc(q)}`),
+  ];
+  const usableHits = () => hits.filter((h) => !h.instrumental && sameSong(h, matchArtist, track) && (!known || (typeof h.duration === 'number' && diff(h) <= APPROX_S)));
+  for (const qs of searches) {
+    if (usableHits().some((h) => asSynced(h).length && diff(h) <= CLOSE_S)) break; // a good timed version is already in hand: spare the free service
+    const list = await json(`${LRCLIB}/search?${qs}`);
     if (Array.isArray(list)) hits.push(...(list as ApiHit[]));
   }
-  const usable = hits.filter((h) => !h.instrumental && sameSong(h, artist, track) && (!known || (typeof h.duration === 'number' && diff(h) <= APPROX_S)));
+  const usable = usableHits();
   const synced = usable.filter((h) => asSynced(h).length).sort((a, b) => diff(a) - diff(b));
-  if (synced[0]) return { synced: asSynced(synced[0]), source: 'LRCLIB', approx: known && diff(synced[0]) > CLOSE_S };
+  if (synced[0]) return { synced: asSynced(synced[0]), source: 'LRCLIB', approx: known && diff(synced[0]) > CLOSE_S, trackDuration: synced[0].duration };
 
   const plainHit = usable.filter((h) => h.plainLyrics).sort((a, b) => diff(a) - diff(b))[0];
-  let plain = plainHit?.plainLyrics ?? undefined;
-  let source = 'LRCLIB';
-  if (!plain && artist) {
-    const o = await getJson(f, `${OVH}/${encodeURIComponent(artist)}/${encodeURIComponent(track)}`);
+  if (plainHit?.plainLyrics) return { plain: plainHit.plainLyrics, source: 'LRCLIB', trackDuration: plainHit.duration };
+  for (const who of (allArtists.length ? allArtists : [artist]).slice(0, 2)) {
+    if (!who) continue;
+    const o = await json(`${OVH}/${enc(who)}/${enc(track)}`);
     const text = (o as { lyrics?: unknown } | undefined)?.lyrics;
-    if (typeof text === 'string' && text.trim()) { plain = text; source = 'lyrics.ovh'; }
+    if (typeof text === 'string' && text.trim()) return { plain: text, source: 'lyrics.ovh' };
   }
-  if (!plain) return null;
-  const lines = estimateLines(plain, durationSec);
-  return lines.length ? { synced: lines, plain, estimated: true, source } : null;
+  if (opts.getText) {
+    const text = await geniusLyrics(opts.getText, allArtists.length ? allArtists : [artist], track);
+    if (text) return { plain: text, source: 'Genius' };
+  }
+  // A source was busy and nothing else had the song: do not call it "not found", ask to try again later.
+  if (serverErrors > 0) throw new TransientError('servizio dei testi occupato');
+  return null;
+}
+
+/** Lyrics ready to follow the playhead: timed when the source had timings, otherwise spread over the song (estimated). */
+export function lyricsFrom(found: FoundLyrics, durationSec: number): Lyrics | null {
+  if (found.synced?.length) {
+    const approx = !!found.approx || (!!found.trackDuration && durationSec > 0 && Math.abs(found.trackDuration - durationSec) > CLOSE_S);
+    return { synced: found.synced, source: found.source, approx, trackDuration: found.trackDuration };
+  }
+  if (!found.plain) return null;
+  const lines = estimateLines(found.plain, durationSec);
+  return lines.length ? { synced: lines, plain: found.plain, estimated: true, source: found.source, trackDuration: found.trackDuration } : null;
+}
+
+/** Same as findLyrics, but already shaped for playback at the given length. */
+export async function fetchLyrics(videoTitle: string, channel: string, durationSec: number, f: typeof fetch = fetch, opts: FetchOpts = {}): Promise<Lyrics | null> {
+  try {
+    const found = await findLyrics(videoTitle, channel, durationSec, f, opts);
+    return found ? lyricsFrom(found, durationSec) : null;
+  } catch { return null; }
 }
 
 /** Maps video time to song time: songTime = a * position + b. */
@@ -155,4 +291,34 @@ export function snapshotAt(lines: LrcLine[], position: number, align: number | A
   const prevLine = [...lines.slice(0, Math.max(0, i))].reverse().find((l) => l.text)?.text ?? '';
   const nextLine = lines.slice(i + 1).find((l) => l.text)?.text ?? '';
   return { prev: prevLine, cur: i >= 0 ? lines[i].text : '', next: nextLine };
+}
+
+const KARAOKE = /karaoke|base musicale|instrumental|backing track|\bbasi?\b/i;
+
+/**
+ * Karaoke videos open with a title card and a count-in the studio recording does not have, so every lyric would come early.
+ * The extra length of the video over the studio track is mostly intro (measured: 22 s extra, ~10 s of it before the first line),
+ * so about 45 % of it, within 5-20 s, is used as a starting point. Returns undefined for anything that is not a karaoke.
+ */
+export function karaokeAlign(title: string, videoDuration: number, trackDuration?: number): Align | undefined {
+  if (!KARAOKE.test(title)) return undefined;
+  const extra = trackDuration && videoDuration > 0 ? videoDuration - trackDuration : 0;
+  const intro = Math.min(20, Math.max(5, Math.max(extra, 12) * 0.45));
+  return { a: 1, b: -Math.round(intro * 2) / 2 };
+}
+
+/** Rough syllable count (vowel groups): sung rhythm follows syllables far better than letters. */
+export const syllables = (word: string): number => Math.max(1, (word.match(/[aeiouàèéìíòóùúäöüy]+/gi) ?? []).length);
+
+/**
+ * How much of line `i` has been sung at video time `position` (0..1), so the words can be coloured as they go.
+ * LRC files only time the start of each line. A sung line fills most of the gap up to the next one, so the gap is used,
+ * but never slower than ~2.5 syllables a second: a long gap is an instrumental, not a long note.
+ */
+export function lineProgress(lines: LrcLine[], position: number, align: Align, i: number): number {
+  if (i < 0 || !lines[i]?.text) return 0;
+  const t = lines[i].t, gap = (lines[i + 1]?.t ?? t + 8) - t;
+  const syl = lines[i].text.split(/\s+/).filter(Boolean).reduce((n, w) => n + syllables(w), 0);
+  const span = Math.max(1, Math.min(gap * 0.92, syl / 2.5));
+  return Math.min(1, Math.max(0, (toLyricTime(align, position) - t) / span));
 }

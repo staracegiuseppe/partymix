@@ -1,5 +1,5 @@
 import { fetchOEmbed } from '../src/oembed';
-import { buildTracks, verifyReplacement } from '../src/playlistLoader';
+import { buildTracks, parsePlaylistPage, verifyReplacement } from '../src/playlistLoader';
 import { videoIdFromUrl } from '../src/playlistUrl';
 import { YouTubeDeck, YtPlayerLike } from '../src/youtubeDeck';
 
@@ -105,5 +105,21 @@ describe('YouTubeDeck.readPlaylist', () => {
     const ids = deck.readPlaylist('PLx');
     deck.handleError(100);
     await expect(ids).rejects.toThrow();
+  });
+});
+
+describe('playlist page fallback', () => {
+  const page = (d: unknown) => `<script>var ytInitialData = ${JSON.stringify(d)};</script>`;
+  it('reads playlist items, in order and without duplicates', () => {
+    const html = page({ c: [{ playlistVideoRenderer: { videoId: 'AAAAAAAAAAA' } }, { playlistVideoRenderer: { videoId: 'BBBBBBBBBBB' } }, { playlistVideoRenderer: { videoId: 'AAAAAAAAAAA' } }] });
+    expect(parsePlaylistPage(html)).toEqual(['AAAAAAAAAAA', 'BBBBBBBBBBB']);
+  });
+  it('falls back to the newer list entries', () => {
+    const html = page({ c: [{ lockupViewModel: { contentId: 'CCCCCCCCCCC', contentType: 'LOCKUP_CONTENT_TYPE_VIDEO' } }, { lockupViewModel: { contentId: 'PLxxxxxxxxxx', contentType: 'LOCKUP_CONTENT_TYPE_PLAYLIST' } }] });
+    expect(parsePlaylistPage(html)).toEqual(['CCCCCCCCCCC']);
+  });
+  it('returns nothing for a page without data', () => {
+    expect(parsePlaylistPage('<html></html>')).toEqual([]);
+    expect(parsePlaylistPage('<script>var ytInitialData = {oops};</script>')).toEqual([]);
   });
 });

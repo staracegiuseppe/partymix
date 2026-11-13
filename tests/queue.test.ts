@@ -136,3 +136,65 @@ describe('Queue.remove', () => {
     expect(new Queue([t('a')]).remove('zzz')).toBe(false);
   });
 });
+
+describe('cueNext and setCurrent', () => {
+  const mk = (ids: string[]) => new Queue(ids.map((videoId) => ({ videoId, status: 'ok' as const })));
+  it('cueNext moves a track right after the current one and makes it next', () => {
+    const q = mk(['A', 'B', 'C', 'D']);
+    expect(q.cueNext('D')).toBe(true);
+    expect(q.all().map((t) => t.videoId)).toEqual(['A', 'D', 'B', 'C']);
+    expect(q.peekNext()?.videoId).toBe('D');
+    expect(q.current()?.videoId).toBe('A');
+  });
+  it('cueNext beats repeat-one once, then the normal order resumes', () => {
+    const q = mk(['A', 'B', 'C']);
+    q.setRepeat('one');
+    q.cueNext('C');
+    expect(q.advance()?.videoId).toBe('C');
+    expect(q.peekNext()?.videoId).toBe('C'); // repeat-one again
+  });
+  it('cueNext refuses the current or an unplayable track', () => {
+    const q = mk(['A', 'B', 'C']);
+    q.markUnplayable('C');
+    expect(q.cueNext('A')).toBe(false);
+    expect(q.cueNext('C')).toBe(false);
+    expect(q.cueNext('zzz')).toBe(false);
+  });
+  it('cueNext works for a track that is before the current one', () => {
+    const q = mk(['A', 'B', 'C']);
+    q.advance(); q.advance();
+    expect(q.cueNext('A')).toBe(true);
+    expect(q.current()?.videoId).toBe('C');
+    expect(q.peekNext()?.videoId).toBe('A');
+  });
+  it('setCurrent starts from the picked track', () => {
+    const q = mk(['A', 'B', 'C']);
+    expect(q.setCurrent('C')).toBe(true);
+    expect(q.current()?.videoId).toBe('C');
+    expect(q.setCurrent('zzz')).toBe(false);
+  });
+});
+
+describe('the same video twice in a playlist', () => {
+  const mk = (ids: string[]) => new Queue(ids.map((videoId) => ({ videoId, status: 'ok' as const })));
+  it('moves on to the next occurrence instead of going back to the first one', () => {
+    const q = mk(['A', 'X', 'X', 'B']);
+    q.advance();                     // X (first)
+    expect(q.currentIndex()).toBe(1);
+    q.advanceTo('X');                // X (second)
+    expect(q.currentIndex()).toBe(2);
+    q.advanceTo('B');
+    expect(q.currentIndex()).toBe(3);
+  });
+  it('does not loop between the two copies', () => {
+    const q = mk(['X', 'X', 'B']);
+    const seen: number[] = [q.currentIndex()];
+    for (const id of ['X', 'B']) { q.advanceTo(id); seen.push(q.currentIndex()); }
+    expect(seen).toEqual([0, 1, 2]);
+  });
+  it('still finds a track that was moved before the current one', () => {
+    const q = mk(['A', 'B', 'C']);
+    q.advance(); q.advance();
+    expect(q.advanceTo('A')?.videoId).toBe('A');
+  });
+});

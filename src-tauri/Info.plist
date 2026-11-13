@@ -2,5 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>NSMicrophoneUsageDescription</key>
-<string>PartyMix AI ascolta il suono della stanza solo per far muovere le forme sul proiettore. Non registra né salva nulla.</string>
+<string>PartyMix ascolta il suono della stanza solo per far muovere le forme sul proiettore. Non registra né salva nulla.</string>
+<key>NSAudioCaptureUsageDescription</key>
+<string>PartyMix ascolta l'audio che sta suonando solo per capire se è musica o una pubblicità parlata e abbassare il volume. Non registra né salva nulla.</string>
 </dict></plist>

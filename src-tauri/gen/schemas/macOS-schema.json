@@ -177,10 +177,34 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Enables the ad_debug_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-ad-debug-log",
+          "markdownDescription": "Enables the ad_debug_log command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the ad_debug_playlist command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-ad-debug-playlist",
+          "markdownDescription": "Enables the ad_debug_playlist command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the ad_debug_spot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-ad-debug-spot",
+          "markdownDescription": "Enables the ad_debug_spot command without any pre-configured scope."
+        },
+        {
           "description": "Enables the close_projector command without any pre-configured scope.",
           "type": "string",
           "const": "allow-close-projector",
           "markdownDescription": "Enables the close_projector command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the http_get command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-http-get",
+          "markdownDescription": "Enables the http_get command without any pre-configured scope."
         },
         {
           "description": "Enables the list_displays command without any pre-configured scope.",
@@ -189,10 +213,52 @@
           "markdownDescription": "Enables the list_displays command without any pre-configured scope."
         },
         {
+          "description": "Enables the open_external command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-external",
+          "markdownDescription": "Enables the open_external command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the open_feedback command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-feedback",
+          "markdownDescription": "Enables the open_feedback command without any pre-configured scope."
+        },
+        {
           "description": "Enables the open_projector command without any pre-configured scope.",
           "type": "string",
           "const": "allow-open-projector",
           "markdownDescription": "Enables the open_projector command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the start_audio_capture command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-start-audio-capture",
+          "markdownDescription": "Enables the start_audio_capture command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the stop_audio_capture command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-stop-audio-capture",
+          "markdownDescription": "Enables the stop_audio_capture command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the ad_debug_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-ad-debug-log",
+          "markdownDescription": "Denies the ad_debug_log command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the ad_debug_playlist command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-ad-debug-playlist",
+          "markdownDescription": "Denies the ad_debug_playlist command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the ad_debug_spot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-ad-debug-spot",
+          "markdownDescription": "Denies the ad_debug_spot command without any pre-configured scope."
         },
         {
           "description": "Denies the close_projector command without any pre-configured scope.",
@@ -201,16 +267,46 @@
           "markdownDescription": "Denies the close_projector command without any pre-configured scope."
         },
         {
+          "description": "Denies the http_get command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-http-get",
+          "markdownDescription": "Denies the http_get command without any pre-configured scope."
+        },
+        {
           "description": "Denies the list_displays command without any pre-configured scope.",
           "type": "string",
           "const": "deny-list-displays",
           "markdownDescription": "Denies the list_displays command without any pre-configured scope."
         },
         {
+          "description": "Denies the open_external command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-external",
+          "markdownDescription": "Denies the open_external command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_feedback command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-feedback",
+          "markdownDescription": "Denies the open_feedback command without any pre-configured scope."
+        },
+        {
           "description": "Denies the open_projector command without any pre-configured scope.",
           "type": "string",
           "const": "deny-open-projector",
           "markdownDescription": "Denies the open_projector command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the start_audio_capture command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-start-audio-capture",
+          "markdownDescription": "Denies the start_audio_capture command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the stop_audio_capture command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-stop-audio-capture",
+          "markdownDescription": "Denies the stop_audio_capture command without any pre-configured scope."
         },
         {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",

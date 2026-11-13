@@ -56,3 +56,24 @@ export async function verifyReplacement(
     message: `Va bene: «${r.title}» si può riprodurre.`,
   };
 }
+
+/** Video ids listed on a YouTube playlist page, for playlists the embedded player cannot read (old or unusual ones). */
+export function parsePlaylistPage(html: string): string[] {
+  const m = /var ytInitialData = (\{.*?\});<\/script>/s.exec(html);
+  if (!m) return [];
+  let data: unknown;
+  try { data = JSON.parse(m[1]); } catch { return []; }
+  const items: string[] = [];
+  const lockups: string[] = [];
+  const walk = (o: unknown): void => {
+    if (Array.isArray(o)) { o.forEach(walk); return; }
+    if (!o || typeof o !== 'object') return;
+    const r = o as Record<string, any>;
+    if (typeof r.playlistVideoRenderer?.videoId === 'string') items.push(r.playlistVideoRenderer.videoId);
+    const l = r.lockupViewModel;
+    if (l && typeof l.contentId === 'string' && /VIDEO$/.test(String(l.contentType ?? ''))) lockups.push(l.contentId);
+    Object.values(r).forEach(walk);
+  };
+  walk(data);
+  return [...new Set(items.length ? items : lockups)];
+}

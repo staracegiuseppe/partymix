@@ -235,3 +235,87 @@ describe('fetchLyrics never returns another song', () => {
     expect(await fetchLyrics(title, 'x', 175, f)).toBeNull();
   });
 });
+
+import { karaokeAlign } from '../src/lyrics';
+describe('karaoke intro compensation', () => {
+  it('delays lyrics of a karaoke video by about 45 % of its extra length', () => {
+    expect(karaokeAlign('Ricchi e Poveri - Mamma Maria (versione Karaoke Academy Italia)', 208, 184)).toEqual({ a: 1, b: -11 });
+  });
+  it('stays out of the way for normal videos and clamps wild durations', () => {
+    expect(karaokeAlign('Umberto Tozzi - Gloria (Testo/Lyrics)', 264, 260)).toBeUndefined();
+    expect(karaokeAlign('Qualcosa karaoke', 900, 200)?.b).toBe(-20);
+  });
+});
+
+import { lineProgress } from '../src/lyrics';
+describe('word colouring progress', () => {
+  const lines = [{ t: 10, text: 'Un gatto bianco con gli occhi blu' }, { t: 20, text: 'altra' }];
+  it('runs 0 to 1 over the line and respects the alignment', () => {
+    expect(lineProgress(lines, 10, IDENTITY, 0)).toBe(0);
+    expect(lineProgress(lines, 11.3, IDENTITY, 0)).toBeCloseTo(1.3 / 4, 2);
+    expect(lineProgress(lines, 16, IDENTITY, 0)).toBe(1);
+    expect(lineProgress(lines, 11, { a: 1, b: 5 }, 0)).toBe(1);
+    expect(lineProgress(lines, 5, IDENTITY, -1)).toBe(0);
+  });
+});
+
+import { syllables } from '../src/lyrics';
+describe('syllables', () => {
+  it('counts vowel groups', () => {
+    expect(syllables('Maracaibo')).toBe(4);
+    expect(syllables('tremò,')).toBe(2);
+    expect(syllables('sparò.')).toBe(2);
+    expect(syllables('x')).toBe(1);
+  });
+});
+
+import { findLyrics, TransientError, cleanTrackTitle, splitArtists, parseGeniusLyrics } from '../src/lyrics';
+describe('findLyrics: busy sources, clean names and Genius', () => {
+  const lines = { syncedLyrics: '[00:01.00] ciao\n[00:02.00] mondo', plainLyrics: 'ciao\nmondo', duration: 200, instrumental: false };
+  it('a rate limit or a missing network is "try later", not "not found"', async () => {
+    await expect(findLyrics('A - B', 'x', 200, route({ '/api': () => json(429, {}) }))).rejects.toBeInstanceOf(TransientError);
+    await expect(findLyrics('A - B', 'x', 200, (() => Promise.reject(new Error('offline'))) as unknown as typeof fetch)).rejects.toBeInstanceOf(TransientError);
+  });
+  it('a busy server (503) with nothing else found is "try later", never "not found"', async () => {
+    const f = route({ 'track_name=': () => json(503, {}), '/api/get': () => json(404, {}), '/api/search': () => json(200, []), 'lyrics.ovh': () => json(404, {}) });
+    await expect(findLyrics('A - B', 'x', 200, f)).rejects.toBeInstanceOf(TransientError);
+  });
+  it('a busy server does not matter when another search already found the song', async () => {
+    const lines2 = { syncedLyrics: '[00:01.00] ciao\n[00:02.00] mondo', plainLyrics: 'ciao\nmondo', duration: 200, instrumental: false, trackName: 'B', artistName: 'A' };
+    const f = route({ 'track_name=': () => json(503, {}), '/api/get': () => json(404, {}), '/api/search': () => json(200, [lines2]) });
+    expect((await findLyrics('A - B', 'x', 200, f))?.synced?.length).toBe(2);
+  });
+  it('a 429 carries the wait asked by the service', async () => {
+    const f = route({ '/api': () => Promise.resolve({ ok: false, status: 429, headers: new Headers({ 'retry-after': '30' }), json: async () => ({}) } as Response) });
+    await expect(findLyrics('A - B', 'x', 200, f)).rejects.toMatchObject({ retryAfterMs: 30000 });
+  });
+  it('searches Spotify songs with the clean title and the first artist', async () => {
+    const urls: string[] = [];
+    const f = ((u: string) => { urls.push(u); return u.includes('/api/get') ? json(200, lines) : json(404, {}); }) as unknown as typeof fetch;
+    const r = await findLyrics('NON SEI PIÙ TU (feat. Lazza)', 'Geolier, Lazza', 200, f, { structured: true });
+    expect(r?.synced?.length).toBe(2);
+    expect(decodeURIComponent(urls[0])).toContain('artist_name=Geolier&track_name=NON SEI PIÙ TU&duration=200');
+  });
+  it('falls back to Genius for plain text, using the song that matches title and artist', async () => {
+    const html = '<div data-lyrics-container="true">6 ContributorsTITLE Lyrics[Testo di "X"]<br/>[Strofa 1]<br/>Prima riga che si canta<br/>Seconda riga del brano<br/>Terza riga ancora</div>';
+    const getText = async (u: string) => (u.includes('/api/search/multi')
+      ? JSON.stringify({ response: { sections: [{ hits: [
+        { result: { _type: 'song', title: 'Altro', url: 'https://genius.com/other', primary_artist: { name: 'Qualcuno' } } },
+        { result: { _type: 'song', title: 'CHAMPIONS LEAGUE', url: 'https://genius.com/Frezza-champions-league-lyrics', primary_artist: { name: 'Frezza' } } }] }] } })
+      : u === 'https://genius.com/Frezza-champions-league-lyrics' ? html : 'wrong page');
+    const r = await findLyrics('CHAMPIONS LEAGUE', 'Frezza', 180, route({ '/api': () => json(404, {}), 'lyrics.ovh': () => json(404, {}) }), { structured: true, getText });
+    expect(r?.source).toBe('Genius');
+    expect(r?.plain).toContain('Seconda riga del brano');
+    expect(r?.plain).not.toContain('Contributors');
+  });
+  it('cleans Spotify titles and artist lists', () => {
+    expect(cleanTrackTitle('SARÒ CON TE (feat. MV Killa) - Original Soundtrack')).toBe('SARÒ CON TE');
+    expect(cleanTrackTitle('Audemars (Remix) [with Manuel Erry]')).toBe('Audemars');
+    expect(cleanTrackTitle('Bohemian Rhapsody - Remastered 2011')).toBe('Bohemian Rhapsody');
+    expect(cleanTrackTitle('22:22')).toBe('22:22');
+    expect(splitArtists('Le Scimmie, Lele Blade & Vale Lambo')).toEqual(['Le Scimmie', 'Lele Blade', 'Vale Lambo']);
+  });
+  it('reads Genius pages without the page furniture', () => {
+    expect(parseGeniusLyrics('<html>niente</html>')).toBeUndefined();
+  });
+});

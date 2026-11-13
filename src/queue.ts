@@ -4,6 +4,8 @@ export type Track = {
   artist?: string;
   thumb?: string;
   durationSec?: number;
+  /** Title and artist come separate and reliable (Spotify), so lyrics are searched with them as they are. */
+  structured?: boolean;
   locked?: boolean;
   /** Added or substituted by the user, so a playlist refresh must never drop it. */
   manual?: boolean;
@@ -19,6 +21,8 @@ export class Queue {
   private pos = -1;
   private hist: Track[] = [];
   private repeat: 'off' | 'all' | 'one';
+  /** A track the user asked to play right after the current one, whatever the repeat mode says. */
+  private forced?: string;
 
   constructor(tracks: Track[], opts: Opts = {}) {
     this.order = [...tracks];
@@ -39,6 +43,11 @@ export class Queue {
   }
 
   private nextIndex(): number {
+    if (this.forced) {
+      const f = this.order.findIndex((t) => t.videoId === this.forced && playable(t));
+      if (f >= 0 && f !== this.pos) return f;
+      this.forced = undefined;
+    }
     if (this.repeat === 'one' && this.pos >= 0 && playable(this.order[this.pos])) return this.pos;
     const i = this.findFrom(this.pos + 1);
     if (i >= 0) return i;
@@ -53,16 +62,44 @@ export class Queue {
     if (i < 0) return undefined;
     this.pos = i;
     this.hist.push(this.order[i]);
+    if (this.order[i].videoId === this.forced) this.forced = undefined;
     return this.order[i];
   }
 
   /** Makes the given track current (it was mixed in even if the queue was reordered meanwhile); falls back to advance(). */
   advanceTo(videoId: string): Track | undefined {
-    const i = this.order.findIndex((t) => t.videoId === videoId && playable(t));
+    // The same video can be in the playlist twice: take the occurrence that really comes next, not always the first one.
+    const n = this.nextIndex();
+    let i = n >= 0 && this.order[n].videoId === videoId ? n : this.order.findIndex((t, k) => k > this.pos && t.videoId === videoId && playable(t));
+    if (i < 0) i = this.order.findIndex((t) => t.videoId === videoId && playable(t));
     if (i < 0) return this.advance();
     this.pos = i;
     this.hist.push(this.order[i]);
+    if (videoId === this.forced) this.forced = undefined;
     return this.order[i];
+  }
+
+  /** Puts a track right after the current one and makes it the next to play. False when it cannot be played or is the current one. */
+  cueNext(videoId: string): boolean {
+    const i = this.order.findIndex((t) => t.videoId === videoId && playable(t));
+    if (i < 0 || i === this.pos) return false;
+    const cur = this.current();
+    const [t] = this.order.splice(i, 1);
+    const p = cur ? this.order.indexOf(cur) : -1;
+    this.order.splice(p + 1, 0, t);
+    this.pos = p;
+    this.forced = videoId;
+    return true;
+  }
+
+  /** Makes a track the current one (used to start the party from the track the user picked). */
+  setCurrent(videoId: string): boolean {
+    const i = this.order.findIndex((t) => t.videoId === videoId && playable(t));
+    if (i < 0) return false;
+    this.pos = i;
+    this.hist = [this.order[i]];
+    this.forced = undefined;
+    return true;
   }
 
   skipNext(): Track | undefined {
@@ -127,6 +164,7 @@ export class Queue {
   all(): Track[] { return [...this.order]; }
 
   reset(): void {
+    this.forced = undefined;
     this.pos = this.findFrom(0);
     this.hist = this.pos >= 0 ? [this.order[this.pos]] : [];
   }

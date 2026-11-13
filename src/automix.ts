@@ -35,6 +35,8 @@ export type AutomixDeps = {
 const TICK_MS = 250;
 const LOAD_TIMEOUT_MS = 5000;
 const MANUAL_MIX_S = 8;
+/** A track picked by hand fades in quickly, whatever the transition style. */
+const QUICK_MIX_S = 4;
 const SPARE_MIN_REMAINING_S = 30;
 const RETRY_MS = 5000;
 const isUnplayable = (e: unknown) => (e as { kind?: string } | undefined)?.kind === 'unplayable';
@@ -189,6 +191,18 @@ export class Automix {
     this.switchWhenReady(0);
   }
 
+  /** Plays the given queue track right away: idle starts the party from it, otherwise it fades in quickly over the current one. */
+  playNow(videoId: string): void {
+    const q = this.d.queue;
+    if (this.st === 'idle') { if (q.setCurrent(videoId)) this.start(); return; }
+    if (this.st === 'paused' || this.st === 'preparing') return;
+    if (this.st === 'crossfading') this.finishMix();
+    if (q.current()?.videoId === videoId || !q.cueNext(videoId)) return;
+    this.resetNext();
+    this.prepare();
+    this.switchWhenReady(Math.min(profileSeconds(this.d.profile()) ?? MANUAL_MIX_S, QUICK_MIX_S) * 1000);
+  }
+
   mixNow(): void {
     if (this.st !== 'playing' && this.st !== 'preparing') return;
     const sec = profileSeconds(this.d.profile()) ?? MANUAL_MIX_S;
@@ -320,6 +334,8 @@ export class Automix {
     if (this.st !== 'playing' && this.st !== 'preparing') return;
     this.applyVolumes();
     if (this.borrowed) return;
+    // A mix asked for by hand that never started (the track became ready without picking up the request): start it now.
+    if (this.pending && this.nextState === 'ready') { const { ms } = this.pending; this.pending = undefined; this.beginMix(ms); return; }
     // The user may have reordered the queue: keep the prepared deck in sync with what is really next.
     if (this.d.queue.peekNext()?.videoId !== this.preparedId) {
       this.dueSince = undefined;
