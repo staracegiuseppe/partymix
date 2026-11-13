@@ -81,6 +81,8 @@ I brani sono riprodotti dai player ufficiali di YouTube; con Spotify l'app usa s
 
 Cosa YouTube permette e cosa no (BPM, beatmatching, EQ…) è spiegato in [docs/LIMITI-YOUTUBE.md](docs/LIMITI-YOUTUBE.md).
 
+Il codice di PartyMix è distribuito con [licenza MIT](LICENSE): puoi usarlo, modificarlo e ridistribuirlo liberamente, mantenendo l'avviso di copyright.
+
 ## Sviluppo
 
 App [Tauri 2](https://tauri.app) (Rust + TypeScript, Vite), un unico codice per macOS, Windows e Android.

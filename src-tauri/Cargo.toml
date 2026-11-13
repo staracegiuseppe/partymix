@@ -2,6 +2,7 @@
 name = "partymix-ai"
 version = "1.5.4"
 edition = "2021"
+license = "MIT"
 [lib]
 name = "partymix_ai_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
