@@ -61,8 +61,8 @@ targets:
         UIBackgroundModes: [audio]
         NSMicrophoneUsageDescription: "Il proiettore muove le forme a tempo con il suono della stanza. Non viene registrato nulla."
         ITSAppUsesNonExemptEncryption: false
-        CFBundleShortVersionString: 1.6.2
-        CFBundleVersion: "1.6.2"
+        CFBundleShortVersionString: 1.6.3
+        CFBundleVersion: "1.6.3"
     entitlements:
       path: partymix-ai_iOS/partymix-ai_iOS.entitlements
     scheme:

@@ -17,6 +17,7 @@ export type VideoPlayerLike = {
 const DRIFT_S = 0.6; // further than this from the music → seek
 const SHOW_S = 1.5; // within this the picture is close enough to be shown
 const SEEK_GAP_MS = 2500; // a seek takes a moment to settle: do not chase it
+const STUCK_MS = 8000; // music playing but the player not running for this long: load the video again
 
 export function parseVideoMsg(raw: string | null | undefined): VideoMsg | undefined {
   try {
@@ -37,6 +38,7 @@ export class VideoFollower {
   private loaded = '';
   private lastSeek = 0;
   private preloading = false;
+  private stuckSince = 0;
 
   constructor(private p: VideoPlayerLike, private now: () => number = Date.now) {}
 
@@ -73,14 +75,26 @@ export class VideoFollower {
     if (m.id !== this.loaded) {
       this.loaded = m.id;
       this.lastSeek = this.now();
+      this.stuckSince = this.now();
       this.p.loadVideoById({ videoId: m.id, startSeconds: Math.max(0.05, want) });
       if (!m.playing) this.p.pauseVideo();
       return false;
     }
     const state = this.p.getPlayerState();
     if (!m.playing) {
+      this.stuckSince = 0;
       if (state === 1) this.p.pauseVideo();
       return Math.abs(this.p.getCurrentTime() - want) < SHOW_S;
+    }
+    // On the Mac the player sometimes stalls (buffering or paused) and ignores playVideo until the song changes:
+    // after a few seconds load the same video again at the music time.
+    if (state === 1) this.stuckSince = 0;
+    else if (!this.stuckSince) this.stuckSince = this.now();
+    else if (this.now() - this.stuckSince > STUCK_MS) {
+      this.stuckSince = this.now();
+      this.lastSeek = this.now();
+      this.p.loadVideoById({ videoId: m.id, startSeconds: Math.max(0.05, want) });
+      return false;
     }
     if (state !== 1 && state !== 3) this.p.playVideo();
     const vid = this.p.getVideoData?.()?.video_id;

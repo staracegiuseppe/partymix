@@ -40,6 +40,24 @@ describe('projector video follower', () => {
     expect(p.calls.at(-1)).toBe('seek 6.1');
   });
 
+  it('loads the video again when the player stays stalled while the music plays', () => {
+    let now = 0;
+    const p = fakePlayer();
+    p.playVideo = () => { p.calls.push('play'); }; // a stalled player ignores play
+    const f = new VideoFollower(p as VideoPlayerLike, () => now);
+    const m = { id: 'abc', t: 0, at: 0, playing: true };
+    f.tick(m);
+    for (now = 250; now <= 8_000; now += 250) expect(f.tick(m)).toBe(false);
+    expect(p.calls.filter((c) => c.startsWith('load'))).toHaveLength(1);
+    now = 8_500;
+    f.tick(m);
+    expect(p.calls.at(-1)).toBe('load abc 8.5');
+    p.state = 1; p.time = 8.6; now = 8_600;
+    expect(f.tick(m)).toBe(true);
+    for (now = 9_000; now <= 20_000; now += 250) { p.time = now / 1000; f.tick(m); }
+    expect(p.calls.filter((c) => c.startsWith('load'))).toHaveLength(2); // running fine: no more reloads
+  });
+
   it('pauses when the music pauses or stops', () => {
     const p = fakePlayer();
     const f = new VideoFollower(p as VideoPlayerLike, () => 0);
