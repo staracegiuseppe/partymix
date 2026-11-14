@@ -205,7 +205,7 @@ export function applySystemInsets(): void {
       const kb = typeof j.ime === 'number' && j.ime > 0;
       st.setProperty('--ime', `${kb ? j.ime : 0}px`);
       document.body.classList.toggle('kb', kb);
-      if (kb) requestAnimationFrame(() => document.activeElement?.scrollIntoView({ block: 'center' }));
+      if (kb) requestAnimationFrame(() => (document.activeElement as HTMLElement | null)?.scrollIntoView?.({ block: 'center' }));
     } catch { /* keep the CSS defaults */ }
   };
   apply();
