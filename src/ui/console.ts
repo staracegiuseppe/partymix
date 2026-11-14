@@ -1,6 +1,7 @@
 import type { AutomixState } from '../automix';
 import type { Profile } from '../crossfade';
 import { isAndroidApp } from '../androidBridge';
+import { isIOSApp } from '../platform';
 import { fmtTime, h, paintWords } from './dom';
 import { showAppPicker, showFeedback, showInfo, startTour, startWizard, TourStep } from './guide';
 import { UNAVAILABLE_WITH_YOUTUBE } from './unavailable';
@@ -194,7 +195,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
       : 'Le forme seguono il suono della stanza tramite il microfono, con il testo del brano. Non viene registrato nulla.';
   }
   const openProj = async () => { projMsg.textContent = ''; try { await a.openProjector(); } catch (e) { projMsg.textContent = `Non riesco ad aprire il proiettore: ${(e as Error)?.message ?? String(e)}`; } };
-  const projOpen = h('button', { class: md ? 'm-filled' : '', onClick: openProj }, md ? 'Trasmetti alla TV' : 'Apri proiettore');
+  const projOpen = h('button', { class: md ? 'm-filled' : '', onClick: openProj }, isIOSApp() ? 'Mostra il proiettore' : md ? 'Trasmetti alla TV' : 'Apri proiettore');
   const projClose = h('button', { class: md ? 'm-outlined' : '', onClick: () => a.closeProjector() }, md ? 'Interrompi' : 'Chiudi proiettore');
   const projPanel = h('section', { class: 'panel' }, h('h3', {}, 'Proiettore'),
     h('div', { class: 'seg', role: 'group', 'aria-label': 'Cosa mostrare sul proiettore' }, ...projModeBtns), projModeHint,
@@ -287,7 +288,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     : h('div', { class: 'load' }, slotSel, nameInput, savedInfo, link, loadBtn, appsBtn);
   /** A line about the projector that the app keeps up to date (Android: the cast screen). */
   function setProjectorInfo(text: string) { if (projMsg.textContent !== text) projMsg.textContent = text; }
-  const where = md ? 'sul telefono' : 'sul PC';
+  const where = isIOSApp() ? `sull’${/iPad/.test(navigator.userAgent) ? 'iPad' : 'iPhone'}` : md ? 'sul telefono' : 'sul PC';
   /** Fills the playlist menu: each playlist by name with how many songs are saved, or «vuota»; the one in use is selected. */
   function setPlaylistSlots(slot: number, links: string[], names: string[] = [], saved: number[] = []) {
     const opts = links.map((l, i) => {
@@ -340,21 +341,21 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     { target: () => lyricsPanel, title: 'Il pannello Testo', text: 'Mostra da dove viene il testo e l’elenco di tutte le righe. Se il testo non combacia con il video, tocca la riga che si sta cantando in quel momento: l’app si allinea da sola.' },
     { target: () => histPanel, title: 'Già suonati', text: 'L’elenco dei brani già passati nella serata.' },
     { target: () => probPanel, title: 'Stato e problemi', text: 'Qui compaiono, in italiano semplice, i problemi che l’app ha incontrato, come un brano che non si carica: quel brano viene saltato e la festa continua.' },
-    { target: () => topTools, title: 'Aiuto e informazioni', text: 'Da qui puoi rifare la configurazione guidata, rivedere questo tutorial e aprire le informazioni, dove trovi anche la donazione facoltativa per chi ha creato l’app. Con «💬 Commenti» mi scrivi cosa ne pensi e cosa aggiungere. Buona festa!' },
+    { target: () => topTools, title: 'Aiuto e informazioni', text: `Da qui puoi rifare la configurazione guidata, rivedere questo tutorial e aprire le informazioni${isIOSApp() ? '' : ', dove trovi anche la donazione facoltativa per chi ha creato l’app'}. Con «💬 Commenti» mi scrivi cosa ne pensi e cosa aggiungere. Buona festa!` },
   ];
   const topTools = h('div', { class: 'top-tools' },
     h('button', { onClick: openWizard }, 'Configurazione guidata'),
     h('button', { onClick: openTutorial }, 'Tutorial'),
     h('button', { onClick: openInfo }, 'Info'),
     h('button', { title: 'Scrivimi cosa ne pensi e cosa vorresti trovare in PartyMix', onClick: () => showFeedback() }, '💬 Commenti'));
-  const castTop = h('button', { class: 'm-icon-btn', 'aria-label': 'Trasmetti il proiettore alla TV', title: 'Trasmetti il proiettore alla TV', onClick: () => { shell?.go('proj'); void openProj(); } });
+  const castTop = h('button', { class: 'm-icon-btn', 'aria-label': isIOSApp() ? 'Mostra il proiettore' : 'Trasmetti il proiettore alla TV', title: isIOSApp() ? 'Mostra il proiettore' : 'Trasmetti il proiettore alla TV', onClick: () => { shell?.go('proj'); void openProj(); } });
   const helpItem = (ic: Parameters<typeof withIcon>[1], text: string, sub: string, run: () => void) =>
     h('button', { class: 'm-list-item', type: 'button', onClick: run }, withIcon(h('span', { class: 'm-lead' }), ic, true), h('span', { class: 'm-text' }, h('span', { class: 't' }, text), h('span', { class: 'm-sub' }, sub)));
   const helpPanel = h('section', { class: 'panel' }, h('h3', {}, 'Aiuto'),
     helpItem('school', 'Configurazione guidata', 'Playlist, proiettore e primo avvio, passo per passo', openWizard),
     helpItem('help', 'Tutorial', 'Cosa fa ogni parte dell’app', openTutorial),
     helpItem('feedback', 'Commenti e suggerimenti', 'Scrivimi cosa ne pensi e cosa aggiungere', () => showFeedback()),
-    helpItem('info', 'Informazioni', 'Versione, autore e donazione facoltativa', openInfo));
+    helpItem('info', 'Informazioni', isIOSApp() ? 'Versione e autore' : 'Versione, autore e donazione facoltativa', openInfo));
   /** Phone: the parts of the console grouped in four destinations, each one a screen. */
   const mdTourSteps = (): TourStep[] => [
     { target: () => root.querySelector('.m-nav'), title: 'Prima la playlist, poi In onda', text: 'In basso le sezioni sono in ordine: 1) «Playlist» per scegliere la musica, 2) «In onda» per farla partire, poi «Proiettore» per la TV e il testo e «Altro» per le impostazioni e l’aiuto. Un pallino colorato ti dice dove andare. Il tasto Indietro torna a «In onda».' },
@@ -364,7 +365,9 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     { target: () => bigBtn, title: 'Avvia automix', text: 'Il tasto principale: parte il primo brano e da lì l’app mixa da sola, un brano dopo l’altro, con una sfumatura.' },
     { target: () => nextBtn.parentElement as HTMLElement, title: 'Pausa, mix, prossimo', text: '«Pausa» ferma tutto, «Mix ora» sfuma subito nel brano pronto, «Prossimo» salta al successivo.' },
     { target: () => seg.parentElement as HTMLElement, title: 'Stile delle transizioni', text: 'Morbida (circa 12 secondi), Standard (8), Energica (4) oppure Manuale, dove il cambio avviene solo quando lo decidi tu.' },
-    { target: () => projPanel, title: 'Il proiettore sulla TV', text: '«Trasmetti alla TV» apre le impostazioni di Android «Trasmetti» o «Schermo wireless»: scegli la TV o il proiettore e lì compare il proiettore di PartyMix, mentre il telefono resta la console. Puoi mostrare le forme col testo (Karaoke) o il video del brano (Video YouTube).' },
+    { target: () => projPanel, title: 'Il proiettore sulla TV', text: isIOSApp()
+      ? 'Dal Centro di Controllo scegli «Duplica schermo» e la tua Apple TV o TV AirPlay, poi tocca «Mostra il proiettore»: le forme col testo (Karaoke) o il video del brano (Video YouTube) riempiono lo schermo e arrivano alla TV. «Torna alla console» in alto lo chiude.'
+      : '«Trasmetti alla TV» apre le impostazioni di Android «Trasmetti» o «Schermo wireless»: scegli la TV o il proiettore e lì compare il proiettore di PartyMix, mentre il telefono resta la console. Puoi mostrare le forme col testo (Karaoke) o il video del brano (Video YouTube).' },
     { target: () => syncBar, title: 'Testo a tempo', text: 'La riga che si sta cantando. Se il testo non è a tempo con il video usa ① e ② quando il cantante inizia la prima e l’ultima riga, oppure Anticipa e Ritarda.' },
     { target: () => helpPanel, title: 'Aiuto e commenti', text: 'Da qui rifai la configurazione guidata, rivedi questo tutorial e mi scrivi cosa ne pensi. Buona festa!' },
   ];

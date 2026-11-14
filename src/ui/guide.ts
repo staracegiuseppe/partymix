@@ -1,3 +1,5 @@
+import { isIOSApp } from '../platform';
+import { materialUI } from './material';
 import type { Profile } from '../crossfade';
 import { APP_VERSION, AUTHOR, PAYPAL_QR } from '../info';
 import { isAndroidApp, openMusicApp } from '../androidBridge';
@@ -125,7 +127,7 @@ export function startWizard(ctx: WizardCtx): void {
       box.append(
         h('h2', {}, 'Benvenuto in PartyMix'),
         h('p', {}, 'Un DJ virtuale per le tue feste: scegli una playlist, premi un tasto e la musica va avanti da sola, con sfumature tra un brano e l’altro, testi da cantare e immagini sul proiettore.'),
-        h('p', {}, 'Ti guido in quattro passi, ci vogliono due minuti. Puoi saltare tutto e rifarlo quando vuoi dal pulsante «Configurazione guidata» in alto.'),
+        h('p', {}, `Ti guido in quattro passi, ci vogliono due minuti. Puoi saltare tutto e rifarlo quando vuoi da «Configurazione guidata» ${materialUI() ? 'nella sezione «Altro»' : 'in alto'}.`),
         nav({ next: 'Iniziamo' }));
     } else if (n === 1) {
       const input = h('input', { type: 'text', placeholder: 'Incolla il link di una playlist YouTube o Spotify', 'aria-label': 'Link della playlist' });
@@ -246,10 +248,13 @@ export function showInfo(ctx: InfoCtx): void {
     APP_VERSION ? h('div', { class: 'artist' }, `Versione ${APP_VERSION}`) : null,
     h('p', {}, 'Un DJ virtuale gratuito per feste e serate: playlist YouTube o Spotify, mix automatico, testi da cantare e proiettore.'),
     h('div', { class: 'credit' }, h('div', { class: 'artist' }, 'Creato da'), h('div', { class: 'credit-name' }, AUTHOR)),
-    h('p', {}, 'Se PartyMix ti è utile e ti va di ringraziare chi lo ha creato, puoi fare una piccola donazione con PayPal: è facoltativa e tutto funziona uguale anche senza.'),
-    h('img', { class: 'paypal-qr', src: PAYPAL_QR, alt: `Codice QR PayPal di ${AUTHOR}`, width: '280', height: '280' }),
-    h('div', { class: 'credit-name paypal-name' }, AUTHOR.toLowerCase()),
-    h('p', { class: 'artist' }, 'Per donare: apri l’app PayPal sul telefono, scegli «Scansiona» e inquadra questo codice.'),
+    // App Store rules: no payment outside Apple's in-app purchase inside an iOS app, so the donation is not shown there
+    ...(isIOSApp() ? [] : [
+      h('p', {}, 'Se PartyMix ti è utile e ti va di ringraziare chi lo ha creato, puoi fare una piccola donazione con PayPal: è facoltativa e tutto funziona uguale anche senza.'),
+      h('img', { class: 'paypal-qr', src: PAYPAL_QR, alt: `Codice QR PayPal di ${AUTHOR}`, width: '280', height: '280' }),
+      h('div', { class: 'credit-name paypal-name' }, AUTHOR.toLowerCase()),
+      h('p', { class: 'artist' }, 'Per donare: apri l’app PayPal sul telefono, scegli «Scansiona» e inquadra questo codice.'),
+    ]),
     h('p', { class: 'artist fine' }, 'I brani sono riprodotti da YouTube; con Spotify l’app usa solo l’elenco dei brani. Spotify e YouTube sono marchi dei rispettivi proprietari, estranei a questo progetto.'),
     h('div', { class: 'tour-actions' },
       h('button', { onClick: () => { close(); ctx.openTutorial(); } }, 'Tutorial'),

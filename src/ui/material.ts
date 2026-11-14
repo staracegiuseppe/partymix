@@ -1,4 +1,5 @@
 import { isAndroidApp } from '../androidBridge';
+import { isIOSApp } from '../platform';
 import { h } from './dom';
 
 /**
@@ -7,7 +8,7 @@ import { h } from './dom';
  * it can be tried with `?android` in the address.
  */
 export const materialUI = (): boolean => {
-  if (isAndroidApp()) return true;
+  if (isAndroidApp() || isIOSApp()) return true;
   try { return new URLSearchParams(location.search).has('android'); } catch { return false; }
 };
 
@@ -205,11 +206,19 @@ export function applySystemInsets(): void {
       const kb = typeof j.ime === 'number' && j.ime > 0;
       st.setProperty('--ime', `${kb ? j.ime : 0}px`);
       document.body.classList.toggle('kb', kb);
-      if (kb) requestAnimationFrame(() => document.activeElement?.scrollIntoView({ block: 'center' }));
+      if (kb) requestAnimationFrame(() => (document.activeElement as HTMLElement | null)?.scrollIntoView?.({ block: 'center' }));
     } catch { /* keep the CSS defaults */ }
   };
   apply();
   addEventListener('partymix-insets', apply);
+  // iPhone and iPad: no bridge, the safe areas come from CSS env(); the keyboard only shrinks the visual viewport
+  const vv = window.visualViewport;
+  if (!b && vv) vv.addEventListener('resize', () => {
+    const kb = innerHeight - vv.height > 150;
+    if (kb === document.body.classList.contains('kb')) return;
+    document.body.classList.toggle('kb', kb);
+    if (kb) requestAnimationFrame(() => (document.activeElement as HTMLElement | null)?.scrollIntoView?.({ block: 'center' }));
+  });
 }
 
 const THEME_TOKENS = ['primary', 'on-primary', 'primary-container', 'on-primary-container', 'secondary-container', 'on-secondary-container',

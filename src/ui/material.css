@@ -1,6 +1,6 @@
 /* Phone layout: Material Design 3. Dark and light schemes from the PartyMix pink; on Android 12+ the phone's
    Material You colours replace them (set inline by applyPhoneTheme), and light/dark follows the phone. Everything is scoped to body.md (Android). */
-body.md {
+body.md { touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%;
   --md-primary: #ffb0c8; --md-on-primary: #5e1133; --md-primary-container: #7b2949; --md-on-primary-container: #ffd9e2;
   --md-secondary-container: #5a3f47; --md-on-secondary-container: #ffd9e2;
   --md-tertiary: #82d3e0; --md-tertiary-container: #004f58; --md-on-tertiary-container: #9eeffd;
@@ -262,3 +262,17 @@ body.md.light {
 .md .m-empty .artist { white-space: normal; overflow: visible; }
 /* nothing to play yet: the empty deck cards would only be noise next to «Prima scegli la musica» */
 .md .m-empty:not(.hidden) + .m-now .deck { display: none; }
+
+/* Wide screens (iPad, tablets in landscape, foldables open): navigation rail on the left, the two decks side by side */
+@media (min-width: 840px) {
+  .md .m-nav { inset: 0 auto 0 0; width: calc(80px + env(safe-area-inset-left, 0px)); height: auto;
+    padding: calc(64px + var(--sys-top) + 12px) 0 var(--sys-bottom) env(safe-area-inset-left, 0px);
+    grid-template-columns: 1fr; grid-auto-rows: min-content; align-content: start; gap: 12px; background: var(--md-surface); }
+  .md .m-appbar { left: calc(80px + env(safe-area-inset-left, 0px)); padding-left: 24px; padding-right: calc(12px + env(safe-area-inset-right, 0px)); }
+  .md .m-main { max-width: 1100px; padding: calc(64px + var(--sys-top) + 4px) calc(24px + env(safe-area-inset-right, 0px)) calc(var(--sys-bottom) + 24px) calc(80px + env(safe-area-inset-left, 0px) + 24px); }
+  .md .m-snack { left: calc(80px + 24px); bottom: calc(var(--sys-bottom) + 16px); }
+  .md .m-now { grid-template-columns: 1fr 1fr; align-items: start; }
+  .md .m-now > :nth-child(1) { grid-column: 1; grid-row: 1; }
+  .md .m-now > :nth-child(3) { grid-column: 2; grid-row: 1; }
+  .md .m-now > :nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+}

@@ -1,3 +1,4 @@
+import { isIOSApp, isTablet } from './platform';
 import { canCast, castMessage, castState, isAndroidApp, onSharedLink } from './androidBridge';
 import './ui/style.css';
 import './ui/material.css';
@@ -28,7 +29,7 @@ const store: Storage | undefined = (() => { try { return window.localStorage; } 
 const settings = store ? loadSettings(store) : loadSettings({ getItem: () => null, setItem: () => {} } as unknown as Storage);
 const save = () => store && saveSettings(store, settings);
 /** Where the saved playlists live, as the user calls it. */
-const DEVICE = isAndroidApp() ? 'telefono' : 'PC';
+const DEVICE = isIOSApp() ? (isTablet() ? 'iPad' : 'iPhone') : isAndroidApp() ? 'telefono' : 'PC';
 
 // Problems the user should see, in plain Italian.
 const problems: string[] = [];
@@ -321,6 +322,7 @@ ui.setSensitivity(settings.micSensitivity);
 showSlots();
 ui.setProjectorMode(settings.projectorMode);
 if (canCast()) window.setInterval(() => ui.setProjectorInfo(castMessage(castState())), 1000);
+else if (isIOSApp()) ui.setProjectorInfo('📺 Per la TV: Centro di Controllo → «Duplica schermo» → Apple TV o TV AirPlay, poi «Mostra il proiettore».');
 ui.setAutoRefreshValue(settings.playlistRefreshMin);
 if (hasNativeDisplays()) void listDisplays().then((n) => ui.setDisplays(n, settings.projectorDisplay)).catch(() => {});
 
@@ -529,7 +531,14 @@ function viewModel(): ViewModel {
   };
 }
 
-window.setInterval(() => { skipSpot(); syncAutoDuck(); ui.update(viewModel()); }, 250);
+// iPhone/iPad: iOS pauses YouTube when the screen locks, so the screen stays on while the automix plays
+let awake = false;
+const keepAwake = (on: boolean) => {
+  if (on === awake || !isIOSApp()) return;
+  awake = on;
+  void (window as unknown as { __TAURI_INTERNALS__?: { invoke(c: string, a: unknown): Promise<unknown> } }).__TAURI_INTERNALS__?.invoke('keep_awake', { on }).catch(() => {});
+};
+window.setInterval(() => { skipSpot(); syncAutoDuck(); const vm = viewModel(); ui.update(vm); keepAwake(vm.state !== 'idle'); }, 250);
 // The projector line follows the playhead on its own faster beat, so it is never up to 250 ms behind the console tick.
 window.setInterval(() => { publishLyrics(lyricsVM()); publishVideo(); }, 80);
 

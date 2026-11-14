@@ -1,4 +1,29 @@
 import { canCast, castStart, castStop } from '../androidBridge';
+import { isIOSApp } from '../platform';
+
+/**
+ * iPhone and iPad: one window, no cast API. The projector covers the app inside it and reaches the TV through
+ * AirPlay «Duplica schermo»; a corner button brings back the console. It reads the same settings and
+ * lyrics from localStorage as the projector window on a computer.
+ */
+function iosProjector(open: boolean): void {
+  document.getElementById('ios-projector')?.remove();
+  if (!open) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'ios-projector';
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:100;background:#000';
+  const frame = document.createElement('iframe');
+  frame.src = '/projector.html';
+  frame.allow = 'microphone; autoplay; fullscreen';
+  frame.style.cssText = 'border:0;width:100%;height:100%';
+  const back = document.createElement('button');
+  back.textContent = '✕ Torna alla console';
+  back.setAttribute('aria-label', 'Chiudi il proiettore e torna alla console');
+  back.style.cssText = 'all:unset;box-sizing:border-box;display:inline-flex;align-items:center;cursor:pointer;white-space:nowrap;position:absolute;top:calc(env(safe-area-inset-top,0px) + 8px);right:calc(env(safe-area-inset-right,0px) + 8px);min-height:44px;padding:0 16px;border-radius:22px;border:0;background:#0009;color:#fff;font:500 14px system-ui,sans-serif;opacity:.55';
+  back.onclick = () => iosProjector(false);
+  wrap.append(frame, back);
+  document.body.appendChild(wrap);
+}
 type TauriInternals = { invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> };
 const tauri = () => (window as unknown as { __TAURI_INTERNALS__?: TauriInternals }).__TAURI_INTERNALS__;
 
@@ -11,6 +36,7 @@ export async function listDisplays(): Promise<string[]> {
 
 export async function openProjector(display?: string): Promise<void> {
   if (canCast()) { castStart(); return; } // Android: on the TV or projector the phone casts to
+  if (isIOSApp()) { iosProjector(true); return; }
   const t = tauri();
   if (t) await t.invoke('open_projector', { display });
   else window.open('/projector.html', 'partymix-projector', 'popup,width=1280,height=720');
@@ -18,6 +44,7 @@ export async function openProjector(display?: string): Promise<void> {
 
 export async function closeProjector(): Promise<void> {
   if (canCast()) { castStop(); return; }
+  if (isIOSApp()) { iosProjector(false); return; }
   await tauri()?.invoke('close_projector');
 }
 

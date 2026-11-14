@@ -18,6 +18,25 @@ Gli installer **non sono firmati** (la firma richiede un account sviluppatore a 
 
 > Lo stato di verifica su Windows è nel [registro delle verifiche](VERIFICHE.md).
 
+## Linux
+
+Per computer x86_64 (64 bit Intel/AMD) con Ubuntu 22.04 o successivo, Debian 12, Fedora, Mint e simili.
+
+- **AppImage** (`PartyMix_x.y.z_linux-x86_64.AppImage`), non si installa nulla:
+  1. Scaricalo e rendilo eseguibile: tasto destro → *Proprietà → Permessi → Consenti l'esecuzione*, oppure `chmod +x PartyMix_*.AppImage`.
+  2. Aprilo con un doppio clic (o `./PartyMix_*.AppImage` dal terminale).
+  3. Se non parte e dice che manca **FUSE**: Fedora `sudo dnf install fuse-libs`; Ubuntu `sudo apt install libfuse2` (su Ubuntu 24.04 `libfuse2t64`).
+- **.rpm** (`PartyMix_x.y.z_linux-x86_64.rpm`), per **Fedora** (e RHEL, Rocky, openSUSE): `sudo dnf install ./PartyMix_*.rpm`. Usa WebKitGTK di Fedora e installa da solo i plugin di GStreamer per i video. Si toglie con `sudo dnf remove party-mix`.
+- **.deb** (`PartyMix_x.y.z_linux-amd64.deb`), per Ubuntu e Debian: `sudo apt install ./PartyMix_*.deb`. PartyMix compare tra le applicazioni, nella categoria Audio/Musica. Si toglie con `sudo apt remove party-mix`.
+
+I video di YouTube passano da GStreamer. L'AppImage lo porta con sé; il .rpm e il .deb installano i plugin che servono (Fedora: `gstreamer1-plugins-good`, `gstreamer1-plugins-bad-free`; Ubuntu/Debian: `gstreamer1.0-plugins-good`, `-bad`, `gstreamer1.0-libav`). Se i brani restano fermi, su Fedora aggiungi anche `gstreamer1-plugin-openh264` (oppure `gstreamer1-libav` da RPM Fusion).
+
+Se la finestra resta **bianca o vuota** (succede con alcune schede video, soprattutto NVIDIA, su Wayland), avvia PartyMix così: `WEBKIT_DISABLE_DMABUF_RENDERER=1 partymix-ai` (con l'AppImage: `WEBKIT_DISABLE_DMABUF_RENDERER=1 ./PartyMix_*.AppImage`).
+
+Il proiettore è fatto per andare a tutto schermo sul monitor scelto anche con Wayland (GNOME, KDE). Il microfono del proiettore usa quello predefinito di sistema, che puoi cambiare dalle impostazioni audio.
+
+> Linux non è ancora stato provato su un computer vero: se qualcosa non va, scrivimi da 💬 Commenti.
+
 ## Android
 1. Scarica `PartyMix_x.y.z_android.apk` sul telefono (Android 7 o successivo) e aprilo.
 2. Se Android lo chiede, consenti a quell'app (browser o file) di **installare app sconosciute**, poi **Installa**.

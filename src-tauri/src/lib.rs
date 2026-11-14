@@ -46,8 +46,41 @@ async fn open_projector(app: tauri::AppHandle, display: Option<String>) -> Resul
     if let Some(m) = target {
         let p = m.position();
         let _ = w.set_position(PhysicalPosition::new(p.x + 40, p.y + 40));
+        // Linux: on Wayland the compositor ignores where a window asks to go; GTK can still put it full screen on a chosen monitor.
+        #[cfg(target_os = "linux")]
+        if linux_fullscreen_on(&w, p.x, p.y, m.name().cloned()) {
+            return Ok(());
+        }
     }
     w.set_fullscreen(true).map_err(|e| e.to_string())
+}
+
+/// Full screen on the GDK monitor at that physical position (or with that name). False if none matches: the caller
+/// then falls back to the plain full screen. GTK may only be touched on the main thread.
+#[cfg(target_os = "linux")]
+fn linux_fullscreen_on(w: &tauri::WebviewWindow, x: i32, y: i32, name: Option<String>) -> bool {
+    use gtk::prelude::{GtkWindowExt, MonitorExt};
+    let found = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+    let win = w.clone();
+    let flag = found.clone();
+    let queued = w.run_on_main_thread(move || {
+        if let (Ok(gw), Some(display)) = (win.gtk_window(), gtk::gdk::Display::default()) {
+            let index = (0..display.n_monitors()).find(|&i| {
+                display.monitor(i).map_or(false, |m| {
+                    let g = m.geometry();
+                    let sf = m.scale_factor();
+                    (g.x() * sf == x && g.y() * sf == y) || (name.is_some() && m.model().map(|s| s.to_string()) == name)
+                })
+            });
+            if let Some(i) = index {
+                gw.fullscreen_on_monitor(&GtkWindowExt::screen(&gw).unwrap_or_else(|| gtk::gdk::Screen::default().unwrap()), i);
+                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        let _ = done_tx.send(());
+    });
+    queued.is_ok() && done_rx.recv_timeout(std::time::Duration::from_secs(2)).is_ok() && found.load(std::sync::atomic::Ordering::SeqCst)
 }
 
 /// Pages the app may read for the Spotify import. Nothing else: this is not a general web proxy.
@@ -130,18 +163,37 @@ fn feedback_url(via: &str, subject: &str, body: &str) -> Option<String> {
 
 /** Opens a message to the author, written and sent by the user from their own mail account. */
 #[tauri::command]
-fn open_feedback(via: String, subject: String, body: String) -> Result<(), String> {
+fn open_feedback(_app: tauri::AppHandle, via: String, subject: String, body: String) -> Result<(), String> {
     let url = feedback_url(&via, &subject, &body).ok_or("modo di invio sconosciuto")?;
     #[cfg(target_os = "macos")]
     let r = std::process::Command::new("open").arg(&url).spawn();
     // the URL goes as one argument, never through a shell
     #[cfg(target_os = "windows")]
     let r = std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", &url]).spawn();
-    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
+    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android"), not(target_os = "ios")))]
     let r = std::process::Command::new("xdg-open").arg(&url).spawn();
     #[cfg(target_os = "android")]
     let r: std::io::Result<()> = Err(std::io::Error::other("su Android l'invio passa dall'app"));
+    // iPhone and iPad: Mail, or Safari for Gmail and Outlook, through UIApplication openURL
+    #[cfg(target_os = "ios")]
+    let r: std::io::Result<()> = {
+        use tauri_plugin_opener::OpenerExt;
+        _app.opener().open_url(&url, None::<&str>).map_err(std::io::Error::other)
+    };
     r.map(|_| ()).map_err(|e| format!("non riesco ad aprire la posta: {}", e))
+}
+
+/** iPhone and iPad: iOS pauses web videos when the app leaves the screen, so while the music plays the screen stays on. */
+#[tauri::command]
+fn keep_awake(app: tauri::AppHandle, on: bool) {
+    #[cfg(target_os = "ios")]
+    let _ = app.run_on_main_thread(move || unsafe {
+        use objc2::{class, msg_send, runtime::{AnyObject, Bool}};
+        let ui: *mut AnyObject = msg_send![class!(UIApplication), sharedApplication];
+        let _: () = msg_send![ui, setIdleTimerDisabled: Bool::new(on)];
+    });
+    #[cfg(not(target_os = "ios"))]
+    let _ = (app, on);
 }
 
 #[cfg(test)]
@@ -159,16 +211,28 @@ mod feedback_tests {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "ios")]
+    let builder = builder.plugin(tauri_plugin_opener::init());
+    builder
         .manage(capture::CaptureState::default())
         .plugin(tauri_plugin_localhost::Builder::new(PORT).build())
-        .invoke_handler(tauri::generate_handler![list_displays, open_projector, close_projector, http_get, capture::start_audio_capture, capture::stop_audio_capture, capture::ad_debug_log, capture::ad_debug_playlist, capture::ad_debug_spot, open_feedback])
+        .invoke_handler(tauri::generate_handler![list_displays, open_projector, close_projector, http_get, capture::start_audio_capture, capture::stop_audio_capture, capture::ad_debug_log, capture::ad_debug_playlist, capture::ad_debug_spot, open_feedback, keep_awake])
         .setup(|app| {
             let url: Url = format!("http://localhost:{}/index.html", PORT).parse().unwrap();
             let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url));
             #[cfg(desktop)]
             let builder = builder.title("PartyMix").disable_drag_drop_handler().inner_size(1280.0, 800.0);
-            builder.build()?;
+            let _window = builder.build()?;
+            // iPhone and iPad: the page lays itself out edge to edge (viewport-fit=cover) and reads the safe areas
+            // with env(); UIKit's automatic insets would push it down and leave env() at zero.
+            #[cfg(target_os = "ios")]
+            _window.with_webview(|w| unsafe {
+                use objc2::{msg_send, runtime::AnyObject};
+                let wk = w.inner() as *mut AnyObject;
+                let scroll: *mut AnyObject = msg_send![wk, scrollView];
+                let _: () = msg_send![scroll, setContentInsetAdjustmentBehavior: 2isize]; // .never
+            })?;
             Ok(())
         })
         .run(tauri::generate_context!())

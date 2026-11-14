@@ -2,19 +2,19 @@
 //! macOS 14.6+ and Windows can record the output of the sound card without extra drivers. The audio is reduced to
 //! 16 kHz mono blocks of 100 ms, handed to the web view, analysed on the fly and never stored.
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use cpal::{SampleFormat, Stream};
 
-/// Android does not let an app record what the device is playing without the screen-capture consent:
+/// Android and iOS do not let an app record what the device is playing without the screen-capture consent:
 /// the ad detector simply stays off there.
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 struct Stream;
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn open(_on_audio: Channel<InvokeResponseBody>) -> Result<Stream, String> {
-    Err("su Android l'ascolto dell'audio del dispositivo non è disponibile".into())
+    Err("su telefono e tablet l'ascolto dell'audio del dispositivo non è disponibile".into())
 }
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Mutex;
@@ -65,7 +65,7 @@ impl Reducer {
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn open(on_audio: Channel<InvokeResponseBody>) -> Result<Stream, String> {
     let host = cpal::default_host();
     let device = host.default_output_device().ok_or("nessuna uscita audio trovata")?;

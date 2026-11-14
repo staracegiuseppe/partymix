@@ -32,6 +32,28 @@
           "Italian"
         ]
       }
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": true
+      },
+      "deb": {
+        "depends": [
+          "libasound2",
+          "gstreamer1.0-plugins-good",
+          "gstreamer1.0-plugins-bad",
+          "gstreamer1.0-libav"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "webkit2gtk4.1",
+          "gtk3",
+          "alsa-lib",
+          "gstreamer1-plugins-good",
+          "gstreamer1-plugins-bad-free"
+        ]
+      }
     }
   }
 }

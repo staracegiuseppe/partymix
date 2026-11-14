@@ -37,6 +37,7 @@ Incolli una playlist YouTube o Spotify, premi un tasto e la musica va avanti da 
 |---|---|---|
 | **macOS** (Apple Silicon) | `PartyMix_x.y.z_aarch64.dmg` | Apri il DMG e trascina PartyMix in Applicazioni. Primo avvio: clic destro → Apri. |
 | **Windows 10/11** (64 bit) | `PartyMix_x.y.z_windows-x64.zip` | Estrai lo zip e apri `PartyMix.exe`, senza installare nulla. Se compare SmartScreen: *Ulteriori informazioni → Esegui comunque*. |
+| **Linux** x86_64 (Fedora, Ubuntu 22.04 o successivo, Debian 12…) | `PartyMix_x.y.z_linux-x86_64.rpm` · `PartyMix_x.y.z_linux-amd64.deb` · `PartyMix_x.y.z_linux-x86_64.AppImage` | Fedora: `sudo dnf install ./PartyMix_*.rpm`. Ubuntu/Debian: `sudo apt install ./PartyMix_*.deb`. Oppure l'AppImage, senza installare: `chmod +x PartyMix_*.AppImage` e aprilo. |
 | **Android** 7 o successivo | `PartyMix_x.y.z_android.apk` | Apri l'APK sul telefono e consenti l'installazione da questa fonte. |
 
 Tutti i file sono nella pagina [**Release**](https://github.com/staracegiuseppe/partymix/releases/latest). Le app non sono firmate con un certificato a pagamento, quindi al primo avvio il sistema mostra un avviso: è normale, i dettagli sono in [docs/INSTALLAZIONE.md](docs/INSTALLAZIONE.md). Per aggiornare installa la nuova versione sopra la vecchia: impostazioni e playlist restano.
@@ -92,7 +93,7 @@ Il codice di PartyMix è distribuito con [licenza MIT](LICENSE): puoi usarlo, mo
 
 ## Sviluppo
 
-App [Tauri 2](https://tauri.app) (Rust + TypeScript, Vite), un unico codice per macOS, Windows e Android.
+App [Tauri 2](https://tauri.app) (Rust + TypeScript, Vite), un unico codice per macOS, Windows, Linux e Android.
 
 ```bash
 npm install
@@ -100,7 +101,10 @@ npm test                # test della logica, dell'automix, dei testi e della UI
 npx tauri dev           # avvia l'app
 npx tauri build         # pacchetto per il sistema in uso
 npx tauri android build --apk --target aarch64
+npx tauri build --bundles appimage,deb,rpm   # su Linux
 ```
+
+**Linux.** Servono le librerie di sviluppo di WebKitGTK e ALSA (Fedora: `sudo dnf install webkit2gtk4.1-devel gtk3-devel libsoup3-devel alsa-lib-devel dbus-devel librsvg2-devel libxdo-devel gcc pkgconf-pkg-config`; Ubuntu/Debian: `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libdbus-1-dev libasound2-dev librsvg2-dev libxdo-dev build-essential pkg-config file patchelf`). Per avere i video di YouTube anche in sviluppo installa i plugin di GStreamer: `gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav`. Il workflow [`.github/workflows/linux.yml`](.github/workflows/linux.yml) (avvio manuale da *Actions → Linux → Run workflow*) produce AppImage, .deb e .rpm (Fedora) su Ubuntu 22.04 e, se gli indichi una release, li allega lì.
 
 Struttura: `src/automix.ts` (motore), `src/queue.ts`, `src/crossfade.ts`, `src/youtubeDeck.ts`, `src/lyrics.ts`, `src/savedPlaylists.ts`, `src/projector/` (proiettore, video e precaricamento), `src/ui/` (console), `src-tauri/` (Rust: finestre, schermi, cattura audio), `src-tauri/gen/android/` (app Android, proiettore in cast in `CastProjector.kt`).
 
@@ -118,7 +122,7 @@ Dopo aver caricato una playlist, in sottofondo PartyMix cerca i testi di tutti i
 
 Dal pannello «Pubblicità» si può attivare l'ascolto dell'**audio che sta suonando sul computer** (non il microfono). PartyMix ne misura ogni 100 ms alcune caratteristiche (energia nelle fasce di frequenza, pause, quanto è «tonale») e capisce se somiglia a una voce che parla, come in uno spot, oppure a una canzone. Se sente parlato per qualche secondo abbassa il volume del deck in onda al 20%, e lo rialza quando torna la musica. Il pulsante «Abbassa volume» manuale continua a funzionare. L'audio non viene registrato né salvato: restano solo i numeri dell'analisi.
 
-- Funziona nell'app installata, su **macOS 14.6 o successivo** (la prima volta il Mac chiede il permesso di registrare l'audio di sistema) e su **Windows 10/11** (non provato su Windows).
+- Funziona nell'app installata, su **macOS 14.6 o successivo** (la prima volta il Mac chiede il permesso di registrare l'audio di sistema) e su **Windows 10/11** (non provato su Windows). Su **Linux** l'ascolto parte dal dispositivo di registrazione predefinito: per fargli sentire la musica e non il microfono, con PulseAudio o PipeWire apri `pavucontrol` → *Registrazione* e per PartyMix (compare come «ALSA plug-in [partymix-ai]») scegli «Monitor di …» la tua uscita audio (non ancora provato su Linux).
 - Tarato su voci di sintesi italiane e inglesi e su 16 brani veri (rap e pop): 14 voci su 14 riconosciute dopo 5-9 secondi, 0 brani su 16 scambiati per parlato. Provato dal vivo sulla playlist «birra» (circa 35 brani di pop italiano e karaoke, 13 secondi ciascuno): all'inizio erano scattati due falsi allarmi (l'intro quasi a cappella di «A far l'amore comincia tu» e 2 secondi tra due brani), risolti chiedendo che la voce domini il suono (energia sotto i 500 Hz) e che faccia pause da parlato; dopo la correzione nessun falso allarme. Il pannello mostra lo storico degli ultimi rilevamenti, con brano e valori misurati, per capire dove scatta. Una pubblicità con la **musica sotto la voce** non viene riconosciuta, e una voce registrata molto «brillante» potrebbe sfuggire: per questo c'è la sensibilità (Alta/Normale/Prudente).
 - **Brani brevi (spot).** Gli spot nelle playlist sono clip da pochi secondi a un minuto, le canzoni durano minuti. Dal pannello si può scegliere «Brani brevi (spot)»: «Abbassa il volume» o «Salta al brano dopo» per i brani sotto i **75 secondi** (di serie «Non fare niente»). Funziona anche senza ascoltare l'audio, quindi prende anche gli spot fatti solo di musica. Non si applica alle pubblicità inserite da YouTube nel suo player, che non vengono né saltate né nascoste.
 - Provato su 30 spot veri registrati dall'audio di sistema contro 13 canzoni vere con la stessa catena: le caratteristiche del suono da sole non bastano per separare uno spot di sola musica da una canzone (a validazione per clip, il 36% degli spot per l'8% di canzoni scambiate), per questo la durata è il segnale principale per quel caso.

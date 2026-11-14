@@ -20,7 +20,7 @@
 
 PartyMix suona una playlist YouTube o Spotify come farebbe un DJ: mentre un brano finisce, il successivo entra con una sfumatura. Puoi mandare su una TV o un proiettore le forme che ballano a tempo con il testo da cantare, oppure il video del brano.
 
-Questa guida vale per 💻 **computer** (macOS e Windows) e 📱 **Android**. Dove cambia qualcosa, lo trovi indicato. Per scaricare e installare l'app leggi [INSTALLAZIONE.md](INSTALLAZIONE.md).
+Questa guida vale per 💻 **computer** (macOS, Windows e Linux) e 📱 **Android**. Dove cambia qualcosa, lo trovi indicato. Per scaricare e installare l'app leggi [INSTALLAZIONE.md](INSTALLAZIONE.md).
 
 - [1. Primo avvio](#1-primo-avvio)
 - [2. Dove si trova cosa](#2-dove-si-trova-cosa)
@@ -162,7 +162,7 @@ Il proiettore è una seconda schermata, da mandare su TV o videoproiettore, che 
 - **Karaoke:** forme colorate che seguono il suono della stanza attraverso il microfono, con il testo da cantare. Il suono non viene registrato.
 - **Video YouTube:** il video del brano in onda a tutto schermo, muto e allineato alla musica. È perfetto per i balli tipo Just Dance. Il video successivo è già caricato, quindi al cambio brano lo schermo non diventa mai nero. Quando YouTube mostra una pubblicità, al suo posto restano le forme.
 
-**Computer.** Premi **Apri proiettore** e scegli lo schermo: secondo monitor, TV collegata o proiettore. Nel pannello scegli anche il microfono e la sensibilità.
+**Computer.** Premi **Apri proiettore** e scegli lo schermo: secondo monitor, TV collegata o proiettore. Nel pannello scegli anche il microfono e la sensibilità. Su Linux il proiettore va a tutto schermo sul monitor scelto, anche con Wayland (non ancora provato su un computer vero).
 
 **Android.** Premi **Trasmetti alla TV** (oppure l'icona in alto).
 1. Si aprono le impostazioni di Android «Trasmetti» o «Schermo wireless».
@@ -205,6 +205,7 @@ Interruttori:
 - **Abbassa il volume durante le pubblicità**, solo su computer.
   - PartyMix ascolta l'audio che sta suonando: se sente una voce che parla, come in uno spot, abbassa il volume e lo rialza quando torna la musica.
   - Su macOS la prima volta il Mac chiede il permesso di registrare l'audio di sistema.
+  - Su Linux PartyMix ascolta il dispositivo di registrazione predefinito: per fargli sentire la musica, apri `pavucontrol` → *Registrazione* e per «ALSA plug-in [partymix-ai]» scegli «Monitor di …» la tua uscita audio.
   - L'audio non viene registrato né salvato.
 
 Le pubblicità che YouTube inserisce nel suo player non si possono saltare né nascondere.
@@ -224,6 +225,9 @@ Le pubblicità che YouTube inserisce nel suo player non si possono saltare né n
 - **La playlist non si carica:** controlla che sia pubblica (o non in elenco) e che la rete funzioni.
 - **Un brano viene saltato:** il proprietario non permette di suonarlo fuori da YouTube. Lo trovi in «Stato e problemi»; sostituiscilo dall'avviso dei brani non riproducibili.
 - **Il testo è sfasato:** usa ① e ② (vedi il [capitolo 7](#7-il-testo-da-cantare)), oppure spegni «Parole che si illuminano».
+- **Linux: l'AppImage non si apre:** rendila eseguibile (`chmod +x`) e, se dice che manca FUSE, installa `fuse-libs` (Fedora) o `libfuse2` (Ubuntu; 24.04: `libfuse2t64`). Su Fedora conviene il pacchetto .rpm.
+- **Linux: la finestra resta bianca:** avvia con `WEBKIT_DISABLE_DMABUF_RENDERER=1 partymix-ai`. I dettagli sono in [INSTALLAZIONE.md](INSTALLAZIONE.md#linux).
+- **Linux: i brani non partono o il video è nero:** mancano i plugin di GStreamer (Fedora: `gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-plugin-openh264`; Ubuntu/Debian: `gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav`).
 - **Android: sulla TV vedo il telefono invece del proiettore:** il dispositivo copia lo schermo ma non riceve uno «schermo wireless». Prova un'app ricevitore Miracast sulla TV, oppure un cavo HDMI.
 - **Android: la musica si ferma con lo schermo spento.** Dalla versione 1.6.2 la musica continua a schermo spento (provato su un Realme con Android 16), e la notifica «La festa continua anche a schermo spento» tiene viva l'app. Se il tuo telefono la ferma lo stesso, togli PartyMix dall'ottimizzazione della batteria nelle impostazioni di Android.
 - Per tutto il resto scrivimi da **💬 Commenti**.

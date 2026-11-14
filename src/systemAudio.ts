@@ -1,6 +1,8 @@
+import { isIOSApp } from './platform';
 import { Channel, invoke } from '@tauri-apps/api/core';
 
-export const hasSystemAudio = (): boolean => !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+/** iOS does not let an app record what the device plays: the ad detector is for computers (and stays off on phones). */
+export const hasSystemAudio = (): boolean => !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ && !isIOSApp();
 
 /** 16 kHz mono blocks of what the computer is playing, as -1..1 samples. Needs the installed app. */
 export async function startSystemAudio(onSamples: (s: Float32Array) => void): Promise<void> {

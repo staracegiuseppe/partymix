@@ -1,3 +1,4 @@
+import { isIOSApp } from './platform';
 import { APP_VERSION } from './info';
 
 /** Comments and ideas reach the author by e-mail, written and sent by the user from their own account. */
@@ -14,6 +15,7 @@ const win = () => window as unknown as { PartyMixAndroid?: AndroidBridge; __TAUR
 /** Which system the app runs on, written in the message so a problem can be reproduced. */
 export function platformName(): string {
   if (win().PartyMixAndroid) return 'Android';
+  if (isIOSApp()) return /iPad/.test(navigator.userAgent) || (navigator.maxTouchPoints ?? 0) > 1 && /Macintosh/.test(navigator.userAgent) ? 'iPadOS' : 'iOS';
   const p = (typeof navigator !== 'undefined' && navigator.platform) || '';
   if (/^Win/i.test(p)) return 'Windows';
   if (/^Mac/i.test(p)) return 'macOS';
