@@ -2521,6 +2521,7 @@ name = "partymix-ai"
 version = "1.6.2"
 dependencies = [
  "cpal",
+ "gtk",
  "reqwest 0.12.28",
  "rustfft",
  "tauri",

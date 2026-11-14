@@ -46,8 +46,41 @@ async fn open_projector(app: tauri::AppHandle, display: Option<String>) -> Resul
     if let Some(m) = target {
         let p = m.position();
         let _ = w.set_position(PhysicalPosition::new(p.x + 40, p.y + 40));
+        // Linux: on Wayland the compositor ignores where a window asks to go; GTK can still put it full screen on a chosen monitor.
+        #[cfg(target_os = "linux")]
+        if linux_fullscreen_on(&w, p.x, p.y, m.name().cloned()) {
+            return Ok(());
+        }
     }
     w.set_fullscreen(true).map_err(|e| e.to_string())
+}
+
+/// Full screen on the GDK monitor at that physical position (or with that name). False if none matches: the caller
+/// then falls back to the plain full screen. GTK may only be touched on the main thread.
+#[cfg(target_os = "linux")]
+fn linux_fullscreen_on(w: &tauri::WebviewWindow, x: i32, y: i32, name: Option<String>) -> bool {
+    use gtk::prelude::{GtkWindowExt, MonitorExt};
+    let found = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+    let win = w.clone();
+    let flag = found.clone();
+    let queued = w.run_on_main_thread(move || {
+        if let (Ok(gw), Some(display)) = (win.gtk_window(), gtk::gdk::Display::default()) {
+            let index = (0..display.n_monitors()).find(|&i| {
+                display.monitor(i).map_or(false, |m| {
+                    let g = m.geometry();
+                    let sf = m.scale_factor();
+                    (g.x() * sf == x && g.y() * sf == y) || (name.is_some() && m.model().map(|s| s.to_string()) == name)
+                })
+            });
+            if let Some(i) = index {
+                gw.fullscreen_on_monitor(&GtkWindowExt::screen(&gw).unwrap_or_else(|| gtk::gdk::Screen::default().unwrap()), i);
+                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        let _ = done_tx.send(());
+    });
+    queued.is_ok() && done_rx.recv_timeout(std::time::Duration::from_secs(2)).is_ok() && found.load(std::sync::atomic::Ordering::SeqCst)
 }
 
 /// Pages the app may read for the Spotify import. Nothing else: this is not a general web proxy.

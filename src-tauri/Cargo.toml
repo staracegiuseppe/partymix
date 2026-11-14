@@ -17,10 +17,19 @@ rustfft = "6"
 
 # Reads Spotify and YouTube pages (the web view cannot: those sites do not allow cross-origin reads).
 # Desktop: the system TLS keeps the build free of C code. Android has no system TLS for native code: rustls with bundled roots.
-[target.'cfg(not(target_os = "android"))'.dependencies]
-# Records what the computer plays (ad detector). Not available to apps on Android.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+# Records what the computer plays (ad detector). Not available to apps on Android and iOS.
 cpal = "0.18"
+
+# Mac, Windows and iPhone/iPad: the system TLS (Security framework on Apple, SChannel on Windows).
+[target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["native-tls"] }
+
+# Linux: rustls with bundled roots, like Android, so the AppImage does not depend on the distribution's OpenSSL version.
+[target.'cfg(target_os = "linux")'.dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+# The same GTK as Tauri's: puts the projector full screen on the chosen monitor (also on Wayland).
+gtk = "0.18"
 
 [target.'cfg(target_os = "android")'.dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
