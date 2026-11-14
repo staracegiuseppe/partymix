@@ -1,4 +1,4 @@
-# Builds PartyMix for Linux (x86_64): an AppImage and a .deb, on Ubuntu 22.04 so they also run on older distributions.
+# Builds PartyMix for Linux (x86_64): an AppImage, a .deb (Ubuntu/Debian) and an .rpm (Fedora), on Ubuntu 22.04 so they also run on older distributions.
 # Started only by hand (Actions → «Linux» → Run workflow). With a release tag (for example v1.6.3) it also attaches the
 # two files to that GitHub release; otherwise they are only kept as the run's artifacts.
 name: Linux
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release a cui allegare AppImage e .deb (es. v1.6.3). Vuoto = solo artefatti della run."
+        description: "Release a cui allegare AppImage, .deb e .rpm (es. v1.6.3). Vuoto = solo artefatti della run."
         required: false
         default: ""
 
@@ -48,8 +48,8 @@ jobs:
       - name: Tests
         run: npx vitest run
 
-      - name: Build AppImage and .deb
-        run: npx tauri build --bundles appimage,deb
+      - name: Build AppImage, .deb and .rpm
+        run: npx tauri build --bundles appimage,deb,rpm
 
       - name: Collect the files
         id: files
@@ -58,6 +58,7 @@ jobs:
           mkdir -p out
           cp src-tauri/target/release/bundle/appimage/*.AppImage "out/PartyMix_${V}_linux-x86_64.AppImage"
           cp src-tauri/target/release/bundle/deb/*.deb "out/PartyMix_${V}_linux-amd64.deb"
+          cp src-tauri/target/release/bundle/rpm/*.rpm "out/PartyMix_${V}_linux-x86_64.rpm"
           ls -l out
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
