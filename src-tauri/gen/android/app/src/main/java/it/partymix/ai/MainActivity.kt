@@ -49,6 +49,8 @@ class MainActivity : TauriActivity() {
     // transparent bars drawn behind by the page; their icons dark or light like the phone's theme
     enableEdgeToEdge(SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT), SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT))
     super.onCreate(savedInstanceState)
+    // no grey veil behind the three navigation buttons: the page's own bottom bar colour runs under them
+    if (Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
     // Back closes a sheet or returns to «In onda» (history in the page); at the start it sends the app to the
     // background instead of closing it, so the party keeps playing.
     onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -88,9 +90,15 @@ class MainActivity : TauriActivity() {
       }
       insets
     }
+    ViewCompat.requestApplyInsets(webView) // the first measure may have gone by before the listener was set
     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
       WebViewCompat.addDocumentStartJavaScript(webView, ALWAYS_VISIBLE, setOf("*"))
     }
+  }
+
+  override fun onResume() {
+    super.onResume()
+    webView?.let { ViewCompat.requestApplyInsets(it) }
   }
 
   // Wry pauses the web view when the app leaves the screen, and that pauses the players: undo it.

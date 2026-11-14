@@ -192,7 +192,8 @@ export function applySystemInsets(): void {
   const apply = () => {
     try {
       const j = JSON.parse(b?.insets?.() ?? '{}');
-      const st = document.documentElement.style;
+      // on body, where the default values live (set on <html> they would be hidden by body's own defaults)
+      const st = document.body.style;
       if (typeof j.top === 'number') st.setProperty('--sys-top', `${j.top}px`);
       if (typeof j.bottom === 'number') st.setProperty('--sys-bottom', `${j.bottom}px`);
       // keyboard open: the bottom bar steps aside and the field being typed in scrolls into view above the keys

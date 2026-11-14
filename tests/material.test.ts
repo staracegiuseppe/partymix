@@ -1,5 +1,5 @@
 import { buildConsole, Actions, ViewModel } from '../src/ui/console';
-import { applyPhoneTheme } from '../src/ui/material';
+import { applyPhoneTheme, applySystemInsets } from '../src/ui/material';
 
 const deck = { title: '', artist: '', elapsed: 0, duration: 0, role: 'idle' as const, volume: 100, duck: false };
 const vm = (): ViewModel => ({
@@ -86,5 +86,20 @@ describe('colours like the phone', () => {
     window.dispatchEvent(new Event('partymix-theme'));
     expect(document.body.classList.contains('dark')).toBe(true);
     expect(document.body.style.getPropertyValue('--md-primary')).toBe('');
+  });
+});
+
+describe('room for the phone\'s own bars', () => {
+  afterEach(() => { delete (window as unknown as { PartyMixAndroid?: unknown }).PartyMixAndroid; document.body.removeAttribute('style'); document.body.className = ''; });
+  it('puts the status and navigation bar heights on body, where the defaults are, and follows the keyboard', () => {
+    let reply = { top: 32, bottom: 48, ime: 0 };
+    (window as unknown as { PartyMixAndroid: unknown }).PartyMixAndroid = { insets: () => JSON.stringify(reply) };
+    applySystemInsets();
+    expect(document.body.style.getPropertyValue('--sys-top')).toBe('32px');
+    expect(document.body.style.getPropertyValue('--sys-bottom')).toBe('48px');
+    reply = { top: 32, bottom: 48, ime: 300 };
+    window.dispatchEvent(new Event('partymix-insets'));
+    expect(document.body.classList.contains('kb')).toBe(true);
+    expect(document.body.style.getPropertyValue('--ime')).toBe('300px');
   });
 });

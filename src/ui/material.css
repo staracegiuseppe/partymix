@@ -8,7 +8,7 @@ body.md {
   --md-surface: #191113; --md-surface-low: #22191b; --md-surface-c: #261d1f; --md-surface-high: #31282a; --md-surface-highest: #3c3234;
   --md-on-surface: #efdfe1; --md-on-surface-variant: #d5c2c6; --md-outline: #9e8c90; --md-outline-variant: #514347;
   --md-inverse-surface: #efdfe1; --md-inverse-on-surface: #372e30; --md-scrim: #000000;
-  --sys-top: 0px; --sys-bottom: 0px; --warn: #fbbf24; --ok: #4ade80; color-scheme: dark;
+  --sys-top: env(safe-area-inset-top, 0px); --sys-bottom: env(safe-area-inset-bottom, 0px); --warn: #fbbf24; --ok: #4ade80; color-scheme: dark;
   /* the classic tokens the shared parts still use */
   --bg: var(--md-surface); --panel: var(--md-surface-low); --panel2: var(--md-surface-high); --line: var(--md-outline-variant);
   --text: var(--md-on-surface); --muted: var(--md-on-surface-variant); --b: var(--md-tertiary); --a: var(--md-primary); --err: var(--md-error);
