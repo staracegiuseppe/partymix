@@ -133,3 +133,26 @@ describe('YouTubeDeck load errors and retry cleanup', () => {
     expect(cleared).toEqual([77]);
   });
 });
+
+describe('pause that nobody asked for (screen off)', () => {
+  it('plays again after a second while the deck should be playing', () => {
+    const { p, d, timers } = mk();
+    d.play();
+    p.calls = [];
+    d.handleState(2);
+    d.handleState(2); // a second pause before the timer fires does not stack
+    expect(timers).toHaveLength(1);
+    expect(timers[0].ms).toBe(1000);
+    timers[0].fn();
+    expect(p.calls).toEqual(['play']);
+  });
+  it('a pause from the app itself stays paused', () => {
+    const { p, d, timers } = mk();
+    d.play();
+    d.pause();
+    p.calls = [];
+    d.handleState(2);
+    expect(timers).toHaveLength(0);
+    expect(p.calls).toEqual([]);
+  });
+});

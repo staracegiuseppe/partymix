@@ -242,3 +242,23 @@ body.md.light {
 .md .role.live { background: var(--md-primary); color: var(--md-on-primary); }
 .md .cover.none { display: none; }
 .md .m-sheet-panel:focus { outline: none; }
+
+/* Playlist first, then «In onda»: the dot on the destination to go to, the empty state, the way to the music */
+.md .m-ind { position: relative; }
+.md .m-nav-item.hint .m-ind::after { content: ''; position: absolute; top: 2px; right: 14px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--md-primary); box-shadow: 0 0 0 2px var(--md-surface-c); animation: m-pulse 1.6s ease-in-out infinite; }
+@keyframes m-pulse { 50% { transform: scale(1.35); opacity: .7; } }
+.md .m-empty { background: var(--md-primary-container); color: var(--md-on-primary-container); display: grid; gap: 12px; }
+.md .m-empty h3 { color: var(--md-on-primary-container); font-size: 22px; line-height: 28px; font-weight: 400; margin: 0; }
+.md .m-empty .artist { color: var(--md-on-primary-container); font-size: 16px; line-height: 24px; margin: 0; }
+.md .m-empty button { justify-self: start; min-height: 48px; }
+.md .m-steps { display: flex; align-items: center; gap: 8px; }
+.md .m-step { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 500 14px/1 Roboto, system-ui, sans-serif;
+  box-shadow: inset 0 0 0 2px currentColor; opacity: .6; }
+.md .m-step.on { background: var(--md-primary); color: var(--md-on-primary); box-shadow: none; opacity: 1; }
+.md .m-step-line { width: 32px; height: 2px; background: currentColor; opacity: .4; }
+.md .m-gonow { min-height: 56px; border-radius: 16px; font-size: 16px; box-shadow: 0 1px 3px #0004, 0 4px 8px #0002; }
+.md .m-gonow .m-icon { width: 24px; height: 24px; }
+.md .m-empty .artist { white-space: normal; overflow: visible; }
+/* nothing to play yet: the empty deck cards would only be noise next to «Prima scegli la musica» */
+.md .m-empty:not(.hidden) + .m-now .deck { display: none; }

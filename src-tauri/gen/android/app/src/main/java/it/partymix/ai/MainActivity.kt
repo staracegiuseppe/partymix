@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.webkit.JavascriptInterface
 import android.graphics.Color
 import android.webkit.WebView
@@ -104,7 +105,23 @@ class MainActivity : TauriActivity() {
   // Wry pauses the web view when the app leaves the screen, and that pauses the players: undo it.
   override fun onPause() {
     super.onPause()
-    webView?.onResume()
+    keepPlaying()
+  }
+
+  // Screen off or another app in front: the web view is told its window is hidden, and Chromium then suspends
+  // the video players (the YouTube decks). Tell it again that it is visible, now and once the window has changed.
+  override fun onStop() {
+    super.onStop()
+    keepPlaying()
+    webView?.postDelayed({ keepPlaying() }, 300)
+    webView?.postDelayed({ keepPlaying() }, 1500)
+  }
+
+  private fun keepPlaying() {
+    val w = webView ?: return
+    w.onResume()
+    w.resumeTimers()
+    w.dispatchWindowVisibilityChanged(View.VISIBLE)
   }
 
   /** The phone switched between light and dark (uiMode is handled here, the activity is not recreated). */

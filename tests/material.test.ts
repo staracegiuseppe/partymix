@@ -15,7 +15,7 @@ function setup() {
   history.replaceState(null, '', '/?android');
   document.body.className = '';
   document.body.innerHTML = '<div id="root"></div>';
-  const fns = { removeTrack: vi.fn(), move: vi.fn(), selectPlaylist: vi.fn(), playNow: vi.fn() };
+  const fns = { removeTrack: vi.fn(), move: vi.fn(), selectPlaylist: vi.fn(), playNow: vi.fn(), start: vi.fn() };
   const actions = new Proxy(fns, { get: (t, k) => (k in t ? (t as never)[k] : vi.fn()) }) as unknown as Actions;
   const ui = buildConsole(document.getElementById('root')!, actions);
   ui.update(vm());
@@ -26,14 +26,32 @@ const sheetItem = (label: string) => [...document.querySelectorAll<HTMLButtonEle
 describe('phone layout (Material Design)', () => {
   afterEach(() => history.replaceState(null, '', '/'));
 
-  it('has four destinations, «In onda» first, and switches between them', () => {
+  it('has four destinations in the order of the steps, Playlist first, and switches between them', () => {
     setup();
     const nav = [...document.querySelectorAll<HTMLButtonElement>('.m-nav-item')];
-    expect(nav.map((b) => b.textContent)).toEqual(['In onda', 'Playlist', 'Proiettore', 'Altro']);
-    expect(document.querySelector('.m-screen.on')?.getAttribute('data-screen')).toBe('now');
+    expect(nav.map((b) => b.textContent)).toEqual(['Playlist', 'In onda', 'Proiettore', 'Altro']);
+    expect(document.querySelector('.m-screen.on')?.getAttribute('data-screen')).toBe('list'); // nothing saved yet: start from the playlist
     nav[1].click();
-    expect(document.querySelector('.m-screen.on')?.getAttribute('data-screen')).toBe('list');
-    expect(document.querySelector('[data-screen=now]')?.hasAttribute('inert')).toBe(true);
+    expect(document.querySelector('.m-screen.on')?.getAttribute('data-screen')).toBe('now');
+    expect(document.querySelector('[data-screen=list]')?.hasAttribute('inert')).toBe(true);
+  });
+
+  it('shows the way (and the big button also starts the music): no music → «Prima scegli la musica» and a dot on Playlist; music ready → a dot on In onda and the button to go there', () => {
+    const { ui, fns } = setup();
+    const nav = () => [...document.querySelectorAll<HTMLButtonElement>('.m-nav-item')];
+    const v = vm();
+    ui.update({ ...v, queue: [], state: 'idle' });
+    expect(document.querySelector('.m-empty')?.classList.contains('hidden')).toBe(false);
+    expect(nav()[0].classList.contains('hint')).toBe(true);
+    ui.update({ ...v, state: 'idle', queue: v.queue.map((r) => ({ ...r, current: false })) });
+    expect(document.querySelector('.m-empty')?.classList.contains('hidden')).toBe(true);
+    expect(nav()[0].classList.contains('hint')).toBe(false);
+    expect(nav()[1].classList.contains('hint')).toBe(true);
+    const go = document.querySelector<HTMLButtonElement>('.m-gonow')!;
+    expect(go.classList.contains('hidden')).toBe(false);
+    go.click();
+    expect(document.querySelector('.m-screen.on')?.getAttribute('data-screen')).toBe('now');
+    expect(fns.start).toHaveBeenCalled();
   });
 
   it('lists the four playlists in a menu by name, with how many songs each keeps', () => {

@@ -90,7 +90,8 @@ export const EMPTY_SOURCE = '↓ Carica la tua playlist (Spotify / YouTube)';
 const fmtSpeed = (v: number) => '×' + v.toFixed(2).replace('.', ',');
 const ROLE_LABEL: Record<DeckVM['role'], string> = { live: 'IN ONDA', out: 'IN USCITA', ready: 'PRONTO', loading: 'PREPARAZIONE…', idle: 'FERMO' };
 
-export function buildConsole(root: HTMLElement, a: Actions) {
+/** `hasMusic`: a playlist is saved for the slot in use, so the phone opens on «In onda» instead of «Playlist». */
+export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: boolean } = {}) {
   /** Phone layout (Material Design 3) on Android; the classic console on a computer. */
   const md = materialUI();
   const label = (el: HTMLElement, t: string) => (md ? setLabel(el, t) : el.textContent !== t && (el.textContent = t));
@@ -267,13 +268,22 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     onChange: () => a.renamePlaylist(nameInput.value) });
   nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') nameInput.blur(); });
   const savedInfo = h('span', { class: 'artist saved' });
+  // Phone, step 2: once a playlist is ready, the way to the music is the most visible button on the page.
+  const goNow = h('button', { class: 'm-filled m-gonow hidden', onClick: () => { shell?.go('now'); if (lastVm?.ready && lastVm.state === 'idle') a.start(); } }, 'Vai a In onda e avvia la musica');
+  // Phone, step 1: «In onda» with nothing to play says where to start.
+  const emptyNow = h('section', { class: 'panel m-empty hidden' },
+    h('div', { class: 'm-steps' }, h('span', { class: 'm-step on' }, '1'), h('span', { class: 'm-step-line' }), h('span', { class: 'm-step' }, '2')),
+    h('h3', {}, 'Prima scegli la musica'),
+    h('p', { class: 'artist' }, 'Vai su «Playlist», scegli una delle tue playlist o incolla un link di YouTube o Spotify. Poi torna qui e premi «Avvia automix».'),
+    h('button', { class: 'm-filled', onClick: () => shell?.go('list') }, 'Scegli la playlist'));
   const loadRow = md
     ? h('div', { class: 'load m-card' },
       h('label', { class: 'm-field' }, h('span', { class: 'm-field-label' }, 'Playlist in uso'), slotSel),
       h('label', { class: 'm-field' }, h('span', { class: 'm-field-label' }, 'Nome'), nameInput),
       savedInfo,
       h('label', { class: 'm-field' }, h('span', { class: 'm-field-label' }, 'Link YouTube o Spotify'), link),
-      h('div', { class: 'm-btnrow' }, loadBtn, appsBtn))
+      h('div', { class: 'm-btnrow' }, loadBtn, appsBtn),
+      goNow)
     : h('div', { class: 'load' }, slotSel, nameInput, savedInfo, link, loadBtn, appsBtn);
   /** A line about the projector that the app keeps up to date (Android: the cast screen). */
   function setProjectorInfo(text: string) { if (projMsg.textContent !== text) projMsg.textContent = text; }
@@ -347,7 +357,7 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     helpItem('info', 'Informazioni', 'Versione, autore e donazione facoltativa', openInfo));
   /** Phone: the parts of the console grouped in four destinations, each one a screen. */
   const mdTourSteps = (): TourStep[] => [
-    { target: () => root.querySelector('.m-nav'), title: 'Quattro sezioni', text: 'In basso passi da una sezione all’altra: «In onda» per suonare, «Playlist» per scegliere i brani, «Proiettore» per la TV e il testo, «Altro» per le impostazioni e l’aiuto. Il tasto Indietro torna a «In onda».' },
+    { target: () => root.querySelector('.m-nav'), title: 'Prima la playlist, poi In onda', text: 'In basso le sezioni sono in ordine: 1) «Playlist» per scegliere la musica, 2) «In onda» per farla partire, poi «Proiettore» per la TV e il testo e «Altro» per le impostazioni e l’aiuto. Un pallino colorato ti dice dove andare. Il tasto Indietro torna a «In onda».' },
     { target: () => loadRow, title: 'Le tue playlist', text: 'Puoi tenere quattro playlist: scegline una dal menu, dalle un nome e incolla il link di YouTube o Spotify. Ancora più comodo: «Scegli dalle app», apri la playlist in YouTube o Spotify e tocca Condividi › PartyMix. La lista resta salvata sul telefono.' },
     { target: () => queuePanel, title: 'La coda', text: 'Tocca un brano per suonarlo subito, farlo partire dopo quello in onda, spostarlo, bloccarlo o toglierlo dalla playlist.' },
     { target: () => (dA.card.classList.contains('is-live') ? dA.card : dB.card), title: 'In onda', text: 'Il brano che si sente, con il video e il tempo che manca. Trascina la barra per spostarti nel brano.' },
@@ -370,6 +380,7 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     withIcon(shuffleBtn, 'shuffle'); withIcon(shuffleNow, 'shuffle'); withIcon(repeatBtn, 'repeat');
     withIcon(refreshBtn, 'refresh'); withIcon(addBtn, 'add');
     withIcon(projOpen, 'cast'); withIcon(projClose, 'stop');
+    withIcon(goNow, 'play'); withIcon(emptyNow.querySelector('button')!, 'queue');
     withIcon(dA.duck, 'volumeDown'); withIcon(dB.duck, 'volumeDown');
     master.parentElement?.prepend(withIcon(h('span', { class: 'm-vol-ic' }), 'volume', true));
     nextBtn.parentElement?.append(nextBtn); // Pausa · Mix ora · Prossimo, like a player
@@ -379,9 +390,12 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     shell = buildShell(root, {
       title: h('div', { class: 'logo' }, 'Party', h('b', {}, 'Mix')),
       actions: [pill, castTop],
+      home: 'now',
+      start: opts.hasMusic ? 'now' : 'list',
       screens: [
-        { id: 'now', label: 'In onda', icon: 'nowPlaying', body: [h('div', { class: 'm-now' }, dA.card, mixer, dB.card)] },
+        // the order of the steps: first the playlist, then the music
         { id: 'list', label: 'Playlist', icon: 'queue', body: [loadRow, warnPanel, queuePanel] },
+        { id: 'now', label: 'In onda', icon: 'nowPlaying', body: [emptyNow, h('div', { class: 'm-now' }, dA.card, mixer, dB.card)] },
         { id: 'proj', label: 'Proiettore', icon: 'cast', body: [projPanel, syncBar, lyricsPanel] },
         { id: 'more', label: 'Altro', icon: 'tune', body: [karaokePanel, adPanel, helpPanel, histPanel, probPanel, h('section', { class: 'panel' }, unav)] },
       ],
@@ -536,6 +550,13 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     label(repeatBtn, { off: 'Ripeti: no', all: 'Ripeti: tutta la playlist', one: 'Ripeti: questo brano' }[vm.repeat]);
     repeatBtn.setAttribute('aria-pressed', String(vm.repeat !== 'off'));
 
+    if (md) {
+      const has = vm.queue.length > 0;
+      emptyNow.classList.toggle('hidden', has);
+      goNow.classList.toggle('hidden', !has || !idle);
+      shell?.hint('list', !has);
+      shell?.hint('now', has && idle && shell.current() !== 'now');
+    }
     once('queue', JSON.stringify(vm.queue), () => {
       queueList.replaceChildren(...vm.queue.map((r, i) => md ? mdRow(r, i, vm.queue) : h('div', {
         class: 'item' + (r.current ? ' cur' : '') + (r.bad ? ' bad' : ''),

@@ -316,7 +316,7 @@ const ui = buildConsole(document.getElementById('app')!, {
   markWelcomed() { settings.welcomed = true; save(); },
   retryKaraoke: () => startKaraoke(true),
   setKaraokeAuto(on) { settings.karaokeAuto = on; save(); if (on) startKaraoke(); else karaoke.stop(); },
-});
+}, { hasMusic: !!loadSaved(store, settings.playlistSlot) });
 ui.setSensitivity(settings.micSensitivity);
 showSlots();
 ui.setProjectorMode(settings.projectorMode);

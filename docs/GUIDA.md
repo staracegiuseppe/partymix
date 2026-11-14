@@ -60,18 +60,25 @@ L'app segue lo stile Material Design e ha quattro sezioni nella barra in basso:
 
 <table>
 <tr>
-<td align="center"><img src="img/android-now.png" alt="Sezione In onda" width="190"><br><b>In onda</b></td>
-<td align="center"><img src="img/android-playlist.png" alt="Sezione Playlist, tema chiaro" width="190"><br><b>Playlist</b> (tema chiaro)</td>
+<td align="center"><img src="img/android-playlist.png" alt="Sezione Playlist, tema chiaro" width="190"><br><b>① Playlist</b> (tema chiaro)</td>
+<td align="center"><img src="img/android-now.png" alt="Sezione In onda" width="190"><br><b>② In onda</b></td>
 <td align="center"><img src="img/android-projector.png" alt="Sezione Proiettore" width="190"><br><b>Proiettore</b></td>
 </tr>
 </table>
 
 | Sezione | Cosa contiene |
 |---|---|
-| **In onda** | Il brano che si sente (copertina, titolo, tempo, barra per spostarsi), **Avvia/Ferma automix**, Pausa, Mix ora, Prossimo, volume e stile delle transizioni. Più sotto la scheda «Poi» con il brano già pronto |
-| **Playlist** | Il menu delle quattro playlist, il nome, il link, «Carica playlist», «Scegli dalle app» e la coda dei brani |
+| **① Playlist** | Il menu delle quattro playlist, il nome, il link, «Carica playlist», «Scegli dalle app» e la coda dei brani |
+| **② In onda** | Il brano che si sente (copertina, titolo, tempo, barra per spostarsi), **Avvia/Ferma automix**, Pausa, Mix ora, Prossimo, volume e stile delle transizioni. Più sotto la scheda «Poi» con il brano già pronto |
 | **Proiettore** | Karaoke o Video YouTube, «Trasmetti alla TV», microfono e la scheda «Testo da cantare» per mettere il testo a tempo |
 | **Altro** | Karaoke automatico, brani brevi (spot), aiuto, commenti, informazioni, brani già suonati e problemi |
+
+**Prima la playlist, poi In onda.** Le sezioni sono in ordine: si sceglie la musica e poi la si fa partire.
+- Finché non c'è una playlist, l'app si apre su **Playlist** e la voce Playlist ha un **pallino colorato**. Se apri In onda, trovi la scheda «Prima scegli la musica» con il pulsante per tornare a Playlist.
+- Quando la playlist è pronta, in Playlist compare il grande pulsante **▶ Vai a In onda e avvia la musica**: ti porta in In onda e fa partire l'automix. Il pallino passa sulla voce In onda.
+- Se all'apertura c'è già una playlist salvata, l'app si apre direttamente su In onda.
+
+<p align="center"><img src="img/android-start.png" alt="In onda senza playlist: «Prima scegli la musica» e il pallino su Playlist" width="240"></p>
 
 - L'icona **Trasmetti** in alto a destra apre subito il proiettore sulla TV.
 - Il tasto **Indietro** chiude un pannello aperto, poi torna a «In onda». Da «In onda» manda l'app in secondo piano senza chiuderla, quindi la musica continua.
@@ -218,7 +225,7 @@ Le pubblicità che YouTube inserisce nel suo player non si possono saltare né n
 - **Un brano viene saltato:** il proprietario non permette di suonarlo fuori da YouTube. Lo trovi in «Stato e problemi»; sostituiscilo dall'avviso dei brani non riproducibili.
 - **Il testo è sfasato:** usa ① e ② (vedi il [capitolo 7](#7-il-testo-da-cantare)), oppure spegni «Parole che si illuminano».
 - **Android: sulla TV vedo il telefono invece del proiettore:** il dispositivo copia lo schermo ma non riceve uno «schermo wireless». Prova un'app ricevitore Miracast sulla TV, oppure un cavo HDMI.
-- **Android: la musica si ferma con lo schermo spento.** PartyMix tiene viva la musica con la notifica «La festa continua anche a schermo spento». Se il telefono la ferma lo stesso, togli PartyMix dall'ottimizzazione della batteria nelle impostazioni di Android.
+- **Android: la musica si ferma con lo schermo spento.** Dalla versione 1.6.2 la musica continua a schermo spento (provato su un Realme con Android 16), e la notifica «La festa continua anche a schermo spento» tiene viva l'app. Se il tuo telefono la ferma lo stesso, togli PartyMix dall'ottimizzazione della batteria nelle impostazioni di Android.
 - Per tutto il resto scrivimi da **💬 Commenti**.
 
 ## 💜 Sostieni PartyMix

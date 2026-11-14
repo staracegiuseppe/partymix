@@ -86,9 +86,9 @@ export type SheetItem = { label: string; icon: IconName; danger?: boolean; disab
  * Builds the app frame and returns its controls. Back (Android's back gesture) closes an open sheet, then returns
  * to the first destination, then leaves the app: every step is a history entry, so the WebView's back does the work.
  */
-export function buildShell(root: HTMLElement, o: { title: Node; actions: Node[]; screens: Screen[] }) {
+export function buildShell(root: HTMLElement, o: { title: Node; actions: Node[]; screens: Screen[]; home?: string; start?: string }) {
   document.body.classList.add('md');
-  const home = o.screens[0].id;
+  const home = o.home ?? o.screens[0].id;
   let current = home;
   const scroll = new Map<string, number>();
   const sections = new Map<string, HTMLElement>();
@@ -111,6 +111,7 @@ export function buildShell(root: HTMLElement, o: { title: Node; actions: Node[];
   root.append(appbar, main, nav, snack);
 
   /** Hidden destinations stay laid out off screen (not display:none), so the YouTube players inside keep playing. */
+  const listeners = new Set<(id: string) => void>();
   function show(id: string) {
     if (!sections.has(id)) id = home;
     scroll.set(current, scrollY);
@@ -123,10 +124,11 @@ export function buildShell(root: HTMLElement, o: { title: Node; actions: Node[];
       if (on) navBtns.get(k)?.setAttribute('aria-current', 'page'); else navBtns.get(k)?.removeAttribute('aria-current');
     }
     scrollTo(0, scroll.get(id) ?? 0);
+    listeners.forEach((f) => f(id));
   }
   function go(id: string) {
     if (id === current) { scrollTo({ top: 0, behavior: 'smooth' }); return; }
-    if (id === home) { if (history.state?.screen && history.state.screen !== home) history.back(); else show(home); return; }
+    if (id === home) { const back = history.state?.screen && history.state.screen !== home; show(home); if (back) history.back(); return; }
     const st = { screen: id };
     if (current === home) history.pushState(st, ''); else history.replaceState(st, '');
     show(id);
@@ -137,6 +139,7 @@ export function buildShell(root: HTMLElement, o: { title: Node; actions: Node[];
     show((e.state as { screen?: string } | null)?.screen ?? home);
   });
   show(home);
+  if (o.start && o.start !== home) go(o.start);
 
   let snackTimer = 0;
   function toast(text: string, error = false) {
@@ -183,7 +186,9 @@ export function buildShell(root: HTMLElement, o: { title: Node; actions: Node[];
     if (id && id !== current) go(id);
   }
 
-  return { go, toast, sheet, reveal, current: () => current };
+  /** A dot on a destination of the bottom bar: «there is something for you here». */
+  function hint(id: string, on: boolean): void { navBtns.get(id)?.classList.toggle('hint', on); }
+  return { go, toast, sheet, reveal, hint, onScreen: (f: (id: string) => void) => listeners.add(f), current: () => current };
 }
 
 /** Android draws the app under the status and navigation bars: the app asks how tall they are and leaves room. */

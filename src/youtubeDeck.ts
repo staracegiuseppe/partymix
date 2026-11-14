@@ -108,6 +108,22 @@ export class YouTubeDeck implements Deck {
     if (state === 5) this.settle();
     else if (state === 1) this.retries = 0;
     else if (state === 0) this.endedCb();
+    else if (state === 2 && this.wantPlay) this.resumeSoon();
+  }
+
+  /**
+   * Paused, but nobody asked: the phone suspended the player (screen off, app in the background). Play again,
+   * at most once a second so a player that keeps refusing is not hammered.
+   */
+  private resumeTimer: number | undefined;
+  private resumeSoon(): void {
+    if (this.resumeTimer !== undefined) return;
+    this.resumeTimer = this.timers.setTimer(() => {
+      this.resumeTimer = undefined;
+      if (!this.wantPlay) return;
+      log('info', 'deck.resumed_after_pause', { videoId: this.videoId });
+      this.player.playVideo();
+    }, 1000);
   }
 
   /** Called by the YT.Player onError event. */
