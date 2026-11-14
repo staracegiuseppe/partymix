@@ -2,6 +2,7 @@ import { isIOSApp, isTablet } from './platform';
 import { canCast, castMessage, castState, isAndroidApp, onSharedLink } from './androidBridge';
 import './ui/style.css';
 import './ui/material.css';
+import './ui/desktop.css';
 import { Automix } from './automix';
 import { log, setSinks } from './log';
 import { buildTracks, oembedMeta, parsePlaylistPage, verifyReplacement } from './playlistLoader';
@@ -9,7 +10,7 @@ import { diffPlaylist } from './playlistSync';
 import { parsePlaylistInput } from './playlistUrl';
 import { Queue, Track } from './queue';
 import { Align, alignFromAnchors, findLyrics, lyricsFrom, TransientError, IDENTITY, indexFor, Lyrics, shiftAlign, snapshotAt, toLyricTime, karaokeAlign, lineProgress } from './lyrics';
-import { loadSettings, PLAYLIST_SLOTS, saveSettings } from './settings';
+import { loadSettings, saveSettings } from './settings';
 import { buildConsole, DeckVM, ViewModel } from './ui/console';
 import { bindShortcuts } from './ui/shortcuts';
 import { AdGuard } from './adGuard';
@@ -21,9 +22,20 @@ import { throttled } from './throttle';
 import { parseSpotifyInput } from './spotify';
 import { loadSpotifyList } from './spotifyLoader';
 import { closeProjector, hasNativeDisplays, listDisplays, nativeGet, openProjector } from './projector/launcher';
-import { loadSaved, saveSaved, slotLabel } from './savedPlaylists';
+import { openKV, KV } from './library/kv';
+import { migrateLegacy, PlaylistStore, Playlist } from './library/playlists';
+import { MusicLibrary, probeWithAudio } from './library/library';
+import { KvBlobStore, NativeBlobStore } from './library/blobStore';
+import { AudioDeck, HybridDeck } from './audioDeck';
+import { buildDesktopPages } from './ui/desktopPages';
+import type { DesktopParts } from './ui/console';
+import { materialUI } from './ui/material';
+import { readPlaylistApi, searchYouTube } from './ytSearch';
+import { tauriDownloadClient } from './download/client';
+import { DownloadCoordinator } from './download/manager';
+import { listen } from '@tauri-apps/api/event';
 import { listInputs } from './projector/mic';
-import { createYouTubeDeck, YouTubeDeck } from './youtubeDeck';
+import { createYouTubeDeck } from './youtubeDeck';
 
 const store: Storage | undefined = (() => { try { return window.localStorage; } catch { return undefined; } })();
 const settings = store ? loadSettings(store) : loadSettings({ getItem: () => null, setItem: () => {} } as unknown as Storage);
@@ -52,7 +64,38 @@ setSinks([
   },
 ]);
 
-let decks: [YouTubeDeck, YouTubeDeck] | undefined;
+// --- Storage: playlists and music library in IndexedDB (no 5 MB limit), audio files in Music/PartyMix Library on the computer. ---
+const kvReady = openKV();
+const kv: KV = {
+  get: async (st, k) => (await kvReady).get(st, k),
+  getAll: async (st) => (await kvReady).getAll(st),
+  put: async (st, k, v) => (await kvReady).put(st, k, v),
+  delete: async (st, k) => (await kvReady).delete(st, k),
+};
+const tauriInvoke = (window as unknown as { __TAURI_INTERNALS__?: { invoke(c: string, a?: unknown, o?: unknown): Promise<unknown> } }).__TAURI_INTERNALS__?.invoke;
+/** The computer console (not the phone or tablet layout): the only one with the library, the side bar and the YouTube search. */
+const desktopUI = !materialUI() && !isIOSApp() && !isAndroidApp();
+const plStore = new PlaylistStore(kv);
+const library = new MusicLibrary({
+  kv,
+  blobs: desktopUI && tauriInvoke ? new NativeBlobStore((c, a, o) => tauriInvoke(c, a, o)) : new KvBlobStore(kv),
+  probe: (b) => probeWithAudio(b),
+});
+window.addEventListener('pagehide', () => void plStore.flush().catch(() => {}));
+
+/** YouTube's players are ready (they need the internet). Without them the library still plays. */
+let ytReady = false;
+/** Network usable: navigator.onLine says the computer has a network, ytReady that YouTube answered. */
+const netOk = () => navigator.onLine && ytReady;
+const mkAudio = () => {
+  const a = document.createElement('audio');
+  a.preload = 'auto';
+  a.style.display = 'none';
+  document.body.append(a);
+  return new AudioDeck(a);
+};
+const hybridDeps = { localUrl: (id: string) => library.urlFor(id), canStream: netOk };
+const decks: [HybridDeck, HybridDeck] = [new HybridDeck(mkAudio(), hybridDeps), new HybridDeck(mkAudio(), hybridDeps)];
 let queue = new Queue([]);
 let listId: string | undefined;
 const replaced = new Set<string>();
@@ -74,106 +117,251 @@ function makeAutomix(): Automix {
     setTimer: (fn, ms) => window.setTimeout(fn, ms),
     clearTimer: (id) => window.clearTimeout(id),
     log,
-    online: () => navigator.onLine,
+    online: netOk,
   });
 }
 
 function setQueue(tracks: Track[]) {
   am?.stop();
   for (const t of tracks) if (settings.locked.includes(t.videoId)) t.locked = true;
-  queue = new Queue(tracks, { shuffle: settings.shuffle, repeat: settings.repeat });
+  queue = new Queue(tracks, { shuffle: settings.shuffle, repeat: settings.repeat, available: (t) => netOk() || library.isOffline(t.videoId) });
+  transient.clear();
   am = makeAutomix();
 }
 
+/** Songs played from the library or the search while a playlist is on: in the queue, not saved into the playlist. */
+const transient = new Set<string>();
 const trackOf = (id: string) => queue.all().find((t) => t.videoId === id);
 const titleOf = (t?: Track) => (t ? t.title || `Video ${t.videoId}` : '');
 
 async function probe(videoId: string): Promise<{ ok: boolean; reason?: string }> {
-  if (!decks || (am && am.state() !== 'idle')) return { ok: true }; // never disturb a running party
+  if (!ytReady || (am && am.state() !== 'idle')) return { ok: true }; // never disturb a running party
   try { await decks[1].load(videoId); return { ok: true }; } catch (e) { return { ok: false, reason: (e as Error).message }; }
 }
 
 /** Reads a playlist's video ids without interrupting the music: while the party runs it uses the spare deck. */
 async function readIds(id: string): Promise<string[]> {
+  if (settings.ytApiKey) {
+    // the official API reads the whole playlist, also beyond the ~200 videos the player exposes
+    try { const all = await readPlaylistApi(id, settings.ytApiKey); if (all.length) return all; } catch (e) { log('warn', 'playlist.api_failed', { error: String(e) }); }
+  }
   if (am && am.state() !== 'idle') {
-    const r = await am.withSpareDeck((d) => (d as YouTubeDeck).readPlaylist(id));
+    const r = await am.withSpareDeck((d) => (d as HybridDeck).readPlaylist(id));
     if (!r.ok) throw new Error(`${r.reason}: aspetta qualche secondo o ferma l'automix`);
     return r.value;
   }
   return decks![0].readPlaylist(id);
 }
 
-/** Which playlist slot the queue came from: its songs are saved again when they change. */
-let loadedSlot: number | undefined;
+/** Which playlist the queue came from: its songs are saved again when they change. */
+let loadedId: string | undefined;
 let loadedSource: 'YouTube' | 'Spotify' = 'YouTube';
 /** False when the list was opened from the PC: then it changes only when the user asks (Carica playlist / Aggiorna ora). */
 let autoRefreshable = true;
+const nameOf = (p?: Playlist) => p?.name ?? 'Playlist';
 
 function showSlots() {
-  const n = Array.from({ length: PLAYLIST_SLOTS }, (_, i) => loadSaved(store, i)?.tracks.length ?? 0);
-  ui.setPlaylistSlots(settings.playlistSlot, settings.playlists, settings.playlistNames, n);
+  ui.setPlaylists(plStore.list(settings.playlistSort).map((p) => ({ id: p.id, name: p.name, count: p.tracks.length, link: p.link ?? '' })), settings.currentPlaylistId);
 }
 
-/** Keeps the songs of the playlist in use on this computer (name, link and list), so it opens at once next time. */
+/** The playlist in use; one is created when there is none yet. */
+function ensureCurrent(): Playlist {
+  const have = plStore.get(settings.currentPlaylistId);
+  if (have) return have;
+  const p = plStore.list()[0] ?? plStore.create();
+  settings.currentPlaylistId = p.id; save();
+  return p;
+}
+
+/** Keeps the songs of the playlist in use (name, link and list), so it opens at once next time, also offline. */
 function persistQueue() {
-  if (loadedSlot === undefined) return;
-  const tracks = queue.all();
+  if (loadedId === undefined || !plStore.get(loadedId)) return;
+  const tracks = queue.all().filter((t) => !transient.has(t.videoId));
   if (!tracks.length) return;
-  saveSaved(store, loadedSlot, { name: settings.playlistNames[loadedSlot], link: settings.playlists[loadedSlot], source: loadedSource, tracks, removed: [...replaced] });
+  plStore.setTracks(loadedId, tracks, [...replaced]);
   showSlots();
 }
 
-/** The loaded link becomes the one saved in the playlist slot in use, together with its songs. */
+/** The loaded link becomes the one saved in the playlist in use, together with its songs. */
 function rememberLink(text: string, source: 'YouTube' | 'Spotify', ownName?: string) {
-  const slot = settings.playlistSlot;
+  const p = ensureCurrent();
   settings.playlistText = text;
-  settings.playlists[slot] = text.trim();
-  if (!settings.playlistNames[slot] && ownName) settings.playlistNames[slot] = ownName.slice(0, 60);
   save();
-  loadedSlot = slot;
+  plStore.update(p.id, { link: text.trim(), source });
+  if (ownName && /^Playlist \d+$/.test(p.name)) plStore.rename(p.id, ownName);
+  loadedId = p.id;
   loadedSource = source;
   autoRefreshable = true;
   persistQueue();
 }
 
-/** Opens the copy saved on this computer: no waiting for YouTube or Spotify. A YouTube playlist is then checked for news in the background. */
-function openSaved(slot: number): boolean {
-  const p = loadSaved(store, slot);
-  if (!p || p.link !== settings.playlists[slot]) return false;
+/** Opens the copy saved on this computer: no waiting for YouTube or Spotify, and it works offline too. */
+function openSaved(id: string | undefined): boolean {
+  const p = plStore.get(id);
+  if (!p || !p.tracks.length) return false;
   setQueue(p.tracks.map((t) => ({ ...t })));
   startKaraoke();
-  ui.setSource(p.source);
-  loadedSlot = slot;
-  loadedSource = p.source;
-  const parsed = p.source === 'YouTube' ? parsePlaylistInput(p.link) : undefined;
+  const src = p.source === 'Spotify' ? 'Spotify' : 'YouTube';
+  ui.setSource(p.source === 'Locale' ? 'Libreria' : src);
+  loadedId = p.id;
+  loadedSource = src;
+  const parsed = p.source !== 'Spotify' && p.link ? parsePlaylistInput(p.link) : undefined;
   listId = parsed?.kind === 'playlist' ? parsed.listId : undefined;
   replaced.clear();
-  for (const id of p.removed ?? []) replaced.add(id); // songs taken out stay out, also when the playlist is updated
+  for (const id2 of p.removed ?? []) replaced.add(id2); // songs taken out stay out, also when the playlist is updated
   autoRefreshable = false;
   ui.setRefreshInfo(listId ? `Aperta dal ${DEVICE}: la lista non cambia da sola. «Aggiorna ora» aggiunge i brani nuovi di YouTube, «Carica playlist» la rilegge da capo.` : '');
-  ui.setStatus(`«${slotLabel(slot, settings.playlistNames[slot])}» aperta dal ${DEVICE}: ${p.tracks.length} ${p.tracks.length === 1 ? 'brano' : 'brani'}. Premi «Carica playlist» per rileggerla da ${p.source}.`);
+  const off = navigator.onLine ? '' : ` Sei offline: suonano i ${p.tracks.filter((t) => library.isOffline(t.videoId)).length} brani disponibili offline.`;
+  ui.setStatus(`«${nameOf(p)}» aperta dal ${DEVICE}: ${p.tracks.length} ${p.tracks.length === 1 ? 'brano' : 'brani'}.${p.link ? ` Premi «Carica playlist» per rileggerla da ${src}.` : ''}${off}`);
   return true;
 }
 
-const ui = buildConsole(document.getElementById('app')!, {
-  selectPlaylist(slot) {
-    settings.playlistSlot = slot; save();
-    const text = settings.playlists[slot];
-    ui.linkInput.value = text;
-    showSlots();
-    if (loadedSlot === slot && am && am.state() !== 'idle') { ui.setStatus(`«${slotLabel(slot, settings.playlistNames[slot])}» sta già suonando.`); return; }
-    if (text && openSaved(slot)) return;
-    if (!text) { ui.setStatus(`«${slotLabel(slot, settings.playlistNames[slot])}» è vuota: incolla il link di una playlist YouTube o Spotify e premi «Carica playlist».`); ui.linkInput.focus(); return; }
+/** The playlist in the queue was changed from the side bar (songs added or removed): the queue follows, the music goes on. */
+function syncQueueWith(id: string) {
+  if (id !== loadedId) { showSlots(); return; }
+  const p = plStore.get(id);
+  if (!p) return;
+  if (!am || queue.length() === 0) { openSaved(id); return; }
+  const want = new Set(p.tracks.map((t) => t.videoId));
+  for (const t of p.tracks) if (!queue.has(t.videoId)) queue.add({ ...t });
+  for (const t of queue.all()) if (!want.has(t.videoId) && !transient.has(t.videoId)) queue.remove(t.videoId);
+  startKaraoke();
+  showSlots();
+}
+
+/** Plays a song now from the library or the search: added to the queue (not to the playlist) if it is not there. */
+function playTrack(t: Track) {
+  if (!netOk() && !library.isOffline(t.videoId)) { ui.setStatus('Sei offline: questo brano è solo online. Suonano i brani ✓ della libreria.', true); return; }
+  if (!queue.has(t.videoId)) {
+    if (!am || queue.length() === 0) { setQueue([{ ...t }]); loadedId = undefined; }
+    else { queue.add({ ...t }); transient.add(t.videoId); }
+  }
+  if (!am) return;
+  if (am.state() === 'idle') { queue.setCurrent(t.videoId); am.start(); } else am.playNow(t.videoId);
+  ui.setStatus(`▶ «${titleOf(t)}»`);
+}
+
+/**
+ * «Metti in coda»: the song goes at the end of the play queue, or right after the song on air (`next`).
+ * Like «Riproduci», it joins the queue only: the playlist itself does not change.
+ */
+function enqueue(t: Track, next: boolean) {
+  if (!netOk() && !library.isOffline(t.videoId)) { ui.setStatus('Sei offline: questo brano è solo online, lo metterò in coda ma verrà saltato finché non torna la rete.', true); }
+  const name = titleOf(t);
+  if (!am || queue.length() === 0) {
+    setQueue([{ ...t }]); loadedId = undefined;
+    ui.setStatus(`In coda: «${name}». Premi «Avvia automix» per farlo partire.`);
+    return;
+  }
+  if (!queue.has(t.videoId)) { queue.add({ ...t }); transient.add(t.videoId); }
+  else if (!next) {
+    const i = queue.all().findIndex((x) => x.videoId === t.videoId);
+    if (i === queue.currentIndex()) { ui.setStatus(`«${name}» sta già suonando.`); return; }
+    queue.move(i, queue.length() - 1);
+  }
+  if (next) {
+    if (!queue.cueNext(t.videoId)) { ui.setStatus(`«${name}» sta già suonando.`); return; }
+    ui.setStatus(`⏭ «${name}» suonerà subito dopo il brano in onda.`);
+  } else ui.setStatus(`⤵ In coda: «${name}» (posizione ${queue.length()}).`);
+}
+
+/** Any song the app knows: in the queue, in the library, in the search results or in a playlist. */
+function trackById(id: string): Track | undefined {
+  const q = trackOf(id);
+  if (q) return { ...q, locked: undefined, status: 'ok' };
+  const e = library.get(id);
+  if (e) return library.toTrack(e);
+  const k = libUI?.known(id);
+  if (k) return k;
+  for (const p of plStore.list()) { const t = p.tracks.find((x) => x.videoId === id); if (t) return { ...t }; }
+  return undefined;
+}
+
+/** Download Manager (computer app): yt-dlp runs in the app, finished files join My Library and the chosen playlist. */
+const downloads = desktopUI && tauriInvoke ? new DownloadCoordinator(
+  tauriDownloadClient((c, a) => tauriInvoke(c, a), (ev, fn) => listen(ev, fn)),
+  library, plStore,
+  { status: (t, e) => ui.setStatus(t, e), playlistChanged: (id) => syncQueueWith(id) },
+) : undefined;
+
+/** The computer's pages (Playlist, Cerca, Download, Libreria), built with the shell's menu and navigation. */
+let libUI: ReturnType<typeof buildDesktopPages> | undefined;
+const desktopPages = desktopUI ? (parts: DesktopParts) => (libUI = buildDesktopPages({
+  downloads,
+  playlists: plStore,
+  library,
+  playingId: () => loadedId,
+  sort: () => settings.playlistSort,
+  setSort: (s2) => { settings.playlistSort = s2; save(); showSlots(); },
+  apiKey: () => settings.ytApiKey ?? '',
+  setApiKey: (k) => { settings.ytApiKey = k || undefined; save(); },
+  online: netOk,
+  playPlaylist,
+  loadLink(id, link) {
+    settings.currentPlaylistId = id; save();
+    ui.linkInput.value = link;
     if (!ui.loadBtn.disabled) ui.loadBtn.click();
   },
+  edited: (id) => syncQueueWith(id),
+  deleted: (id) => {
+    if (loadedId === id) loadedId = undefined; // the music goes on, but is not saved into a playlist that no longer exists
+    if (settings.currentPlaylistId === id) { settings.currentPlaylistId = plStore.list(settings.playlistSort)[0]?.id; save(); }
+    showSlots();
+  },
+  playTrack,
+  enqueue,
+  trackById,
+  search: (q, page) => searchYouTube(q, { apiKey: settings.ytApiKey, getText: hasNativeDisplays() ? nativeGet : undefined, pageToken: page }),
+  status: (t, e) => ui.setStatus(t, e),
+  menu: parts.menu,
+  go: parts.go,
+  store,
+})) : undefined;
+
+/**
+ * ▶ on a playlist: it becomes the play queue (from `startAt` if given) and the Player opens.
+ * The playlist already playing is not restarted: ▶ just opens the Player (or jumps to the song asked).
+ */
+function playPlaylist(id: string, startAt?: string) {
+  const p = plStore.get(id);
+  if (!p) return;
+  ui.go('now');
+  const running = !!am && am.state() !== 'idle';
+  if (loadedId !== id || !running) {
+    settings.currentPlaylistId = id; save();
+    ui.linkInput.value = p.link ?? '';
+    showSlots();
+    if (loadedId !== id && !openSaved(id)) {
+      if (p.link && !ui.loadBtn.disabled) ui.loadBtn.click(); else ui.setStatus(`«${p.name}» è vuota: aggiungi brani dalla Ricerca o dalla Libreria.`, true);
+      return;
+    }
+  }
+  if (!am) return;
+  if (startAt) { if (am.state() === 'idle') { queue.setCurrent(startAt); am.start(); } else am.playNow(startAt); }
+  else if (am.state() === 'idle') am.start();
+}
+
+function selectPlaylist(id: string) {
+  const p = plStore.get(id);
+  if (!p) return;
+  settings.currentPlaylistId = id; save();
+  ui.linkInput.value = p.link ?? '';
+  showSlots();
+  if (loadedId === id && am && am.state() !== 'idle') { ui.setStatus(`«${nameOf(p)}» sta già suonando.`); return; }
+  if (openSaved(id)) return;
+  if (!p.link) { ui.setStatus(`«${nameOf(p)}» è vuota: incolla il link di una playlist YouTube o Spotify e premi «Carica playlist»${desktopUI ? ', oppure aggiungi brani dalla libreria o dalla ricerca' : ''}.`); ui.linkInput.focus(); return; }
+  if (!ui.loadBtn.disabled) ui.loadBtn.click();
+}
+
+const ui: ReturnType<typeof buildConsole> & { selectById(id: string): void } = Object.assign(buildConsole(document.getElementById('app')!, {
+  selectPlaylist,
   setProjectorMode(m) { settings.projectorMode = m; save(); ui.setProjectorMode(m); },
   renamePlaylist(name) {
-    const slot = settings.playlistSlot;
-    settings.playlistNames[slot] = name.trim().slice(0, 60); save();
-    const p = loadSaved(store, slot);
-    if (p) saveSaved(store, slot, { ...p, name: settings.playlistNames[slot] });
+    const p = ensureCurrent();
+    if (!name.trim()) { showSlots(); ui.setStatus('Il nome non può restare vuoto.', true); return; }
+    plStore.rename(p.id, name);
     showSlots();
-    ui.setStatus(name.trim() ? `Nome salvato: «${name.trim()}».` : `Nome tolto: torna «Playlist ${slot + 1}».`);
+    ui.setStatus(`Nome salvato: «${name.trim()}».`);
   },
   async loadPlaylist(text) {
     const spotify = parseSpotifyInput(text);
@@ -203,7 +391,7 @@ const ui = buildConsole(document.getElementById('app')!, {
     }
     const parsed = parsePlaylistInput(text);
     if (parsed.kind === 'invalid') { ui.setStatus('Link non valido: incolla il link di una playlist YouTube o Spotify, o di un video YouTube.', true); return; }
-    if (!decks) { ui.setStatus('I player YouTube non sono ancora pronti.', true); return; }
+    if (!ytReady) { ui.setStatus(navigator.onLine ? 'I player YouTube non sono ancora pronti: riprova tra qualche secondo.' : 'Sei offline: per leggere una playlist da YouTube serve la rete. Intanto suona la tua libreria.', true); return; }
     ui.loadBtn.disabled = true;
     try {
       ui.setStatus('Leggo la playlist…');
@@ -260,7 +448,8 @@ const ui = buildConsole(document.getElementById('app')!, {
     if (!queue.remove(id)) { ui.setStatus('Il brano in onda non si può togliere: passa al successivo e poi toglilo.', true); return; }
     replaced.add(id); // a playlist update must not bring it back
     persistQueue();
-    ui.setStatus(`Tolto dalla playlist: «${titleOf(t)}»${loadedSlot !== undefined ? ` (salvato sul ${DEVICE})` : ''}.`);
+    transient.delete(id);
+    ui.setStatus(`Tolto dalla playlist: «${titleOf(t)}»${loadedId !== undefined ? ` (salvato sul ${DEVICE})` : ''}.`);
   },
   setShuffle(on) { settings.shuffle = on; save(); if (on) queue.shuffleUpcoming(); },
   setRepeat(r) { settings.repeat = r; queue.setRepeat(r); save(); },
@@ -269,7 +458,7 @@ const ui = buildConsole(document.getElementById('app')!, {
     const r = await verifyReplacement(text, fetch, probe);
     if (!r.ok || !r.track) return r.message;
     r.track.manual = true;
-    if (!am) { setQueue([r.track]); loadedSlot = undefined; } else { queue.add(r.track); persistQueue(); }
+    if (!am) { setQueue([r.track]); loadedId = undefined; } else { queue.add(r.track); persistQueue(); }
     startKaraoke();
     return `Aggiunto: ${titleOf(r.track)}`;
   },
@@ -317,9 +506,16 @@ const ui = buildConsole(document.getElementById('app')!, {
   markWelcomed() { settings.welcomed = true; save(); },
   retryKaraoke: () => startKaraoke(true),
   setKaraokeAuto(on) { settings.karaokeAuto = on; save(); if (on) startKaraoke(); else karaoke.stop(); },
-}, { hasMusic: !!loadSaved(store, settings.playlistSlot) });
+  toggleFavorite(id) { const t = trackOf(id); const on = library.toggleFavorite(id, t); ui.setStatus(on ? `♥ «${titleOf(t)}» nei preferiti.` : `«${titleOf(t)}» tolto dai preferiti.`); },
+  makeOffline(id) { libUI?.offline(id); },
+  addToPlaylist(id) { libUI?.pickPlaylist([id]); },
+  prev() {
+    const i = queue.currentIndex();
+    const t = i > 0 ? queue.all()[i - 1] : undefined;
+    if (t && am && t.status !== 'unplayable') am.playNow(t.videoId);
+  },
+}, { hasMusic: !!settings.currentPlaylistId, desktop: desktopPages }), { selectById: selectPlaylist });
 ui.setSensitivity(settings.micSensitivity);
-showSlots();
 ui.setProjectorMode(settings.projectorMode);
 if (canCast()) window.setInterval(() => ui.setProjectorInfo(castMessage(castState())), 1000);
 else if (isIOSApp()) ui.setProjectorInfo('📺 Per la TV: Centro di Controllo → «Duplica schermo» → Apple TV o TV AirPlay, poi «Mostra il proiettore».');
@@ -329,18 +525,18 @@ if (hasNativeDisplays()) void listDisplays().then((n) => ui.setDisplays(n, setti
 // --- Playlist refresh: picks up videos added to or removed from the YouTube playlist. ---
 async function refreshPlaylist(manual: boolean): Promise<void> {
   if (refreshing) return;
-  if (!listId || !decks) { if (manual) ui.setRefreshInfo('Niente da aggiornare: hai caricato un singolo video.'); return; }
+  if (!listId || !ytReady) { if (manual) ui.setRefreshInfo('Niente da aggiornare: hai caricato un singolo video.'); return; }
   refreshing = true;
   if (manual) ui.setRefreshInfo('Aggiorno la playlist…');
   try {
     const running = !!am && am.state() !== 'idle';
     let ids: string[];
     if (running) {
-      const r = await am!.withSpareDeck((d) => (d as YouTubeDeck).readPlaylist(listId!));
+      const r = await am!.withSpareDeck((d) => (d as HybridDeck).readPlaylist(listId!));
       if (!r.ok) { if (manual) ui.setRefreshInfo(`Non in questo momento (${r.reason.toLowerCase()}): riprova tra qualche secondo.`); return; }
       ids = r.value;
     } else {
-      ids = await decks[0].readPlaylist(listId);
+      ids = settings.ytApiKey ? await readIds(listId) : await decks[0].readPlaylist(listId);
     }
     lastAttempt = Date.now();
     const q = queue;
@@ -511,21 +707,43 @@ function karaokeVM(): ViewModel['karaoke'] {
   return { running: st.running, waiting: st.waiting, total: st.total, done: st.done, synced, plain, none, pending, auto: settings.karaokeAuto };
 }
 
+/** The queue rows are rebuilt only when something they show changed (with 10 000 songs, not 4 times a second). */
+let rowsCache: { sig: string; rows: ViewModel['queue'] } = { sig: '', rows: [] };
+function queueRows(cur: number): { sig: string; rows: ViewModel['queue'] } {
+  const st = am?.state() ?? 'idle';
+  const net = netOk();
+  const sig = `${queue.version}|${cur}|${st === 'idle' ? 'i' : st === 'paused' ? 'p' : 'r'}|${karaoke.state().done}|${library.version}|${net}`;
+  if (sig === rowsCache.sig) return rowsCache;
+  const rows = queue.all().map((t, i) => {
+    const off = library.stateOf(t.videoId);
+    return {
+      id: t.videoId, title: titleOf(t), artist: t.artist ?? '', bad: t.status === 'unplayable', locked: !!t.locked,
+      current: i === cur && st !== 'idle', paused: st === 'paused', lyr: lyricsStore.status(t.videoId),
+      off, pct: off === 'downloading' ? library.progressOf(t.videoId) : undefined, fav: !!library.get(t.videoId)?.favorite,
+      dur: t.durationSec || library.get(t.videoId)?.durationSec, skip: !net && off !== 'offline',
+    };
+  });
+  rowsCache = { sig, rows };
+  return rowsCache;
+}
+
 function viewModel(): ViewModel {
   const cur = queue.currentIndex();
   const lyrics = lyricsVM();
   publishLyrics(lyrics);
+  const q = queueRows(cur);
   return {
     lyrics,
     state: am?.state() ?? 'idle',
     active: am?.activeDeck() ?? 0,
-    ready: !!decks && !!am && !!queue.current(),
+    ready: !!am && !!queue.current(),
     decks: [deckVM(0), deckVM(1)],
     mix: am?.mixProgress() ?? 0,
     master: settings.master, profile: settings.profile, shuffle: settings.shuffle, repeat: settings.repeat,
     karaoke: karaokeVM(),
     ads: adsVM(),
-    queue: queue.all().map((t, i) => ({ id: t.videoId, title: titleOf(t), artist: t.artist ?? '', bad: t.status === 'unplayable', locked: !!t.locked, current: i === cur && (am?.state() ?? 'idle') !== 'idle', lyr: lyricsStore.status(t.videoId) })),
+    queue: q.rows, queueSig: q.sig, queueKey: loadedId ?? 'coda',
+    playing: { from: plStore.get(loadedId)?.name ?? (queue.length() ? 'Coda' : ''), pos: (am?.state() ?? 'idle') !== 'idle' ? cur + 1 : 0, total: queue.length() },
     history: queue.history().map((t) => titleOf(t)),
     problems,
   };
@@ -550,10 +768,10 @@ function publishVideo() {
   if (decks && am && st !== 'idle') {
     const idx = st === 'crossfading' ? (am.mixProgress() > 0.5 ? 1 - am.activeDeck() : am.activeDeck()) : am.activeDeck();
     const d = decks[idx as 0 | 1];
-    id = d.currentVideoId(); t = d.position(); playing = st !== 'paused' && d.duration() > 0;
+    id = d.videoIdForProjector(); t = d.position(); playing = st !== 'paused' && d.duration() > 0;
     // during a crossfade the next video is the incoming deck's, until it becomes the one heard
     const n = st === 'crossfading' ? (am.mixProgress() > 0.5 ? undefined : decks[(1 - idx) as 0 | 1].currentVideoId()) : (am.upcomingId() ?? queue.peekNext()?.videoId);
-    next = n && n !== id ? n : '';
+    next = n && n !== id && !n.startsWith('local:') ? n : '';
   }
   const key = `${id}|${playing}|${next}`, now = Date.now();
   if (key === lastVideo.key && now - lastVideo.at < 1000) return; // the playhead is re-sent once a second, a change at once
@@ -571,16 +789,61 @@ bindShortcuts(window, {
   volumeDown: () => { settings.master = Math.max(0, settings.master - 5); save(); },
 });
 
-(async () => {
-  ui.setStatus('Avvio i player YouTube…');
+/** Starts (or starts again, when the network comes back) the two YouTube players; the library plays without them. */
+let ytBooting = false;
+async function bootYouTube(): Promise<boolean> {
+  if (ytReady || ytBooting) return ytReady;
+  ytBooting = true;
   try {
-    decks = await Promise.all([createYouTubeDeck(ui.mounts[0]), createYouTubeDeck(ui.mounts[1])]);
+    const yts = await Promise.all([createYouTubeDeck(ui.mounts[0]), createYouTubeDeck(ui.mounts[1])]);
+    decks[0].setYouTube(yts[0]); decks[1].setYouTube(yts[1]);
+    ytReady = true;
+    queue.touch();
+    return true;
   } catch (e) {
     log('error', 'youtube.boot_failed', { error: String(e) });
-    ui.setStatus(`Non riesco ad avviare i player YouTube (${(e as Error).message}). Controlla la connessione e riavvia l'app.`, true);
+    return false;
+  } finally {
+    ytBooting = false;
+  }
+}
+const onNetChange = () => {
+  queue.touch();
+  if (navigator.onLine && !ytReady) void bootYouTube().then((ok) => { if (ok) ui.setStatus('Rete tornata: anche i brani online ☁ suonano di nuovo.'); });
+  else if (!navigator.onLine) ui.setStatus('📴 Rete assente: continuo con i brani disponibili offline ✓.', true);
+};
+window.addEventListener('online', onNetChange);
+window.addEventListener('offline', onNetChange);
+window.setInterval(() => { if (navigator.onLine && !ytReady) void bootYouTube(); }, 60_000);
+
+(async () => {
+  // 1. the library and the playlists (from the disk: no network needed)
+  try {
+    await Promise.all([plStore.load(), library.load()]);
+    void downloads?.start().catch((e) => log('warn', 'downloads.start_failed', { error: String(e) }));
+    const migrated = migrateLegacy(plStore, settings, store);
+    if (migrated) { settings.currentPlaylistId = migrated; save(); log('info', 'playlists.migrated', { count: plStore.count() }); }
+    if (!plStore.get(settings.currentPlaylistId) && plStore.count()) { settings.currentPlaylistId = plStore.list(settings.playlistSort)[0].id; save(); }
+  } catch (e) {
+    log('error', 'library.load_failed', { error: String(e) });
+    ui.setStatus('Non riesco a leggere le playlist salvate: riavvia l’app. Se succede ancora, scrivimi da «💬 Commenti».', true);
+  }
+  showSlots();
+  const current = plStore.get(settings.currentPlaylistId);
+  if (current) ui.linkInput.value = current.link ?? '';
+  const openedSaved = openSaved(settings.currentPlaylistId);
+  // 2. YouTube (needs the internet)
+  if (!openedSaved) ui.setStatus('Avvio i player YouTube…');
+  const ok = await bootYouTube();
+  if (!ok) {
+    const offline = library.all().filter((e) => e.file).length;
+    ui.setStatus(offline
+      ? `📴 YouTube non è raggiungibile: suona la tua libreria offline (${offline} ${offline === 1 ? 'brano' : 'brani'}). Riprovo da solo quando torna la rete.`
+      : 'YouTube non è raggiungibile e la libreria offline è vuota: controlla la connessione. Riprovo da solo quando torna la rete.', !offline);
+    if (!settings.welcomed) ui.openWizard();
     return;
   }
-  ui.setStatus('Incolla il link di una playlist YouTube o Spotify per cominciare.');
+  if (!openedSaved) ui.setStatus(desktopUI ? 'Incolla il link di una playlist YouTube o Spotify, cerca una canzone in alto o aggiungi la tua musica locale.' : 'Incolla il link di una playlist YouTube o Spotify per cominciare.');
   const spotDebug = hasSystemAudio() ? await debugSpotMode().catch(() => undefined) : undefined;
   if (spotDebug === 'duck' || spotDebug === 'skip' || spotDebug === 'off') settings.spotMode = spotDebug;
   // Android: a playlist shared from YouTube or Spotify («Condividi → PartyMix») loads by itself, and wins over the last one.
@@ -591,9 +854,8 @@ bindShortcuts(window, {
     const go = () => { if (ui.loadBtn.disabled) setTimeout(go, 500); else ui.loadBtn.click(); };
     go();
   });
-  const startLink = (hasSystemAudio() ? await debugPlaylist().catch(() => undefined) : undefined) ?? (settings.playlists[settings.playlistSlot] || undefined);
-  if (!shared && startLink && startLink === settings.playlists[settings.playlistSlot] && openSaved(settings.playlistSlot)) ui.linkInput.value = startLink;
-  else if (startLink && !shared) {
+  const startLink = (hasSystemAudio() ? await debugPlaylist().catch(() => undefined) : undefined) ?? (current?.link || undefined);
+  if (!shared && startLink && !openedSaved) {
     ui.linkInput.value = startLink;
     ui.loadBtn.click();
   }
@@ -602,4 +864,3 @@ bindShortcuts(window, {
   if (!settings.welcomed) ui.openWizard(); // first run: walk the user through the setup
   log('info', 'app.ready');
 })();
-

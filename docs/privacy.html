@@ -32,13 +32,15 @@
   <p class="muted">Ultimo aggiornamento: 14 novembre 2026 · vale per PartyMix su iPhone, iPad, Android, macOS, Windows e Linux.</p>
 
   <div class="card">
-    <p><b>In breve:</b> PartyMix non ha account, non raccoglie dati personali, non usa statistiche né pubblicità propria e non manda niente all’autore. Playlist e impostazioni restano sul tuo dispositivo.</p>
+    <p><b>In breve:</b> PartyMix non ha account, non raccoglie dati personali, non usa statistiche né pubblicità propria e non manda niente all’autore. Playlist, libreria musicale, file audio e impostazioni restano sul tuo dispositivo: niente viene caricato su internet.</p>
   </div>
 
   <h2>Cosa resta sul dispositivo</h2>
   <ul>
-    <li>Le playlist salvate (fino a quattro), i loro nomi e le impostazioni dell’app.</li>
-    <li>Sono salvate solo nella memoria dell’app e si cancellano disinstallandola.</li>
+    <li>Tutte le playlist (senza limite di numero), i loro nomi, l’ordine dei brani, i preferiti e le impostazioni dell’app. Sono salvate nella memoria dell’app e si cancellano disinstallandola.</li>
+    <li><b>Libreria musicale (computer):</b> i file audio che importi o scarichi sono copiati nella cartella <i>Musica › PartyMix Library</i> del tuo computer (nella versione da browser, nel database del browser). L’app legge i loro dati (titolo, artista, album, copertina, durata) solo per mostrarli e non li manda a nessuno. Questi file <b>restano anche se disinstalli l’app</b>: li cancelli tu da quella cartella, oppure con «Elimina download» nell’app.</li>
+    <li>Per i file importati l’app ricorda solo il nome del file e della cartella da cui li hai presi, per mostrarti da dove vengono.</li>
+    <li>La <b>chiave API YouTube</b>, se la inserisci, resta salvata solo sul tuo dispositivo.</li>
   </ul>
 
   <h2>Microfono</h2>
@@ -50,8 +52,14 @@
     <li><b>YouTube</b> (Google): i brani sono riprodotti con il player ufficiale incorporato di YouTube, che riceve il video da riprodurre e può usare i propri cookie. Vale l’<a href="https://policies.google.com/privacy">informativa di Google</a>.</li>
     <li><b>Spotify</b>: se incolli un link di una playlist Spotify, l’app legge la pagina pubblica della playlist per avere l’elenco dei brani. Non accede al tuo account.</li>
     <li><b>Testi delle canzoni</b> (LRCLIB, lyrics.ovh, Genius): ricevono titolo e artista del brano per cercarne il testo.</li>
+    <li><b>Ricerca su YouTube</b> (computer): quello che scrivi in «Cerca su YouTube» viene inviato a Google. Con una tua chiave API passa per le API ufficiali «YouTube Data API v3», insieme alla chiave (si applicano i <a href="https://developers.google.com/youtube/terms/api-services-terms-of-service">termini delle API di YouTube</a> e l’<a href="https://policies.google.com/privacy">informativa di Google</a>); senza chiave l’app legge la pagina pubblica dei risultati di YouTube. La ricerca nella <b>tua libreria</b> invece avviene tutta sul dispositivo e non manda niente.</li>
+    <li><b>Download Manager</b> (computer): quando usi «⬇ Download», il programma <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a> installato sul tuo computer scarica il contenuto dall’indirizzo che hai indicato, il cui sito riceve la richiesta come da qualunque browser. Il file, la sua copertina e i dati del brano (titolo, artista, durata, indirizzo di origine) restano nella cartella <i>Musica › PartyMix Library</i>; l’elenco dei download è in <i>metadata/jobs.json</i> nella stessa cartella. Niente viene mandato all’autore. L’app accetta solo indirizzi web pubblici: mai file del computer, indirizzi della rete di casa o di questo computer.</li>
+    <li><b>Download da un link diretto</b> (computer): il link di un file audio viene scaricato da quell’indirizzo.</li>
   </ul>
   <p>L’app non manda a questi servizi il tuo nome, la tua posizione o altri dati personali; ricevono però, come ogni sito, l’indirizzo IP della connessione.</p>
+
+  <h2>Cosa puoi scaricare</h2>
+  <p>Sei tu a scegliere cosa scaricare e ne sei responsabile: scarica solo contenuti che hai il diritto di scaricare (per esempio tuoi, con licenza libera o di cui hai l’autorizzazione). PartyMix non aggira protezioni anticopia (DRM), abbonamenti o restrizioni di accesso.</p>
 
   <h2>Commenti e suggerimenti</h2>
   <p>Se scegli «Commenti e suggerimenti», l’app apre la tua app di posta (o Gmail/Outlook) con il messaggio già scritto. Parte solo se lo invii tu, dal tuo account, e contiene solo quello che scrivi più la versione dell’app e il sistema.</p>
@@ -65,7 +73,9 @@
   <hr>
   <h2 lang="en">Privacy in English</h2>
   <div lang="en">
-    <p>PartyMix has no accounts and collects no personal data: no analytics, no advertising of its own, nothing is sent to the developer. Saved playlists and settings stay on your device and are deleted with the app.</p>
+    <p>PartyMix has no accounts and collects no personal data: no analytics, no advertising of its own, nothing is sent to the developer. Playlists (no limit on their number), favourites and settings stay on your device and are deleted with the app.</p>
+    <p>On computers, audio files you import or download go to the <i>Music › PartyMix Library</i> folder (in the browser version, the browser’s database). Their tags are read only to display them and are never uploaded. These files <b>stay after you uninstall the app</b>; delete them from that folder or with «Elimina download». For imported files the app only remembers the original file and folder name, to show where they came from. An optional YouTube API key is stored only on your device.</p>
+    <p>What you type in «Cerca su YouTube» is sent to Google (through the official YouTube Data API v3 with your key, or by reading YouTube’s public results page without one). Searching your own library happens entirely on the device. With «⬇ Download» the yt-dlp program installed on your computer fetches the content from the address you entered, whose site sees the request like any browser’s; the file, its cover and its details stay in <i>Music › PartyMix Library</i> (the download list in <i>metadata/jobs.json</i>). Only public web addresses are accepted, never local files or home-network addresses. You choose what to download and are responsible for it: download only content you have the right to download. PartyMix does not bypass DRM, paywalls or access restrictions.</p>
     <p>The projector may use the microphone to animate shapes with the sound in the room. Sound is analysed on the device in real time and is <b>never recorded, stored or transmitted</b>.</p>
     <p>To work, the app contacts public services: YouTube’s official embedded player plays the songs (Google’s privacy policy applies); for a Spotify link, the app reads the public playlist page to get the track list; lyrics services (LRCLIB, lyrics.ovh, Genius) receive the song title and artist. Feedback is sent only if you send it yourself, from your own mail app.</p>
     <p>Contact: <a href="https://github.com/staracegiuseppe/partymix/issues">GitHub issues</a>.</p>

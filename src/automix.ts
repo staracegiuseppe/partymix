@@ -40,6 +40,8 @@ const QUICK_MIX_S = 4;
 const SPARE_MIN_REMAINING_S = 30;
 const RETRY_MS = 5000;
 const isUnplayable = (e: unknown) => (e as { kind?: string } | undefined)?.kind === 'unplayable';
+/** Offline and the song is only online: skip it now (not broken: it plays again when the network is back), never retry it in a loop. */
+const isOfflineSkip = (e: unknown) => (e as { kind?: string } | undefined)?.kind === 'offline';
 const SPARE_TIMEOUT_MS = 12000;
 
 export class Automix {
@@ -132,6 +134,10 @@ export class Automix {
       } catch (e) {
         if (tok !== this.token) return;
         this.d.log('warn', 'deck.load_failed', { videoId: cur.videoId, error: String(e) });
+        if (isOfflineSkip(e)) {
+          if (!this.d.queue.advance()) { this.goIdle('queue.exhausted'); return; }
+          continue;
+        }
         if (!isUnplayable(e) && !(this.d.online?.() ?? true)) {
           await new Promise<void>((r) => this.d.setTimer(r, RETRY_MS));
           if (tok !== this.token) return;
@@ -244,6 +250,10 @@ export class Automix {
       (e) => {
         if (tok !== this.token) return;
         this.d.log('warn', 'deck.prepare_failed', { videoId: track.videoId, error: String(e) });
+        if (isOfflineSkip(e)) {
+          this.d.setTimer(() => { if (tok === this.token) this.prepare(); }, 1000);
+          return;
+        }
         if (!isUnplayable(e) && !(this.d.online?.() ?? true)) {
           this.d.setTimer(() => { if (tok === this.token) this.prepare(); }, RETRY_MS);
           return;

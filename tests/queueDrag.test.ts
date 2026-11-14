@@ -27,14 +27,20 @@ function setup() {
 }
 
 describe('queue drag and drop', () => {
-  it('rows are draggable', () => {
+  it('rows are dragged by their ⋮⋮ grip (the rest of the row scrolls the list)', () => {
     const { rows } = setup();
     expect(rows()).toHaveLength(4);
-    expect(rows().every((r) => r.getAttribute('draggable') === 'true')).toBe(true);
+    expect(rows().every((r) => r.querySelector('.grip')?.getAttribute('draggable') === 'true')).toBe(true);
+  });
+  it('a drag started on the title, not on the grip, does not move anything', () => {
+    const { move, rows } = setup();
+    fire(rows()[0].querySelector('.t')!, 'dragstart');
+    fire(rows()[2], 'drop');
+    expect(move).not.toHaveBeenCalled();
   });
   it('dropping row 0 on row 2 moves 0 -> 2', () => {
     const { move, rows } = setup();
-    fire(rows()[0], 'dragstart');
+    fire(rows()[0].querySelector('.grip')!, 'dragstart');
     fire(rows()[2], 'dragover');
     expect(rows()[2].classList.contains('over')).toBe(true);
     fire(rows()[2], 'drop');
@@ -43,7 +49,7 @@ describe('queue drag and drop', () => {
   });
   it('dropping a row on itself does nothing', () => {
     const { move, rows } = setup();
-    fire(rows()[1], 'dragstart');
+    fire(rows()[1].querySelector('.grip')!, 'dragstart');
     fire(rows()[1], 'drop');
     expect(move).not.toHaveBeenCalled();
   });

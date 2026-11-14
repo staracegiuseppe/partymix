@@ -5,12 +5,14 @@ import { isIOSApp } from '../platform';
 import { fmtTime, h, paintWords } from './dom';
 import { showAppPicker, showFeedback, showInfo, startTour, startWizard, TourStep } from './guide';
 import { UNAVAILABLE_WITH_YOUTUBE } from './unavailable';
+import { buildQueueList, QueueRowVM } from './queueList';
+import type { SheetItem as MenuItem } from './material';
 import { applyPhoneTheme, applySystemInsets, buildShell, materialUI, setLabel, SheetItem, withIcon } from './material';
 
 export type Actions = {
   loadPlaylist(text: string): void;
-  /** Switches to another playlist: opens its saved copy, or puts its link in the box and loads it. */
-  selectPlaylist(slot: number): void;
+  /** Switches to another playlist (by its id): opens its saved copy, or puts its link in the box and loads it. */
+  selectPlaylist(id: string): void;
   setProjectorMode(mode: 'karaoke' | 'video'): void;
   /** Gives the playlist in use a name of the user's choice. */
   renamePlaylist(name: string): void;
@@ -55,10 +57,29 @@ export type Actions = {
   setAdThreshold(t: number): void;
   setSpotMode(m: 'off' | 'duck' | 'skip'): void;
   setKaraokeAuto(on: boolean): void;
+  /** Computer only: ♥ on a song of the queue. */
+  toggleFavorite?(videoId: string): void;
+  /** Computer only: ⬇ on a song of the queue (Download Manager, or the user's own audio file). */
+  makeOffline?(videoId: string): void;
+  /** Computer only: ⏮ the song before the one on air. */
+  prev?(): void;
+  /** Computer only: «Aggiungi a playlist» on a song of the queue. */
+  addToPlaylist?(videoId: string): void;
 };
 
+/** The computer's pages (built by the app with the shell's menu and navigation). */
+export type DesktopPages = {
+  pages: { playlists: HTMLElement; search: HTMLElement; library: HTMLElement; downloads?: HTMLElement };
+  settingsCard: HTMLElement;
+  update(page: string): void;
+  activeDownloads(): number;
+};
+export type DesktopParts = { menu(title: string, subtitle: string, items: MenuItem[]): void; go(page: string): void };
+
 export type DeckVM = { title: string; artist: string; thumb?: string; elapsed: number; duration: number; role: 'live' | 'out' | 'ready' | 'loading' | 'idle'; volume: number; duck: boolean; autoDuck?: boolean };
-export type QueueRowVM = { id: string; title: string; artist: string; bad: boolean; locked: boolean; current: boolean; lyr?: 'synced' | 'plain' | 'none' };
+export type { QueueRowVM };
+/** A playlist in the phone's menu. */
+export type PlaylistItemVM = { id: string; name: string; count: number; link: string };
 export type KaraokeVM = { running: boolean; waiting: boolean; total: number; done: number; synced: number; plain: number; none: number; pending: number; auto: boolean };
 export type LyricsVM = { status: string; prev: string; cur: string; next: string; progress: number; plain?: string; offset: number; speed: number; show: boolean; highlight?: boolean; canShift: boolean; lines: string[]; index: number };
 export type AdsVM = { available: boolean; on: boolean; kind: 'music' | 'speech' | 'silence'; level: number; error?: string; silentFor: number; threshold: number; spotMode?: 'off' | 'duck' | 'skip'; spotNow?: boolean; ducking: boolean; playing: boolean; events?: { time: string; kind: 'music' | 'speech' | 'silence'; score: number; label: string; detail?: string }[] };
@@ -76,6 +97,12 @@ export type ViewModel = {
   shuffle: boolean;
   repeat: 'off' | 'all' | 'one';
   queue: QueueRowVM[];
+  /** Cheap signature of the queue: when it is the same, the 10 000 rows are not compared one by one. */
+  queueSig?: string;
+  /** Which playlist the queue is (each keeps its own scroll position). */
+  queueKey?: string;
+  /** «In riproduzione da: Party · 3 / 124». */
+  playing?: { from: string; pos: number; total: number };
   history: string[];
   problems: string[];
 };
@@ -92,7 +119,7 @@ const fmtSpeed = (v: number) => '×' + v.toFixed(2).replace('.', ',');
 const ROLE_LABEL: Record<DeckVM['role'], string> = { live: 'IN ONDA', out: 'IN USCITA', ready: 'PRONTO', loading: 'PREPARAZIONE…', idle: 'FERMO' };
 
 /** `hasMusic`: a playlist is saved for the slot in use, so the phone opens on «In onda» instead of «Playlist». */
-export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: boolean } = {}) {
+export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: boolean; desktop?: (parts: DesktopParts) => DesktopPages } = {}) {
   /** Phone layout (Material Design 3) on Android; the classic console on a computer. */
   const md = materialUI();
   const label = (el: HTMLElement, t: string) => (md ? setLabel(el, t) : el.textContent !== t && (el.textContent = t));
@@ -160,17 +187,27 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
   const refreshSel = h('select', { 'aria-label': 'Aggiornamento automatico della playlist', onChange: () => a.setAutoRefresh(+refreshSel.value) },
     ...[[0, 'Solo manuale'], [2, 'Ogni 2 minuti'], [5, 'Ogni 5 minuti'], [10, 'Ogni 10 minuti'], [30, 'Ogni 30 minuti']].map(([v, l]) => h('option', { value: String(v) }, String(l))));
   const refreshBtn = h('button', { title: 'Controlla su YouTube se la playlist è cambiata', onClick: () => a.refreshNow() }, 'Aggiorna ora');
-  const queueList = h('div', { class: 'list' });
+  const store: Storage | undefined = (() => { try { return window.localStorage; } catch { return undefined; } })();
+  /** Computer: a circular virtual list (fluid with thousands of songs). Phone: the plain list, as before. */
+  const repeatNote = () => ({ off: 'Ripeti: no — dopo l’ultimo brano la musica si ferma.', all: 'Ripeti tutta la playlist: dopo l’ultimo brano riparte il primo.', one: 'Ripeti questo brano.' }[lastVm?.repeat ?? 'off']);
+  const ql = md ? undefined : buildQueueList({ ...a, songMenu: (r, i) => queueMenu(r, i) }, store, repeatNote);
+  const queueList = ql ? ql.el : h('div', { class: 'list' });
+  const toCurrent = ql ? h('button', { class: 'tocur', title: 'Porta in vista il brano in onda', onClick: () => ql.showCurrent() }, '◎ Brano in onda') : null;
+  window.addEventListener('pagehide', () => ql?.remember());
   const addLink = h('input', { type: 'text', placeholder: 'Aggiungi un video (link)', 'aria-label': 'Aggiungi un video alla coda' });
   const addMsg = h('div', { class: 'status' });
   const addBtn = h('button', { onClick: async () => { addMsg.textContent = await a.addVideo(addLink.value); } }, 'Aggiungi');
-  const queuePanel = h('section', { class: 'panel' },
-    h('h3', {}, 'Coda'),
-    h('div', { class: 'opts' }, shuffleBtn, shuffleNow, repeatBtn),
-    h('div', { class: 'row' }, refreshBtn, refreshSel), refreshInfo,
-    queueList,
-    h('div', { class: 'row' }, addLink, addBtn), addMsg,
-  );
+  const queuePanel = md
+    ? h('section', { class: 'panel' },
+      h('h3', {}, 'Coda'),
+      h('div', { class: 'opts' }, shuffleBtn, shuffleNow, repeatBtn, toCurrent),
+      h('div', { class: 'row' }, refreshBtn, refreshSel), refreshInfo,
+      queueList,
+      h('div', { class: 'row' }, addLink, addBtn), addMsg)
+    // computer: the play queue only; refreshing and adding songs live in the Playlist and Cerca pages
+    : h('section', { class: 'panel queue-panel' },
+      h('div', { class: 'qp-head' }, h('h2', { class: 'qp-title' }, 'Lista di riproduzione'), h('div', { class: 'opts' }, shuffleBtn, shuffleNow, repeatBtn, toCurrent)),
+      queueList);
 
   const warnList = h('div');
   const warnPanel = h('section', { class: 'panel warn hidden' }, h('h3', {}, 'Brani non riproducibili'),
@@ -264,7 +301,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
 
   // Phone: no copy and paste. Pick the playlist in the YouTube or Spotify app, «Condividi → PartyMix», it loads by itself.
   const appsBtn = isAndroidApp() ? h('button', { class: 'primary apps-btn', onClick: () => showAppPicker((m) => setStatus(m, true)) }, '📱 Scegli dalle app') : null;
-  const slotSel = h('select', { class: 'slotsel', 'aria-label': 'Playlist in uso', title: 'Scegli la playlist da suonare', onChange: () => a.selectPlaylist(+slotSel.value) });
+  const slotSel = h('select', { class: 'slotsel', 'aria-label': 'Playlist in uso', title: 'Scegli la playlist da suonare', onChange: () => a.selectPlaylist(slotSel.value) });
   const nameInput = h('input', { type: 'text', class: 'plname', maxlength: '60', placeholder: 'Nome della playlist', 'aria-label': 'Nome della playlist in uso',
     onChange: () => a.renamePlaylist(nameInput.value) });
   nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') nameInput.blur(); });
@@ -285,25 +322,21 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
       h('label', { class: 'm-field' }, h('span', { class: 'm-field-label' }, 'Link YouTube o Spotify'), link),
       h('div', { class: 'm-btnrow' }, loadBtn, appsBtn),
       goNow)
-    : h('div', { class: 'load' }, slotSel, nameInput, savedInfo, link, loadBtn, appsBtn);
+    : h('div', { class: 'load' }, opts.desktop ? null : slotSel, nameInput, savedInfo, link, loadBtn, appsBtn);
   /** A line about the projector that the app keeps up to date (Android: the cast screen). */
   function setProjectorInfo(text: string) { if (projMsg.textContent !== text) projMsg.textContent = text; }
   const where = isIOSApp() ? `sull’${/iPad/.test(navigator.userAgent) ? 'iPad' : 'iPhone'}` : md ? 'sul telefono' : 'sul PC';
-  /** Fills the playlist menu: each playlist by name with how many songs are saved, or «vuota»; the one in use is selected. */
-  function setPlaylistSlots(slot: number, links: string[], names: string[] = [], saved: number[] = []) {
-    const opts = links.map((l, i) => {
-      const name = names[i]?.trim() || `Playlist ${i + 1}`;
-      const n = saved[i] ?? 0;
-      const tail = !l ? 'vuota' : n ? `${n} ${n === 1 ? 'brano' : 'brani'}` : 'da caricare';
-      return h('option', { value: String(i), selected: i === slot }, `${i + 1} · ${name} — ${tail}`);
-    });
-    const sig = opts.map((o) => o.textContent).join('|') + '#' + slot;
+  /** Fills the playlist menu (phone) and the line under the name: each playlist by name with how many songs it has. */
+  function setPlaylists(list: PlaylistItemVM[], currentId: string | undefined) {
+    const opts = list.map((p, i) => h('option', { value: p.id, selected: p.id === currentId }, `${i + 1} · ${p.name} — ${p.count ? `${p.count} ${p.count === 1 ? 'brano' : 'brani'}` : p.link ? 'da caricare' : 'vuota'}`));
+    const sig = opts.map((o) => o.textContent).join('|') + '#' + currentId;
     if (slotSel.dataset.sig !== sig) { slotSel.replaceChildren(...opts); slotSel.dataset.sig = sig; }
-    slotSel.value = String(slot);
-    slotSel.title = links[slot] ? `${names[slot]?.trim() || `Playlist ${slot + 1}`}: ${links[slot]}` : 'Questa playlist è vuota: incolla un link e premi «Carica playlist».';
-    if (document.activeElement !== nameInput) nameInput.value = names[slot] ?? '';
-    nameInput.placeholder = `Nome per «Playlist ${slot + 1}»`;
-    savedInfo.textContent = saved[slot] ? `💾 ${saved[slot]} ${saved[slot] === 1 ? 'brano salvato' : 'brani salvati'} ${where}` : '';
+    if (currentId) slotSel.value = currentId;
+    const cur = list.find((p) => p.id === currentId);
+    slotSel.title = cur?.link ? `${cur.name}: ${cur.link}` : 'Questa playlist è vuota: incolla un link e premi «Carica playlist».';
+    if (document.activeElement !== nameInput) nameInput.value = cur?.name ?? '';
+    nameInput.placeholder = 'Nome della playlist';
+    savedInfo.textContent = cur?.count ? `💾 ${cur.count} ${cur.count === 1 ? 'brano salvato' : 'brani salvati'} ${where}` : '';
   }
   const openTutorial = () => void (md ? startTour(mdTourSteps(), (el) => shell?.reveal(el)) : startTour(tourSteps()));
   const openWizard = () => startWizard({
@@ -371,6 +404,11 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     { target: () => syncBar, title: 'Testo a tempo', text: 'La riga che si sta cantando. Se il testo non è a tempo con il video usa ① e ② quando il cantante inizia la prima e l’ultima riga, oppure Anticipa e Ritarda.' },
     { target: () => helpPanel, title: 'Aiuto e commenti', text: 'Da qui rifai la configurazione guidata, rivedi questo tutorial e mi scrivi cosa ne pensi. Buona festa!' },
   ];
+  let desk: DesktopPages | undefined;
+  let emptyNowRef: HTMLElement | undefined;
+  const prevBtn = h('button', { class: 'icon-btn', onClick: () => a.prev?.() }, '⏮');
+  /** «In riproduzione da: 🎵 Party · 3 / 124». */
+  const nowFrom = h('div', { class: 'pg-sub now-from', 'aria-live': 'polite' });
   if (md) {
     applySystemInsets();
     applyPhoneTheme();
@@ -404,12 +442,60 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
       ],
     });
   } else {
-    root.append(h('div', { class: 'wrap' },
-      h('header', { class: 'top' }, h('div', { class: 'logo' }, 'Party', h('b', {}, 'Mix')),
-        pill, topTools),
-      loadRow, status,
-      h('div', { class: 'decks' }, dA.card, mixer, dB.card), syncBar,
-      h('div', { class: 'lower' }, queuePanel, side)));
+    // ---------- computer: Material 3 with a navigation drawer, one page per job ----------
+    document.body.classList.add('desk');
+    // light or dark like the computer
+    try { const mq = matchMedia('(prefers-color-scheme: light)'); const f = () => document.body.classList.toggle('light', mq.matches); f(); mq.addEventListener('change', f); } catch { /* keep dark */ }
+    const parts: DesktopParts = { menu: (t, sub, items) => shell?.sheet(t, sub, items), go: (id) => shell?.go(id) };
+    desk = opts.desktop?.(parts);
+    const ph = (title: string, sub?: HTMLElement) => h('header', { class: 'pg-head' }, h('div', { class: 'pg-tt' }, h('h1', { class: 'pg-title' }, title), sub ?? null));
+    withIcon(castTop, 'cast', true);
+    prevBtn.textContent = '⏮'; prevBtn.setAttribute('aria-label', 'Brano precedente'); prevBtn.title = 'Brano precedente';
+    nextBtn.textContent = '⏭'; nextBtn.setAttribute('aria-label', 'Brano successivo'); nextBtn.title = 'Brano successivo (con sfumatura)';
+    mixBtn.textContent = 'Mix ora'; mixBtn.title = 'Sfuma subito nel brano già pronto'; mixBtn.classList.remove('wide');
+    const transport = h('div', { class: 'transport' }, prevBtn, pauseBtn, nextBtn);
+    mixer.querySelector('.btns')?.replaceWith(h('div', { class: 'btns' }, transport, mixBtn));
+    const emptyNowDesk = h('section', { class: 'panel empty-state m-empty hidden' }, h('div', { class: 'es-ic', 'aria-hidden': 'true' }, '🎵'), h('div', { class: 'es-t' }, 'Nessuna musica in riproduzione'),
+      h('p', { class: 'es-p' }, 'Scegli una playlist e premi ▶, oppure cerca un brano.'),
+      h('div', { class: 'es-b' }, h('button', { class: 'm-filled', onClick: () => shell?.go('playlists') }, '📋 Scegli una playlist'), h('button', { class: 'm-tonal', onClick: () => shell?.go('search') }, '🔎 Cerca musica')));
+    const settingsGrid = h('div', { class: 'settings-grid' },
+      h('section', { class: 'panel' }, h('h3', {}, 'Aggiornamento delle playlist YouTube'), h('div', { class: 'row' }, refreshBtn, refreshSel), refreshInfo),
+      desk?.settingsCard ?? null, karaokePanel, adPanel, helpPanel, histPanel, probPanel, h('section', { class: 'panel' }, unav));
+    shell = buildShell(root, {
+      title: h('div', { class: 'logo' }, 'Party', h('b', {}, 'Mix')),
+      actions: [pill, castTop],
+      home: 'now',
+      start: 'now',
+      screens: [
+        { id: 'now', label: 'Player', icon: 'nowPlaying', body: [ph('Player', nowFrom), emptyNowDesk, h('div', { class: 'player-grid' }, h('div', { class: 'player-col' }, dA.card, mixer, dB.card), queuePanel)] },
+        { id: 'playlists', label: 'Playlist', icon: 'queue', body: [desk?.pages.playlists ?? null, warnPanel] },
+        { id: 'search', label: 'Cerca', icon: 'search', body: [desk?.pages.search ?? null] },
+        ...(desk?.pages.downloads ? [{ id: 'downloads', label: 'Download', icon: 'download' as const, body: [desk.pages.downloads] }] : []),
+        { id: 'library', label: 'Libreria', icon: 'library', body: [desk?.pages.library ?? null] },
+        { id: 'proj', label: 'Proiettore', icon: 'cast', secondary: true, body: [ph('Proiettore e testo'), projPanel, syncBar, lyricsPanel] },
+        { id: 'settings', label: 'Impostazioni', icon: 'settings', secondary: true, body: [ph('Impostazioni'), settingsGrid] },
+      ],
+    });
+    emptyNowRef = emptyNowDesk;
+  }
+
+  /** ⋮ on a song of the play queue (computer): the actions that make sense for it, in its state. */
+  function queueMenu(r: QueueRowVM, i: number) {
+    const rows = lastVm?.queue ?? [];
+    const cur = rows.findIndex((x) => x.current);
+    const after = cur < 0 ? 0 : i > cur ? cur + 1 : cur;
+    const items: MenuItem[] = [
+      { label: 'Suona adesso', icon: 'play', disabled: !!r.bad || !!r.current || !!r.skip, run: () => a.playNow(r.id) },
+      { label: 'Suona dopo quello in onda', icon: 'playNext', disabled: !!r.current || i === after, run: () => a.move(i, after) },
+      { label: 'Sposta su', icon: 'up', disabled: i === 0, run: () => a.move(i, i - 1) },
+      { label: 'Sposta giù', icon: 'down', disabled: i === rows.length - 1, run: () => a.move(i, i + 1) },
+      { label: 'Aggiungi a playlist…', icon: 'add', run: () => a.addToPlaylist?.(r.id) },
+      { label: r.off === 'offline' ? 'Già disponibile offline' : 'Scarica / rendi offline', icon: 'download', disabled: r.off === 'offline' || r.off === 'downloading', run: () => a.makeOffline?.(r.id) },
+      { label: r.fav ? 'Togli dai preferiti' : 'Aggiungi ai preferiti', icon: 'lock', run: () => a.toggleFavorite?.(r.id) },
+      { label: r.locked ? 'Sblocca (si può saltare)' : 'Blocca (non si salta)', icon: 'lock', run: () => a.toggleLock(r.id) },
+      { label: r.current ? 'In onda: non si può togliere' : 'Togli dalla lista e dalla playlist', icon: 'del', danger: true, disabled: r.current, run: () => a.removeTrack(r.id) },
+    ];
+    shell?.sheet(r.title, [r.artist, r.current ? (r.paused ? 'in pausa' : 'in riproduzione') : `${i + 1} di ${rows.length}`].filter(Boolean).join(' · '), items);
   }
 
   let dragFrom = -1;
@@ -485,6 +571,15 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
 
   function update(vm: ViewModel) {
     lastVm = vm;
+    if (!md) {
+      const p = vm.playing;
+      nowFrom.textContent = p && p.total ? `In riproduzione da: 🎵 ${p.from} · ${p.pos > 0 ? p.pos : '–'} / ${p.total}` : 'Nessuna playlist in riproduzione';
+      ql?.setHead(p?.from ? `IN RIPRODUZIONE: ${p.from}` : 'LISTA DI RIPRODUZIONE', `${p?.total ?? vm.queue.length} brani`);
+      ql?.refreshEnds();
+      emptyNowRef?.classList.toggle('hidden', vm.queue.length > 0);
+      prevBtn.disabled = vm.state === 'idle' || (p?.pos ?? 0) <= 1;
+      if (shell && desk) desk.update(shell.current());
+    }
     const ly = vm.lyrics;
     lyStatus.textContent = ly.status;
     lyPrev.textContent = ly.prev; lyNext.textContent = ly.next;
@@ -560,7 +655,8 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
       shell?.hint('list', !has);
       shell?.hint('now', has && idle && shell.current() !== 'now');
     }
-    once('queue', JSON.stringify(vm.queue), () => {
+    once('queue', (vm.queueSig ?? JSON.stringify(vm.queue)) + '#' + (vm.queueKey ?? ''), () => {
+      if (ql) { ql.setRows(vm.queue, vm.queueKey); return; }
       queueList.replaceChildren(...vm.queue.map((r, i) => md ? mdRow(r, i, vm.queue) : h('div', {
         class: 'item' + (r.current ? ' cur' : '') + (r.bad ? ' bad' : ''),
         draggable: 'true',
@@ -622,5 +718,5 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     statusListeners.forEach((fn) => fn(msg, error));
   }
 
-  return { openWizard, openTutorial, setSource, mounts: [dA.mount, dB.mount] as [HTMLElement, HTMLElement], update, setStatus, setRefreshInfo, setAutoRefreshValue, setDisplays, setInputs, setSensitivity, setPlaylistSlots, setProjectorMode, setProjectorInfo, linkInput: link, loadBtn };
+  return { openWizard, openTutorial, setSource, mounts: [dA.mount, dB.mount] as [HTMLElement, HTMLElement], update, setStatus, setRefreshInfo, setAutoRefreshValue, setDisplays, setInputs, setSensitivity, setPlaylists, setProjectorMode, queuePanel, queueView: ql, setProjectorInfo, linkInput: link, loadBtn, go: (id: string) => shell?.go(id) };
 }

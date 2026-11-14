@@ -54,15 +54,18 @@ describe('phone layout (Material Design)', () => {
     expect(fns.start).toHaveBeenCalled();
   });
 
-  it('lists the four playlists in a menu by name, with how many songs each keeps', () => {
+  it('lists every playlist (no limit of four) in a menu by name, with how many songs each keeps', () => {
     const { ui, fns } = setup();
-    ui.setPlaylistSlots(2, ['l1', '', 'l3', ''], ['Festa', 'Karaoke', '', ''], [12, 0, 1, 0]);
+    const list = Array.from({ length: 12 }, (_, i) => ({ id: 'p' + i, name: i === 0 ? 'Festa' : `Playlist ${i + 1}`, count: i === 0 ? 12 : i === 2 ? 1 : 0, link: i === 1 ? '' : 'l' }));
+    list[1].name = 'Karaoke';
+    ui.setPlaylists(list, 'p2');
     const sel = document.querySelector<HTMLSelectElement>('.slotsel')!;
-    expect([...sel.options].map((o) => o.textContent)).toEqual(['1 · Festa — 12 brani', '2 · Karaoke — vuota', '3 · Playlist 3 — 1 brano', '4 · Playlist 4 — vuota']);
-    expect(sel.value).toBe('2');
-    sel.value = '3';
+    expect(sel.options).toHaveLength(12);
+    expect([...sel.options].slice(0, 4).map((o) => o.textContent)).toEqual(['1 · Festa — 12 brani', '2 · Karaoke — vuota', '3 · Playlist 3 — 1 brano', '4 · Playlist 4 — da caricare']);
+    expect(sel.value).toBe('p2');
+    sel.value = 'p11';
     sel.dispatchEvent(new Event('change'));
-    expect(fns.selectPlaylist).toHaveBeenCalledWith(3);
+    expect(fns.selectPlaylist).toHaveBeenCalledWith('p11');
   });
 
   it('a song opens a sheet: the one on air cannot be removed, another one can', () => {

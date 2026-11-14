@@ -1,7 +1,9 @@
 export type Track = {
+  /** A YouTube video id, or `local:<hash>` for a song kept in the local music library. */
   videoId: string;
   title?: string;
   artist?: string;
+  album?: string;
   thumb?: string;
   durationSec?: number;
   /** Title and artist come separate and reliable (Spotify), so lyrics are searched with them as they are. */
@@ -12,9 +14,11 @@ export type Track = {
   status: 'ok' | 'unplayable' | 'pending';
 };
 
-type Opts = { shuffle?: boolean; repeat?: 'off' | 'all' | 'one'; rng?: () => number };
-
-const playable = (t: Track) => t.status !== 'unplayable';
+type Opts = {
+  shuffle?: boolean; repeat?: 'off' | 'all' | 'one'; rng?: () => number;
+  /** Whether a track can be played right now (offline: only the songs with a local copy). Skipped, never marked broken. */
+  available?: (t: Track) => boolean;
+};
 
 export class Queue {
   private order: Track[];
@@ -23,10 +27,14 @@ export class Queue {
   private repeat: 'off' | 'all' | 'one';
   /** A track the user asked to play right after the current one, whatever the repeat mode says. */
   private forced?: string;
+  private avail?: (t: Track) => boolean;
+  /** Grows at every change of the order, the position or the tracks, so the UI redraws only when something changed. */
+  version = 0;
 
   constructor(tracks: Track[], opts: Opts = {}) {
     this.order = [...tracks];
     this.repeat = opts.repeat ?? 'off';
+    this.avail = opts.available;
     if (opts.shuffle) {
       const rng = opts.rng ?? Math.random;
       for (let i = this.order.length - 1; i > 0; i--) {
@@ -37,18 +45,27 @@ export class Queue {
     this.reset();
   }
 
+  private playable(t: Track): boolean { return t.status !== 'unplayable' && (this.avail?.(t) ?? true); }
+  /** Something outside the queue changed what can be played (network lost or back, a download finished). */
+  touch(): void {
+    this.version++;
+    if (this.pos < 0) this.reset(); // nothing could play before (offline, YouTube not ready yet): now maybe something can
+  }
+  length(): number { return this.order.length; }
+  has(videoId: string): boolean { return this.order.some((t) => t.videoId === videoId); }
+
   private findFrom(start: number): number {
-    for (let i = start; i < this.order.length; i++) if (playable(this.order[i])) return i;
+    for (let i = start; i < this.order.length; i++) if (this.playable(this.order[i])) return i;
     return -1;
   }
 
   private nextIndex(): number {
     if (this.forced) {
-      const f = this.order.findIndex((t) => t.videoId === this.forced && playable(t));
+      const f = this.order.findIndex((t) => t.videoId === this.forced && this.playable(t));
       if (f >= 0 && f !== this.pos) return f;
       this.forced = undefined;
     }
-    if (this.repeat === 'one' && this.pos >= 0 && playable(this.order[this.pos])) return this.pos;
+    if (this.repeat === 'one' && this.pos >= 0 && this.playable(this.order[this.pos])) return this.pos;
     const i = this.findFrom(this.pos + 1);
     if (i >= 0) return i;
     return this.repeat === 'all' ? this.findFrom(0) : -1;
@@ -58,6 +75,7 @@ export class Queue {
   peekNext(): Track | undefined { const i = this.nextIndex(); return i >= 0 ? this.order[i] : undefined; }
 
   advance(): Track | undefined {
+    this.version++;
     const i = this.nextIndex();
     if (i < 0) return undefined;
     this.pos = i;
@@ -68,10 +86,11 @@ export class Queue {
 
   /** Makes the given track current (it was mixed in even if the queue was reordered meanwhile); falls back to advance(). */
   advanceTo(videoId: string): Track | undefined {
+    this.version++;
     // The same video can be in the playlist twice: take the occurrence that really comes next, not always the first one.
     const n = this.nextIndex();
-    let i = n >= 0 && this.order[n].videoId === videoId ? n : this.order.findIndex((t, k) => k > this.pos && t.videoId === videoId && playable(t));
-    if (i < 0) i = this.order.findIndex((t) => t.videoId === videoId && playable(t));
+    let i = n >= 0 && this.order[n].videoId === videoId ? n : this.order.findIndex((t, k) => k > this.pos && t.videoId === videoId && this.playable(t));
+    if (i < 0) i = this.order.findIndex((t) => t.videoId === videoId && this.playable(t));
     if (i < 0) return this.advance();
     this.pos = i;
     this.hist.push(this.order[i]);
@@ -81,7 +100,8 @@ export class Queue {
 
   /** Puts a track right after the current one and makes it the next to play. False when it cannot be played or is the current one. */
   cueNext(videoId: string): boolean {
-    const i = this.order.findIndex((t) => t.videoId === videoId && playable(t));
+    this.version++;
+    const i = this.order.findIndex((t) => t.videoId === videoId && this.playable(t));
     if (i < 0 || i === this.pos) return false;
     const cur = this.current();
     const [t] = this.order.splice(i, 1);
@@ -94,7 +114,8 @@ export class Queue {
 
   /** Makes a track the current one (used to start the party from the track the user picked). */
   setCurrent(videoId: string): boolean {
-    const i = this.order.findIndex((t) => t.videoId === videoId && playable(t));
+    this.version++;
+    const i = this.order.findIndex((t) => t.videoId === videoId && this.playable(t));
     if (i < 0) return false;
     this.pos = i;
     this.hist = [this.order[i]];
@@ -108,14 +129,17 @@ export class Queue {
   }
 
   markUnplayable(videoId: string): void {
+    this.version++;
     for (const t of this.order) if (t.videoId === videoId) t.status = 'unplayable';
   }
 
   setLocked(videoId: string, v: boolean): void {
+    this.version++;
     for (const t of this.order) if (t.videoId === videoId) t.locked = v;
   }
 
   move(from: number, to: number): void {
+    this.version++;
     if (from < 0 || from >= this.order.length || to < 0 || to >= this.order.length) return;
     const cur = this.current();
     const [t] = this.order.splice(from, 1);
@@ -124,6 +148,7 @@ export class Queue {
   }
 
   add(t: Track): void {
+    this.version++;
     this.order.push(t);
     if (this.pos < 0) {
       this.pos = this.findFrom(0);
@@ -132,6 +157,7 @@ export class Queue {
   }
 
   replace(oldVideoId: string, t: Track): void {
+    this.version++;
     const i = this.order.findIndex((x) => x.videoId === oldVideoId);
     if (i < 0) return;
     this.order[i] = t;
@@ -140,6 +166,7 @@ export class Queue {
 
   /** Removes a track from the queue. The track that is playing cannot be removed. */
   remove(videoId: string): boolean {
+    this.version++;
     const i = this.order.findIndex((t) => t.videoId === videoId);
     if (i < 0 || i === this.pos) return false;
     this.order.splice(i, 1);
@@ -151,6 +178,7 @@ export class Queue {
 
   /** Shuffles the tracks after the current one; played tracks and the current one stay put. */
   shuffleUpcoming(rng: () => number = Math.random): void {
+    this.version++;
     const start = this.pos + 1;
     for (let i = this.order.length - 1; i > start; i--) {
       const j = start + Math.floor(rng() * (i - start + 1));
@@ -164,6 +192,7 @@ export class Queue {
   all(): Track[] { return [...this.order]; }
 
   reset(): void {
+    this.version++;
     this.forced = undefined;
     this.pos = this.findFrom(0);
     this.hist = this.pos >= 0 ? [this.order[this.pos]] : [];

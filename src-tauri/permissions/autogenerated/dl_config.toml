@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dl-config"
+description = "Enables the dl_config command without any pre-configured scope."
+commands.allow = ["dl_config"]
+
+[[permission]]
+identifier = "deny-dl-config"
+description = "Denies the dl_config command without any pre-configured scope."
+commands.deny = ["dl_config"]

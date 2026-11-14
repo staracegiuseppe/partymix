@@ -1,0 +1,138 @@
+import { MemoryKV } from '../src/library/kv';
+import { KvBlobStore } from '../src/library/blobStore';
+import { MusicLibrary, LibEntry } from '../src/library/library';
+import { PlaylistStore } from '../src/library/playlists';
+import { buildDesktopPages, PagesDeps, whereText } from '../src/ui/desktopPages';
+import type { Track } from '../src/queue';
+
+const tr = (id: string, title: string, artist = ''): Track => ({ videoId: id, title, artist, status: 'ok' });
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
+function setup(extra: Partial<PagesDeps> = {}) {
+  document.body.innerHTML = '';
+  const kv = new MemoryKV();
+  const library = new MusicLibrary({ kv, blobs: new KvBlobStore(kv) });
+  const playlists = new PlaylistStore(kv, { saveDelayMs: 0 });
+  const party = playlists.create('Festa di Marco', { tracks: [tr('aaaaaaaaaaa', 'Blinding Lights', 'The Weeknd'), tr('bbbbbbbbbbb', 'Volare', 'Modugno')] });
+  playlists.create('Karaoke', { tracks: [tr('aaaaaaaaaaa', 'Blinding Lights', 'The Weeknd'), ...Array.from({ length: 3000 }, (_, i) => tr(`k${String(i).padStart(10, '0')}`, `Canzone ${i}`, 'Vari'))] });
+  library.addOnline(tr('ccccccccccc', 'Solo in libreria', 'X'));
+  const fns = { playTrack: vi.fn(), enqueue: vi.fn(), playPlaylist: vi.fn(), menu: vi.fn(), go: vi.fn(), status: vi.fn(), edited: vi.fn(), deleted: vi.fn(), loadLink: vi.fn(), search: vi.fn(async () => ({ hits: [{ videoId: 'ddddddddddd', title: 'Blinding Lights (Live)', channel: 'TheWeekndVEVO', seconds: 260, thumb: 't.jpg', available: true }, { videoId: 'eeeeeeeeeee', title: 'Bloccato', channel: 'X', seconds: 100, thumb: 'u.jpg', available: false, reason: 'Video privato' }], via: 'api' as const })) };
+  const deps: PagesDeps = {
+    playlists, library, playingId: () => party.id, sort: () => 'custom', setSort: vi.fn(), apiKey: () => '', setApiKey: vi.fn(), online: () => true,
+    trackById: () => undefined, ...fns, ...extra,
+  };
+  const ui = buildDesktopPages(deps);
+  document.body.append(ui.pages.playlists, ui.pages.search, ui.pages.library);
+  return { ui, fns, playlists, library, party };
+}
+const shown = (root: Element) => [...root.querySelectorAll<HTMLElement>('.song')].filter((r) => r.style.display !== 'none').sort((a, b) => +a.dataset.i! - +b.dataset.i!);
+
+describe('where a song is (information only)', () => {
+  it('names the playlists and the file on the computer', () => {
+    const e = { id: 'local:00112233', title: 'Uno', artist: 'A', album: '', source: 'file', file: 'Artista A/Uno.mp3', origin: 'Download/vecchi/Uno.mp3', addedAt: 1 } as LibEntry;
+    const w = whereText(e, ['Festa', 'Karaoke', 'Estate', 'Matrimonio'], 'nella cartella Musica › PartyMix Library');
+    expect(w.short).toBe('📂 Festa, Karaoke +2 · 💾 Artista A/Uno.mp3');
+    expect(w.full).toContain('File sul computer: Musica › PartyMix Library › Artista A › Uno.mp3');
+    expect(w.full).toContain('Importato da: Download/vecchi/Uno.mp3');
+  });
+});
+
+describe('📋 Playlist page', () => {
+  it('lists every playlist as a card with its songs, the one playing marked', () => {
+    const { ui } = setup();
+    const cards = [...ui.pages.playlists.querySelectorAll('.pl-card')];
+    expect(cards).toHaveLength(2);
+    expect(cards[0].querySelector('.pl-name')!.textContent).toBe('Festa di Marco');
+    expect(cards[0].querySelector('.pl-badge')!.textContent).toBe('▶ In riproduzione');
+    expect(cards[1].querySelector('.pl-info')!.textContent).toMatch(/3\.?001 brani/);
+  });
+  it('100 playlists, searchable', () => {
+    const { ui, playlists } = setup();
+    for (let i = 0; i < 100; i++) playlists.create(`Lista ${i}`);
+    ui.update('playlists');
+    expect(ui.pages.playlists.querySelectorAll('.pl-card')).toHaveLength(102);
+    const s = ui.pages.playlists.querySelector<HTMLInputElement>('.pg-search')!;
+    s.value = 'lista 9'; s.dispatchEvent(new Event('input'));
+    expect(ui.pages.playlists.querySelectorAll('.pl-card')).toHaveLength(11); // 9, 90…99
+  });
+  it('a playlist opens on its own page: head, numbered songs, and «Fine playlist»', () => {
+    const { ui, fns } = setup();
+    (ui.pages.playlists.querySelectorAll<HTMLElement>('.pl-card')[1]).click();
+    const detail = ui.pages.playlists.querySelector('.pl-detail')!;
+    expect(detail.classList.contains('hidden')).toBe(false);
+    expect(detail.querySelector('.pg-title')!.textContent).toBe('Karaoke');
+    expect(detail.querySelector('.sl-head')!.textContent).toContain('PLAYLIST: Karaoke');
+    expect(detail.querySelector('.sl-foot')!.textContent).toMatch(/■ Fine playlist · 3\.?001 brani/);
+    expect(shown(detail)[0].querySelector('.lead')!.textContent).toBe('1');
+    expect(fns.go).toHaveBeenCalledWith('playlists');
+    detail.querySelector<HTMLButtonElement>('.pg-actions .m-filled')!.click();
+    expect(fns.playPlaylist).toHaveBeenCalled();
+  });
+});
+
+describe('🔎 Cerca page: results right under the field', () => {
+  it('YouTube results under the search card, with an unavailable one marked', async () => {
+    const { ui, fns } = setup();
+    const input = ui.pages.search.querySelector<HTMLInputElement>('.pg-input')!;
+    input.value = 'The Weeknd Blinding Lights';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await flush(); await flush();
+    expect(fns.search).toHaveBeenCalledWith('The Weeknd Blinding Lights', undefined);
+    const card = ui.pages.search.querySelector('.search-card')!;
+    const head = ui.pages.search.querySelector('.pg-results-head')!;
+    expect(card.compareDocumentPosition(head) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(head.textContent).toBe('2 risultati per «The Weeknd Blinding Lights» su YouTube');
+    const rows = shown(ui.pages.search);
+    expect(rows[0].querySelector('.t')!.textContent).toContain('Blinding Lights (Live)');
+    expect(rows[1].classList.contains('skip')).toBe(true);
+    expect(rows[1].querySelector('.s')!.textContent).toContain('Video privato');
+    rows[0].querySelector<HTMLButtonElement>('.play')!.click();
+    expect(fns.playTrack).toHaveBeenCalledWith(expect.objectContaining({ videoId: 'ddddddddddd' }));
+    rows[0].querySelector<HTMLButtonElement>('.more')!.click();
+    const items = (fns.menu.mock.calls.at(-1) as [string, string, { label: string; run(): void }[]])[2];
+    expect(items.map((i) => i.label)).toEqual(expect.arrayContaining(['Riproduci adesso', 'Suona dopo quello in onda', 'Metti in coda (in fondo)', 'Aggiungi a playlist…']));
+    items.find((i) => i.label === 'Metti in coda (in fondo)')!.run();
+    expect(fns.enqueue).toHaveBeenCalledWith(expect.objectContaining({ videoId: 'ddddddddddd' }), false);
+  });
+  it('«La mia musica» searches the library and every playlist, and says where each song is', () => {
+    const { ui } = setup();
+    [...ui.pages.search.querySelectorAll<HTMLButtonElement>('.seg-btn')][1].click();
+    const input = ui.pages.search.querySelector<HTMLInputElement>('.pg-input')!;
+    input.value = 'blinding'; input.dispatchEvent(new Event('input'));
+    const rows = shown(ui.pages.search);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('.s')!.textContent).toContain('📂 Festa di Marco, Karaoke');
+    input.value = 'MARCO'; input.dispatchEvent(new Event('input'));
+    expect(shown(ui.pages.search).map((r) => r.querySelector('.t')!.firstChild!.textContent).sort()).toEqual(['Blinding Lights', 'Volare']);
+  });
+  it('«Aggiungi a playlist» opens a dialog with the playlists and «Nuova playlist», without changing page', async () => {
+    const { ui, fns, playlists, party } = setup();
+    ui.pickPlaylist(['ccccccccccc']);
+    const [title, , items] = fns.menu.mock.calls.at(-1) as [string, string, { label: string; run(): void }[]];
+    expect(title).toBe('Aggiungi a playlist');
+    expect(items[0].label).toBe('Nuova playlist…');
+    items.find((i) => i.label.startsWith('Festa di Marco'))!.run();
+    expect(playlists.get(party.id)!.tracks.map((t) => t.videoId)).toContain('ccccccccccc');
+    expect(fns.go).not.toHaveBeenCalled();
+  });
+});
+
+describe('🎧 Libreria page', () => {
+  it('shows an empty state with Importa musica / Cerca musica when empty', () => {
+    document.body.innerHTML = '';
+    const kv = new MemoryKV();
+    const ui = buildDesktopPages({ playlists: new PlaylistStore(kv), library: new MusicLibrary({ kv, blobs: new KvBlobStore(kv) }), playingId: () => undefined, sort: () => 'custom', setSort: vi.fn(), apiKey: () => '', setApiKey: vi.fn(), online: () => true, playPlaylist: vi.fn(), loadLink: vi.fn(), edited: vi.fn(), deleted: vi.fn(), playTrack: vi.fn(), enqueue: vi.fn(), trackById: () => undefined, search: vi.fn(), status: vi.fn(), menu: vi.fn(), go: vi.fn() });
+    const es = ui.pages.library.querySelector('.empty-state')!;
+    expect(es.classList.contains('hidden')).toBe(false);
+    expect(es.textContent).toContain('La tua libreria è vuota');
+    expect([...es.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['+ Importa musica', '🔎 Cerca musica']);
+  });
+  it('filters with chips (Preferiti) and the search field', () => {
+    const { ui, library } = setup();
+    library.toggleFavorite('ccccccccccc');
+    const chip = [...ui.pages.library.querySelectorAll<HTMLButtonElement>('.chip')].find((c) => c.textContent === 'Preferiti')!;
+    chip.click();
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
+    expect(shown(ui.pages.library).map((r) => r.querySelector('.t')!.firstChild!.textContent)).toEqual(['Solo in libreria']);
+  });
+});

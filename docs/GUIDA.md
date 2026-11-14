@@ -47,12 +47,16 @@ Il **Tutorial** mostra una parte dell'app alla volta con una breve spiegazione. 
 
 ### Computer
 
-Tutto è in un'unica finestra:
+L'app è divisa in pagine, come una vera app musicale. Il **menu a sinistra** (su finestre strette diventa una colonna di icone) porta a:
 
-- **In alto:** le playlist e il link.
-- **Al centro:** i due deck (A e B), cioè i due giradischi virtuali, con in mezzo il mixer.
-- **Barra bassa sempre visibile:** il testo da cantare.
-- **Sotto:** la coda dei brani e i pannelli Proiettore, Pubblicità, Karaoke automatico, Testo, Già suonati, Stato e problemi.
+- **▶ Player** — quello che suona: i due deck (A e B) con il mixer, i comandi ⏮ ⏸ ⏭, e la **lista di riproduzione**. In alto leggi da dove arriva la musica: *In riproduzione da: 🎵 Festa · 3 / 124*.
+- **📋 Playlist** — tutte le tue playlist; aprine una per vederne i brani e gestirla.
+- **🔎 Cerca** — cerca una canzone su YouTube o nella tua musica: i risultati compaiono subito sotto il campo.
+- **⬇ Download** — i download in corso, in coda, completati e con errori.
+- **🎧 Libreria** — la tua musica sul computer: importati, scaricati, preferiti, artisti, album.
+- In fondo: **📺 Proiettore** (proiettore e testo da cantare) e **⚙ Impostazioni** (karaoke, pubblicità, aggiornamento playlist, chiave YouTube, aiuto).
+
+Ogni brano ha il menu **⋮** (o clic destro) con le azioni che ha senso fare in quel momento: suona adesso, suona dopo, metti in coda, aggiungi a playlist, scarica, preferiti, togli.
 
 ### Android
 
@@ -68,7 +72,7 @@ L'app segue lo stile Material Design e ha quattro sezioni nella barra in basso:
 
 | Sezione | Cosa contiene |
 |---|---|
-| **① Playlist** | Il menu delle quattro playlist, il nome, il link, «Carica playlist», «Scegli dalle app» e la coda dei brani |
+| **① Playlist** | Il menu delle playlist (tutte quelle che vuoi), il nome, il link, «Carica playlist», «Scegli dalle app» e la coda dei brani |
 | **② In onda** | Il brano che si sente (copertina, titolo, tempo, barra per spostarsi), **Avvia/Ferma automix**, Pausa, Mix ora, Prossimo, volume e stile delle transizioni. Più sotto la scheda «Poi» con il brano già pronto |
 | **Proiettore** | Karaoke o Video YouTube, «Trasmetti alla TV», microfono e la scheda «Testo da cantare» per mettere il testo a tempo |
 | **Altro** | Karaoke automatico, brani brevi (spot), aiuto, commenti, informazioni, brani già suonati e problemi |
@@ -87,11 +91,22 @@ L'app segue lo stile Material Design e ha quattro sezioni nella barra in basso:
 
 ## 3. Le playlist
 
-Puoi tenere **quattro playlist** e scegliere quella da suonare dal **menu a tendina**. Per ogni playlist il menu mostra il nome e quanti brani ha salvato, oppure «vuota».
+Puoi tenere **tutte le playlist che vuoi**: non c'è più il limite di quattro. Le playlist che avevi già passano da sole nel nuovo elenco, con i loro nomi e brani.
 
-**Aggiungere una playlist**
+**Computer:** apri la pagina **📋 Playlist**.
+- Ogni playlist è una scheda con nome, numero di brani e durata; quella che sta suonando ha il bordo colorato e «▶ In riproduzione».
+- **▶** sulla scheda la suona subito; un clic sulla scheda la apre.
+- **+ Nuova playlist**, **Cerca playlist** e il menu per ordinarle: «Ordine mio» (trascinando le schede), per nome, modificate di recente, più brani.
+- **⋮** su una scheda: Suona, Apri, Rinomina, Duplica, Elimina (chiede conferma; i brani della libreria restano).
+- Dentro una playlist: in cima «▲ Inizio · PLAYLIST: nome», poi i brani numerati (#, titolo, artista, durata, stato), in fondo «■ Fine playlist». Trascina la maniglia **⋮⋮** per cambiare ordine; **⋮** su un brano per toglierlo o aggiungerlo a un'altra playlist.
+- **Sorgente YouTube / Spotify**: incolla il link e premi **Carica** per riempire la playlist da lì.
+- Una playlist contiene solo riferimenti ai brani: lo stesso brano in più playlist non occupa spazio due volte.
 
-1. Scegli nel menu una playlist vuota.
+**Android e iPhone:** scegli la playlist dal **menu a tendina**, che mostra il nome e quanti brani ha salvato, oppure «vuota».
+
+**Aggiungere una playlist da YouTube o Spotify**
+
+1. Crea una playlist nuova (o scegline una vuota).
 2. Dalle un nome, per esempio «Festa», «Karaoke» o «Just Dance».
 3. Incolla il link di una playlist YouTube, oppure di una playlist o di un album Spotify pubblici, e premi **Carica playlist**.
 
@@ -132,10 +147,12 @@ Sul computer funzionano anche i tasti rapidi:
 
 ## 5. La coda dei brani
 
-**Computer.** Ogni riga ha i tasti Su, Giù, Blocca e «✕ Togli».
-- «✕ Togli» chiede «Sicuro?»: premilo una seconda volta entro 3 secondi per confermare.
-- Con un doppio clic suoni subito un brano.
-- Trascinando le righe cambi l'ordine.
+**Computer.** La lista di riproduzione, nella pagina Player, ha un inizio e una fine ben visibili: in cima «▲ Inizio · IN RIPRODUZIONE: nome · N brani», in fondo «■ Fine della lista di riproduzione · N brani» con **↑ Torna all'inizio**. Va bene anche con migliaia di brani.
+- Scorri con la rotella o il trackpad, oppure **tieni premuto e trascina** la lista con il mouse (lasciando, continua a scorrere e rallenta, e si ferma all'inizio o alla fine). Su uno schermo touch, con il dito.
+- Ogni riga mostra: il numero (o ▶ in riproduzione / ⏸ in pausa), titolo e artista, la durata e lo stato con icona e parola: ✓ Offline · ☁ Online · ⬇ Download · ⏳ In coda · ⚠ Errore.
+- **▶** suona subito il brano (anche doppio clic o Invio); **⋮** apre il menu: suona dopo quello in onda, sposta su/giù, aggiungi a playlist, scarica, preferiti, blocca, togli. Per cambiare l'ordine trascina la maniglia **⋮⋮**.
+- Dopo l'ultimo brano la musica si ferma, a meno che tu non scelga **Ripeti: tutta la playlist** (oppure **Ripeti: questo brano**): il ritorno al primo brano è una scelta del player, scritta anche in fondo alla lista.
+- **◎ Brano in onda** riporta in vista il brano che suona. La lista non salta mai da sola: resta dov'eri anche quando cambia brano, e ogni playlist ricorda il suo punto.
 
 **Android.** Tocca un brano e si apre un pannello dal basso con:
 
@@ -152,6 +169,32 @@ Sul computer funzionano anche i tasti rapidi:
 - Puoi aggiungere un singolo video incollando il suo link.
 - Il brano in onda non si può togliere: passa al successivo e poi toglilo.
 - Se un brano non si può riprodurre, compare un avviso. Lì incolli il link di un brano sostitutivo e l'app ti dice subito se va bene.
+
+## 5b. Libreria, ricerca e download (computer)
+
+**Aggiungere la tua musica.** Nella pagina **🎧 Libreria** premi **+ Importa musica** → «Scegli file» (anche tanti insieme) o «Scegli una cartella». Puoi anche trascinare i file nella pagina. Non c'è un limite al numero di file; alla fine leggi per esempio «✓ Importati 25 brani».
+- I file vanno nella cartella *Musica › PartyMix Library*, divisi per artista.
+- Titolo, artista, album e copertina vengono dal file; se mancano, dal nome del file.
+- Un file non audio, vuoto o danneggiato viene scartato e l'app ti dice perché. Lo stesso brano non viene importato due volte.
+
+**Senza rete.** I brani ✓ della libreria suonano anche senza internet. Se la rete manca compare l'avviso 📴: PartyMix suona i brani ✓ e salta quelli ☁ (solo online), senza riprovarli di continuo. Quando la rete torna, li suona di nuovo.
+
+**⬇ Download.** Nella pagina **⬇ Download** incolla l'indirizzo di un contenuto che hai il diritto di scaricare (o premi **⬇** / «Scarica» nel menu ⋮ di un brano).
+- Scegli **Audio** (MP3, M4A, Opus o Originale) o **Video** (MP4 o WebM, qualità Best, 1080p, 720p, 480p, 360p: se una qualità non esiste si prende la più vicina) e, se vuoi, la **playlist** in cui metterlo.
+- La pagina divide i download in **In corso**, **In coda**, **Completati** ed **Errori**. Ogni download ha la sua barra con percentuale, velocità, tempo che manca e MB scaricati, e **Annulla**. Ne partono al massimo 2 alla volta (puoi cambiarlo).
+- Finito: **▶ Play**, **＋ Playlist**, **📚 Apri libreria**. Il brano è già nella Libreria e suona senza rete.
+- Un brano già scaricato non viene scaricato di nuovo («✓ Già scaricato»). Se un download non riesce, l'app dice perché (rete, contenuto non disponibile, spazio, formato…) e c'è **↻ Riprova**. Se chiudi l'app durante un download, alla riapertura riparte da solo.
+- Serve il programma gratuito **yt-dlp** (e **FFmpeg** per MP3/M4A/Opus e per i video): sul Mac `brew install yt-dlp ffmpeg`, su Windows `winget install yt-dlp` e `winget install ffmpeg`. Se manca, o se è troppo vecchio, la pagina te lo dice con il comando per aggiornarlo.
+- Scarica solo contenuti che hai il diritto di scaricare. PartyMix non aggira protezioni (DRM) né abbonamenti.
+
+**Usare un tuo file.** Senza yt-dlp, «Rendi offline con un tuo file…» nel menu ⋮ ti fa scegliere un tuo file audio di quel brano. «Elimina download» toglie solo il file: il brano resta nelle playlist.
+
+**🔎 Cerca.** Nella pagina **🔎 Cerca** scegli dove cercare, **▶ YouTube** o **🎧 La mia musica**, scrivi titolo, artista o tutti e due (per esempio «The Weeknd Blinding Lights») e premi Invio: i risultati compaiono subito sotto il campo, senza cambiare pagina.
+- Con **La mia musica** l'app cerca tra tutti i brani della libreria e di tutte le playlist (anche per nome della playlist), anche senza rete. Ogni risultato mostra, solo come informazione, **in quali playlist** si trova (📂) e **dove è il file sul PC** (💾).
+- Su YouTube vedi copertina, titolo, canale e durata; i video che non si possono riprodurre sono segnalati con il motivo.
+- Su ogni risultato: **▶** lo suona subito; **⋮** → suona dopo quello in onda, metti in coda (in fondo), aggiungi a playlist (una finestra con le tue playlist e «Nuova playlist»), preferiti.
+- Messo in coda così, il brano entra nella lista di riproduzione ma non cambia la playlist salvata (per salvarlo usa «Aggiungi a playlist»).
+- Per risultati migliori inserisci una chiave gratuita di «YouTube Data API v3» in **⚙ Impostazioni → Ricerca YouTube**.
 
 ## 6. Il proiettore
 

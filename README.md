@@ -19,13 +19,16 @@ Incolli una playlist YouTube o Spotify, premi un tasto e la musica va avanti da 
 
 - **Mix automatico a due deck.** Mentre un brano suona, il successivo è già pronto sull'altro deck: il passaggio parte da solo con una sfumatura morbida, standard o energica. Mai un attimo di silenzio.
 - **YouTube e Spotify.** Playlist YouTube, oppure playlist e album Spotify pubblici: PartyMix prende l'elenco e suona i brani da YouTube.
-- **Quattro playlist con il nome che vuoi, salvate sul dispositivo.** Per esempio «Festa», «Karaoke», «Just Dance» e «Cena»: le scegli da un menu a tendina, si aprono all'istante anche senza rileggere YouTube. Togli i brani che non vuoi, cambia l'ordine: la lista resta così.
+- **Tutte le playlist che vuoi, salvate sul dispositivo.** Nessun limite (prima erano quattro): crea, rinomina, duplica, elimina, cerca e ordina le playlist dalla barra laterale; si aprono all'istante anche senza rileggere YouTube. Togli i brani che non vuoi, cambia l'ordine: la lista resta così.
+- **Libreria musicale locale (computer).** **+ Aggiungi musica locale**: importa MP3 (anche tanti insieme o un'intera cartella) che finiscono in *Musica › PartyMix Library/Artista/Brano.mp3*. Si suonano **anche senza rete**. Sezioni Tutte, Scaricate, Preferiti, Artisti, Album, Playlist; **🔎 Cerca nella libreria** trova un brano tra migliaia e ti dice in quali playlist e in quale cartella del PC si trova.
+- **🔎 Cerca su YouTube (computer).** Scrivi titolo e/o artista: risultati con copertina, canale e durata; **▶ Riproduci**, **⤵ In coda**, **⏭ subito dopo**, **＋ Playlist**, **＋ Libreria**.
+- **Nuova interfaccia per computer (Material Design 3).** Menu a sinistra con pagine separate: ▶ Player (deck, mixer e lista di riproduzione con «In riproduzione da: Festa · 3 / 124»), 📋 Playlist, 🔎 Cerca (risultati subito sotto il campo), ⬇ Download, 🎧 Libreria, 📺 Proiettore, ⚙ Impostazioni. Le liste hanno un inizio e una fine ben visibili e restano fluide anche con 10.000 brani; il ritorno al primo brano è la funzione «Ripeti» del player. L'app per smartphone resta quella di sempre.
 - **Karaoke automatico.** In sottofondo cerca i testi di tutta la playlist e li mostra a tempo, con le parole che si illuminano (o senza, se preferisci).
 - **Proiettore.** Sul secondo schermo, a tutto schermo: forme che seguono la musica dal microfono con il testo da cantare, oppure il **video YouTube in grande** (perfetto per i balli tipo Just Dance), muto, allineato alla musica e senza pubblicità sullo schermo. Il video successivo viene precaricato: niente buchi neri tra un brano e l'altro.
 - **Android in stile Material Design.** Sul telefono l'app è pensata per il tocco: quattro sezioni nella barra in basso (In onda, Playlist, Proiettore, Altro), i colori del tuo telefono (tema chiaro o scuro e Material You), le azioni su ogni brano in un pannello dal basso.
 - **Android: proiettore in cast.** Dal telefono trasmetti a una TV o a un proiettore compatibile (schermo wireless) e lì compare il proiettore, mentre il telefono resta la console.
 - **Pubblicità più sopportabili.** Può abbassare da solo il volume quando sente parlare come in uno spot e saltare le clip brevi.
-- **Leggera e gratuita.** Circa 5 MB su Mac e Windows, nessun account, niente da scaricare sul disco: la musica arriva in streaming dai player ufficiali di YouTube.
+- **Leggera e gratuita.** Circa 15 MB su Mac, nessun account: la musica arriva in streaming dai player ufficiali di YouTube, oppure dalla tua libreria sul computer.
 
 <p align="center"><img src="docs/img/android-now.png" alt="PartyMix su Android: in onda, tema scuro" width="250"> <img src="docs/img/android-playlist.png" alt="PartyMix su Android: le playlist, tema chiaro" width="250"> <img src="docs/img/android-sheet.png" alt="PartyMix su Android: azioni su un brano" width="250"></p>
 
@@ -51,15 +54,16 @@ Tutti i file sono nella pagina [**Release**](https://github.com/staracegiuseppe/
 3. Premi **▶ Avvia automix**. Il resto lo fa PartyMix.
 4. **Apri proiettore** e scegli cosa mostrare: *Karaoke* (forme e testo) o *Video YouTube*.
 
-Doppio clic su un brano in coda per suonarlo subito, trascina per cambiare ordine, **✕ Togli** per toglierlo dalla playlist. Il pulsante **Tutorial** in alto spiega ogni comando.
+Doppio clic su un brano in coda per suonarlo subito, trascina la maniglia **⋮⋮** per cambiare ordine, **✕** per toglierlo dalla playlist. Il pulsante **Tutorial** in alto spiega ogni comando.
 
 | Controllo | Cosa fa |
 |---|---|
 | Avvia / Ferma automix | Avvia; da avviato ferma tutto e riporta la coda all'inizio |
 | Prossimo brano · Pausa · Transizione immediata | Passa al successivo (non salta un brano **bloccato**) · congela i deck · sfuma subito |
 | Morbida / Standard / Energica / Manuale | Crossfade di 12 s / 8 s / 4 s / solo quando lo chiedi tu |
-| Menu playlist | Le quattro playlist salvate: scegline una dal menu a tendina (si apre dalla copia salvata). **Carica playlist** la rilegge da YouTube o Spotify da capo |
-| Coda | Su/Giù o trascina, **Blocca**, **✕ Togli**, **Casuale**, **Ripeti**, **Aggiorna ora** (aggiunge i brani nuovi senza rimettere quelli tolti) |
+| Playlist (barra laterale) | Tutte le playlist, senza limite: clic per aprirla, ✎ rinomina, ⧉ duplica, 🗑 elimina, ricerca e ordinamento, trascina per riordinare o per aggiungere brani. **Carica playlist** la rilegge da YouTube o Spotify da capo. Sul telefono: menu a tendina |
+| My Library | Tutte · Scaricate · Preferiti · Artisti · Album · Playlist, **🔎 Cerca nella libreria**, **+ Aggiungi musica locale** (file, cartella o link diretto a un MP3) |
+| Coda | ⋮⋮ trascina o ↑/↓, 🔒 blocca, ✕ togli, ♥ preferito, ⬇ offline, **◎ Brano in onda**, **Casuale**, **Ripeti**, **Aggiorna ora**. Stato: ▶ in riproduzione · ⏸ pausa · ✓ offline · ☁ online · ⬇ download · ⚠ problema |
 | Testo | Allineamento in due tocchi (① ②), anticipa/ritarda, velocità; **Parole che si illuminano** on/off |
 | Proiettore | Karaoke o Video YouTube, schermo, ingresso audio, sensibilità |
 
@@ -81,7 +85,10 @@ PartyMix è e resta gratuito, senza account e senza pubblicità aggiunte. Se ti 
 
 - Il microfono serve solo a far muovere le forme: l'audio è analizzato in tempo reale, **mai registrato né salvato**. Lo stesso vale per l'ascolto dell'audio del computer contro le pubblicità.
 - Per i testi l'app invia titolo e artista a [LRCLIB](https://lrclib.net), [lyrics.ovh](https://lyrics.ovh) e Genius; per titoli e copertine usa l'oEmbed di YouTube. Nessun account, nessuna chiave, nessuna statistica.
+- La libreria musicale resta sul computer (*Musica › PartyMix Library*); la ricerca nella libreria non manda niente in rete. «Cerca su YouTube» invia a Google quello che scrivi (con la tua chiave API, se l'hai inserita).
 - I commenti partono solo quando li invii tu, dalla tua posta.
+
+Dettagli: [informativa sulla privacy](https://staracegiuseppe.github.io/partymix/privacy.html).
 
 ## Note legali
 
@@ -106,9 +113,17 @@ npx tauri build --bundles appimage,deb,rpm   # su Linux
 
 **Linux.** Servono le librerie di sviluppo di WebKitGTK e ALSA (Fedora: `sudo dnf install webkit2gtk4.1-devel gtk3-devel libsoup3-devel alsa-lib-devel dbus-devel librsvg2-devel libxdo-devel gcc pkgconf-pkg-config`; Ubuntu/Debian: `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libdbus-1-dev libasound2-dev librsvg2-dev libxdo-dev build-essential pkg-config file patchelf`). Per avere i video di YouTube anche in sviluppo installa i plugin di GStreamer: `gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav`. Il workflow [`.github/workflows/linux.yml`](.github/workflows/linux.yml) (avvio manuale da *Actions → Linux → Run workflow*) produce AppImage, .deb e .rpm (Fedora) su Ubuntu 22.04 e, se gli indichi una release, li allega lì.
 
-Struttura: `src/automix.ts` (motore), `src/queue.ts`, `src/crossfade.ts`, `src/youtubeDeck.ts`, `src/lyrics.ts`, `src/savedPlaylists.ts`, `src/projector/` (proiettore, video e precaricamento), `src/ui/` (console), `src-tauri/` (Rust: finestre, schermi, cattura audio), `src-tauri/gen/android/` (app Android, proiettore in cast in `CastProjector.kt`).
+Struttura: `src-tauri/src/download/` (Download Manager in Rust: `validate.rs`, `downloader.rs` con yt-dlp, `metadata.rs`, `queue.rs`, comandi `dl_*` al posto delle rotte REST), `src/download/` (client e collegamento a libreria e playlist), `src/ui/downloadsUI.ts`, `src/automix.ts` (motore), `src/audioDeck.ts` (deck audio locale + deck ibrido locale/YouTube), `src/library/` (playlist dinamiche, libreria, IndexedDB, tag ID3), `src/ui/virtualList.ts` (lista virtuale circolare), `src/ui/libraryUI.ts` (barra laterale e viste della libreria), `src/queue.ts`, `src/crossfade.ts`, `src/youtubeDeck.ts`, `src/lyrics.ts`, `src/savedPlaylists.ts`, `src/projector/` (proiettore, video e precaricamento), `src/ui/` (console), `src-tauri/` (Rust: finestre, schermi, cattura audio), `src-tauri/gen/android/` (app Android, proiettore in cast in `CastProjector.kt`).
 
 Se la cartella del progetto è in iCloud, tieni `node_modules` e la cartella `target` di Cargo fuori da iCloud (`CARGO_TARGET_DIR`), altrimenti i file vengono "svuotati" e gli strumenti si bloccano.
+
+## Libreria musicale, offline e ricerca (computer)
+
+- **Import.** «+ Aggiungi musica locale» accetta MP3 (anche M4A, OGG, FLAC, WAV): un file, tanti file o una cartella intera, oppure trascinandoli sulla barra laterale. Ogni file viene controllato (un file non audio, vuoto o danneggiato viene scartato con il motivo), i duplicati non si importano due volte, titolo/artista/album/copertina vengono dai tag ID3 o dal nome del file.
+- **Offline.** I brani della libreria (✓) suonano senza rete. Se la rete manca, PartyMix salta i brani solo online (☁) senza segnarli come rotti e senza riprovarli di continuo; quando la rete torna li suona di nuovo. **Elimina download** toglie solo il file: il brano resta nelle playlist.
+- **⬇ Download Manager (computer).** Incolla l'indirizzo di un contenuto che hai il diritto di scaricare: il download parte in sottofondo con [yt-dlp](https://github.com/yt-dlp/yt-dlp) installato sul computer (`brew install yt-dlp ffmpeg`), al massimo 2 alla volta (configurabile). Audio MP3/M4A/Opus/originale, video MP4/WebM. Pagina con In corso / In coda / Completati / Errori, barra, velocità, ETA, annulla e riprova; a fine download il brano è nella Libreria (offline) e, se scelta, nella playlist. Un contenuto già scaricato non viene riscaricato. File in *Musica › PartyMix Library*; i download interrotti ripartono da soli. Solo indirizzi web pubblici. Nessun aggiramento di DRM, abbonamenti o restrizioni di accesso.
+- **Ricerca su YouTube.** Con una chiave gratuita di «YouTube Data API v3» (da inserire nella vista di ricerca) usa le API ufficiali: durata, video non riproducibili segnalati, e playlist lette per intero anche oltre 200 brani. Senza chiave legge la pagina dei risultati, come già fa per Spotify. Ogni ricerca con chiave consuma 100 unità della quota gratuita giornaliera (10.000, cioè circa 100 ricerche al giorno); le ricerche ripetute entro 10 minuti non consumano quota.
+- **Limiti tecnici.** Nessun limite fisso a playlist, brani, file o coda. La lista circolare usa al massimo 8 milioni di pixel virtuali: oltre circa 200.000 brani in una sola playlist il giro continuo diventa meno frequente da ricentrare ma resta corretto. Senza chiave API YouTube il player legge al massimo circa 200 brani di una playlist (limite di YouTube).
 
 ## Playlist Spotify
 

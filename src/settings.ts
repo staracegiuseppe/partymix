@@ -14,8 +14,14 @@ export type Settings = {
   playlists: string[];
   /** The names the user gave the playlists (empty = «Playlist N»). */
   playlistNames: string[];
-  /** Which playlist is in use (0 … PLAYLIST_SLOTS-1). */
+  /** Which playlist is in use (0 … PLAYLIST_SLOTS-1). Before 1.7 only: read once to migrate. */
   playlistSlot: number;
+  /** The playlist in use (id in the playlist store), from 1.7 on: no limit to how many there are. */
+  currentPlaylistId?: string;
+  /** How the side bar orders the playlists. */
+  playlistSort: 'custom' | 'name' | 'recent' | 'size';
+  /** The user's YouTube Data API v3 key, for «Cerca su YouTube» and for reading playlists longer than ~200 songs. */
+  ytApiKey?: string;
   /** What the projector shows: shapes and lyrics (karaoke) or the YouTube video itself, big (e.g. Just Dance). */
   projectorMode: 'karaoke' | 'video';
   /** The guided setup was shown (finished or skipped), so it does not open by itself again. */
@@ -57,10 +63,11 @@ export const DEFAULT_SETTINGS: Settings = {
   playlists: ['', '', '', ''],
   playlistNames: ['', '', '', ''],
   playlistSlot: 0,
+  playlistSort: 'custom',
   projectorMode: 'karaoke',
 };
 
-/** How many playlists the user can keep and switch between. */
+/** How many playlists the app had before 1.7 (fixed slots). Only used to read the old settings once: now there is no limit. */
 export const PLAYLIST_SLOTS = 4;
 const SLOTS = Array.from({ length: PLAYLIST_SLOTS }, (_, i) => i);
 const fresh = (): Settings => ({ ...DEFAULT_SETTINGS, playlists: SLOTS.map(() => ''), playlistNames: SLOTS.map(() => '') });
@@ -110,9 +117,12 @@ export function loadSettings(store: Storage): Settings {
       playlistNames: SLOTS.map((i) => (Array.isArray(j.playlistNames) && typeof j.playlistNames[i] === 'string' ? j.playlistNames[i].slice(0, 60) : '')),
       playlistSlot: Number.isInteger(j.playlistSlot) && j.playlistSlot >= 0 && j.playlistSlot < PLAYLIST_SLOTS ? j.playlistSlot : 0,
       projectorMode: j.projectorMode === 'video' ? 'video' : 'karaoke',
+      playlistSort: ['custom', 'name', 'recent', 'size'].includes(j.playlistSort) ? j.playlistSort : 'custom',
       locked: Array.isArray(j.locked) ? j.locked.filter((x: unknown): x is string => typeof x === 'string') : [],
     };
-    const mic = str(j.micDeviceId), disp = str(j.projectorDisplay), pl = str(j.playlistText);
+    const mic = str(j.micDeviceId), disp = str(j.projectorDisplay), pl = str(j.playlistText), cur = str(j.currentPlaylistId), key = str(j.ytApiKey);
+    if (cur) out.currentPlaylistId = cur;
+    if (key) out.ytApiKey = key.trim().slice(0, 100);
     if (mic) out.micDeviceId = mic;
     if (disp) out.projectorDisplay = disp;
     if (pl) out.playlistText = pl;

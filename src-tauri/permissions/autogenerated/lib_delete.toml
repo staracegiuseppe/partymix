@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-lib-delete"
+description = "Enables the lib_delete command without any pre-configured scope."
+commands.allow = ["lib_delete"]
+
+[[permission]]
+identifier = "deny-lib-delete"
+description = "Denies the lib_delete command without any pre-configured scope."
+commands.deny = ["lib_delete"]

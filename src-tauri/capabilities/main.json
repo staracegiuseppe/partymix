@@ -4,5 +4,5 @@
   "description": "Finestre di PartyMix servite da localhost",
   "windows": ["main", "projector"],
   "remote": { "urls": ["http://localhost:9527"] },
-  "permissions": ["core:default", "allow-list-displays", "allow-open-projector", "allow-close-projector", "allow-http-get", "allow-start-audio-capture", "allow-stop-audio-capture", "allow-ad-debug-log", "allow-ad-debug-playlist", "allow-ad-debug-spot", "allow-open-feedback", "allow-keep-awake"]
+  "permissions": ["core:default", "allow-list-displays", "allow-open-projector", "allow-close-projector", "allow-http-get", "allow-start-audio-capture", "allow-stop-audio-capture", "allow-ad-debug-log", "allow-ad-debug-playlist", "allow-ad-debug-spot", "allow-open-feedback", "allow-keep-awake", "allow-lib-write", "allow-lib-read", "allow-lib-delete", "allow-dl-create", "allow-dl-list", "allow-dl-get", "allow-dl-cancel", "allow-dl-remove", "allow-dl-config"]
 }

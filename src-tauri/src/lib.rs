@@ -1,4 +1,5 @@
 mod capture;
+pub mod download;
 
 use tauri::{Url, WebviewUrl, WebviewWindowBuilder};
 #[cfg(desktop)]
@@ -110,6 +111,65 @@ async fn http_get(url: String) -> Result<String, String> {
     resp.text().await.map_err(|e| e.to_string())
 }
 
+// --- Music library: the user's audio files in Music/PartyMix Library/<Artista>/<Titolo>.mp3 ---
+
+fn library_root(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager;
+    let base = app.path().audio_dir().or_else(|_| app.path().app_data_dir()).map_err(|e| e.to_string())?;
+    Ok(base.join("PartyMix Library"))
+}
+
+/// Only plain names inside the library folder: no "..", no absolute paths, no drive letters.
+fn library_path(app: &tauri::AppHandle, rel: &str) -> Result<std::path::PathBuf, String> {
+    use std::path::Component;
+    let p = std::path::Path::new(rel);
+    if rel.is_empty() || !p.components().all(|c| matches!(c, Component::Normal(_))) {
+        return Err("percorso non valido".into());
+    }
+    Ok(library_root(app)?.join(p))
+}
+
+/// Saves a file of the library. The body is the file; the header x-path the wanted place (URL-encoded).
+/// Never overwrites: a second song with the same name becomes «Titolo (2).mp3». Returns the path actually used.
+#[tauri::command]
+fn lib_write(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else { return Err("dati mancanti".into()) };
+    let wanted = request.headers().get("x-path").and_then(|v| v.to_str().ok()).ok_or("percorso mancante")?;
+    let rel: String = url::form_urlencoded::parse(format!("p={}", wanted).as_bytes()).next().map(|(_, v)| v.into_owned()).unwrap_or_default();
+    let mut path = library_path(&app, &rel)?;
+    if let Some(dir) = path.parent() { std::fs::create_dir_all(dir).map_err(|e| e.to_string())?; }
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Brano").to_string();
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("mp3").to_string();
+    let mut n = 2;
+    while path.exists() {
+        path.set_file_name(format!("{} ({}).{}", stem, n, ext));
+        n += 1;
+    }
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    let root = library_root(&app)?;
+    Ok(path.strip_prefix(&root).map_err(|e| e.to_string())?.to_string_lossy().replace('\\', "/"))
+}
+
+#[tauri::command]
+fn lib_read(app: tauri::AppHandle, path: String) -> Result<tauri::ipc::Response, String> {
+    let p = library_path(&app, &path)?;
+    std::fs::read(p).map(tauri::ipc::Response::new).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn lib_delete(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let p = library_path(&app, &path)?;
+    match std::fs::remove_file(&p) {
+        Ok(()) => {
+            // an artist folder left empty goes too (only that one, only if empty)
+            if let Some(dir) = p.parent() { let _ = std::fs::remove_dir(dir); }
+            Ok(())
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 #[cfg(desktop)]
 #[tauri::command]
 fn close_projector(app: tauri::AppHandle) {
@@ -217,8 +277,13 @@ pub fn run() {
     builder
         .manage(capture::CaptureState::default())
         .plugin(tauri_plugin_localhost::Builder::new(PORT).build())
-        .invoke_handler(tauri::generate_handler![list_displays, open_projector, close_projector, http_get, capture::start_audio_capture, capture::stop_audio_capture, capture::ad_debug_log, capture::ad_debug_playlist, capture::ad_debug_spot, open_feedback, keep_awake])
+        .invoke_handler(tauri::generate_handler![list_displays, open_projector, close_projector, http_get, capture::start_audio_capture, capture::stop_audio_capture, capture::ad_debug_log, capture::ad_debug_playlist, capture::ad_debug_spot, open_feedback, keep_awake, lib_write, lib_read, lib_delete, download::dl_create, download::dl_list, download::dl_get, download::dl_cancel, download::dl_remove, download::dl_config])
         .setup(|app| {
+            // download manager: jobs in Music/PartyMix Library/metadata, started at once (interrupted downloads resume)
+            match library_root(app.handle()) {
+                Ok(root) => download::init(app.handle(), root),
+                Err(e) => eprintln!("libreria non disponibile: {}", e),
+            }
             let url: Url = format!("http://localhost:{}/index.html", PORT).parse().unwrap();
             let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url));
             #[cfg(desktop)]

@@ -201,6 +201,42 @@
           "markdownDescription": "Enables the close_projector command without any pre-configured scope."
         },
         {
+          "description": "Enables the dl_cancel command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dl-cancel",
+          "markdownDescription": "Enables the dl_cancel command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the dl_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dl-config",
+          "markdownDescription": "Enables the dl_config command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the dl_create command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dl-create",
+          "markdownDescription": "Enables the dl_create command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the dl_get command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dl-get",
+          "markdownDescription": "Enables the dl_get command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the dl_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dl-list",
+          "markdownDescription": "Enables the dl_list command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the dl_remove command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dl-remove",
+          "markdownDescription": "Enables the dl_remove command without any pre-configured scope."
+        },
+        {
           "description": "Enables the http_get command without any pre-configured scope.",
           "type": "string",
           "const": "allow-http-get",
@@ -211,6 +247,24 @@
           "type": "string",
           "const": "allow-keep-awake",
           "markdownDescription": "Enables the keep_awake command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the lib_delete command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-lib-delete",
+          "markdownDescription": "Enables the lib_delete command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the lib_read command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-lib-read",
+          "markdownDescription": "Enables the lib_read command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the lib_write command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-lib-write",
+          "markdownDescription": "Enables the lib_write command without any pre-configured scope."
         },
         {
           "description": "Enables the list_displays command without any pre-configured scope.",
@@ -267,6 +321,42 @@
           "markdownDescription": "Denies the close_projector command without any pre-configured scope."
         },
         {
+          "description": "Denies the dl_cancel command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dl-cancel",
+          "markdownDescription": "Denies the dl_cancel command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the dl_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dl-config",
+          "markdownDescription": "Denies the dl_config command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the dl_create command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dl-create",
+          "markdownDescription": "Denies the dl_create command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the dl_get command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dl-get",
+          "markdownDescription": "Denies the dl_get command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the dl_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dl-list",
+          "markdownDescription": "Denies the dl_list command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the dl_remove command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dl-remove",
+          "markdownDescription": "Denies the dl_remove command without any pre-configured scope."
+        },
+        {
           "description": "Denies the http_get command without any pre-configured scope.",
           "type": "string",
           "const": "deny-http-get",
@@ -277,6 +367,24 @@
           "type": "string",
           "const": "deny-keep-awake",
           "markdownDescription": "Denies the keep_awake command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the lib_delete command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-lib-delete",
+          "markdownDescription": "Denies the lib_delete command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the lib_read command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-lib-read",
+          "markdownDescription": "Denies the lib_read command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the lib_write command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-lib-write",
+          "markdownDescription": "Denies the lib_write command without any pre-configured scope."
         },
         {
           "description": "Denies the list_displays command without any pre-configured scope.",

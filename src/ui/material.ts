@@ -42,6 +42,11 @@ const PATHS = {
   feedback: 'M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12h-2v-2h2v2zm0-4h-2V6h2v4z',
   close: 'M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
   lyrics: 'M2.5 4v3h5v12h3V7h5V4h-13zm19 5h-9v3h3v7h3v-7h3V9z',
+  search: 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
+  download: 'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z',
+  library: 'M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 5h-3v5.5a2.5 2.5 0 0 1-5 0 2.5 2.5 0 0 1 2.5-2.5c.57 0 1.08.19 1.5.51V5h4v2zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6z',
+  settings: 'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z',
+  prev: 'M6 6h2v12H6zm3.5 6 8.5 6V6z',
 } as const;
 export type IconName = keyof typeof PATHS;
 
@@ -80,7 +85,8 @@ export function setLabel(el: HTMLElement, text: string): void {
   [...el.childNodes].forEach((n) => { if (n.nodeType === Node.TEXT_NODE) n.remove(); });
 }
 
-export type Screen = { id: string; label: string; icon: IconName; body: (Node | null)[] };
+/** `secondary`: computer only — shown at the bottom of the navigation drawer (Proiettore, Impostazioni). */
+export type Screen = { id: string; label: string; icon: IconName; body: (Node | null)[]; secondary?: boolean };
 export type SheetItem = { label: string; icon: IconName; danger?: boolean; disabled?: boolean; run: () => void };
 
 /**
@@ -103,7 +109,7 @@ export function buildShell(root: HTMLElement, o: { title: Node; actions: Node[];
     main.append(sec);
   }
   const nav = h('nav', { class: 'm-nav', 'aria-label': 'Sezioni' }, ...o.screens.map((s) => {
-    const b = h('button', { class: 'm-nav-item', type: 'button', onClick: () => go(s.id) },
+    const b = h('button', { class: 'm-nav-item' + (s.secondary ? ' sec' : ''), type: 'button', title: s.label, onClick: () => go(s.id) },
       h('span', { class: 'm-ind' }, icon(s.icon)), h('span', { class: 'm-nav-label' }, s.label));
     navBtns.set(s.id, b);
     return b;
