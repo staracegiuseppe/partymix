@@ -10,12 +10,12 @@ export type Settings = {
   micSensitivity: number;
   projectorDisplay?: string;
   playlistText?: string;
-  /** The two saved playlist links (empty string = slot not set yet). */
-  playlists: [string, string];
-  /** The names the user gave the two playlists (empty = «Playlist N»). */
-  playlistNames: [string, string];
-  /** Which of the two playlists is in use. */
-  playlistSlot: 0 | 1;
+  /** The saved playlist links, one per slot (empty string = slot not set yet). */
+  playlists: string[];
+  /** The names the user gave the playlists (empty = «Playlist N»). */
+  playlistNames: string[];
+  /** Which playlist is in use (0 … PLAYLIST_SLOTS-1). */
+  playlistSlot: number;
   /** What the projector shows: shapes and lyrics (karaoke) or the YouTube video itself, big (e.g. Just Dance). */
   projectorMode: 'karaoke' | 'video';
   /** The guided setup was shown (finished or skipped), so it does not open by itself again. */
@@ -54,11 +54,16 @@ export const DEFAULT_SETTINGS: Settings = {
   lyricsHighlight: true,
   playlistRefreshMin: 5,
   lyricsAlign: {},
-  playlists: ['', ''],
-  playlistNames: ['', ''],
+  playlists: ['', '', '', ''],
+  playlistNames: ['', '', '', ''],
   playlistSlot: 0,
   projectorMode: 'karaoke',
 };
+
+/** How many playlists the user can keep and switch between. */
+export const PLAYLIST_SLOTS = 4;
+const SLOTS = Array.from({ length: PLAYLIST_SLOTS }, (_, i) => i);
+const fresh = (): Settings => ({ ...DEFAULT_SETTINGS, playlists: SLOTS.map(() => ''), playlistNames: SLOTS.map(() => '') });
 
 const KEY = 'partymix.settings';
 const PROFILES: Profile[] = ['morbida', 'standard', 'energica', 'manuale'];
@@ -83,9 +88,9 @@ function cleanAlign(v: unknown): Record<string, Align> {
 export function loadSettings(store: Storage): Settings {
   try {
     const raw = store.getItem(KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS, playlists: ['', ''], playlistNames: ['', ''] };
+    if (!raw) return fresh();
     const j = JSON.parse(raw);
-    if (!j || typeof j !== 'object') return { ...DEFAULT_SETTINGS, playlists: ['', ''], playlistNames: ['', ''] };
+    if (!j || typeof j !== 'object') return fresh();
     const out: Settings = {
       profile: PROFILES.includes(j.profile) ? j.profile : DEFAULT_SETTINGS.profile,
       master: num(j.master, 0, 100, DEFAULT_SETTINGS.master),
@@ -101,9 +106,9 @@ export function loadSettings(store: Storage): Settings {
       lyricsHighlight: j.lyricsHighlight !== false,
       playlistRefreshMin: REFRESH_CHOICES.includes(j.playlistRefreshMin) ? j.playlistRefreshMin : DEFAULT_SETTINGS.playlistRefreshMin,
       lyricsAlign: cleanAlign(j.lyricsAlign),
-      playlists: [0, 1].map((i) => (Array.isArray(j.playlists) && typeof j.playlists[i] === 'string' ? j.playlists[i] : '')) as [string, string],
-      playlistNames: [0, 1].map((i) => (Array.isArray(j.playlistNames) && typeof j.playlistNames[i] === 'string' ? j.playlistNames[i].slice(0, 60) : '')) as [string, string],
-      playlistSlot: j.playlistSlot === 1 ? 1 : 0,
+      playlists: SLOTS.map((i) => (Array.isArray(j.playlists) && typeof j.playlists[i] === 'string' ? j.playlists[i] : '')),
+      playlistNames: SLOTS.map((i) => (Array.isArray(j.playlistNames) && typeof j.playlistNames[i] === 'string' ? j.playlistNames[i].slice(0, 60) : '')),
+      playlistSlot: Number.isInteger(j.playlistSlot) && j.playlistSlot >= 0 && j.playlistSlot < PLAYLIST_SLOTS ? j.playlistSlot : 0,
       projectorMode: j.projectorMode === 'video' ? 'video' : 'karaoke',
       locked: Array.isArray(j.locked) ? j.locked.filter((x: unknown): x is string => typeof x === 'string') : [],
     };
@@ -114,7 +119,7 @@ export function loadSettings(store: Storage): Settings {
     if (pl && !Array.isArray(j.playlists)) out.playlists[0] = pl; // before two playlists existed: the old one becomes Playlist 1
     return out;
   } catch {
-    return { ...DEFAULT_SETTINGS, playlists: ['', ''], playlistNames: ['', ''] };
+    return fresh();
   }
 }
 

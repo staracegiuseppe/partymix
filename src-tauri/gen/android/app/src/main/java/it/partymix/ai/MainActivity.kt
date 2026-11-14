@@ -3,12 +3,18 @@ package it.partymix.ai
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.webkit.JavascriptInterface
+import android.graphics.Color
 import android.webkit.WebView
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 
@@ -36,10 +42,21 @@ class MainActivity : TauriActivity() {
   @Volatile private var sharedText: String? = null
   private var webView: WebView? = null
   private var cast: CastProjector? = null
+  /** Height of the status bar and of the navigation bar in CSS pixels, so the page can keep its bars clear of them. */
+  @Volatile private var insetsJson = "{}"
 
   override fun onCreate(savedInstanceState: Bundle?) {
-    enableEdgeToEdge()
+    // transparent bars drawn behind by the page; their icons dark or light like the phone's theme
+    enableEdgeToEdge(SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT), SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT))
     super.onCreate(savedInstanceState)
+    // Back closes a sheet or returns to «In onda» (history in the page); at the start it sends the app to the
+    // background instead of closing it, so the party keeps playing.
+    onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+      override fun handleOnBackPressed() {
+        val w = webView
+        if (w != null && w.canGoBack()) w.goBack() else moveTaskToBack(true)
+      }
+    })
     keepShared(intent)
     // Android 13+: the "music playing" notification needs consent; the service runs either way.
     if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -60,6 +77,17 @@ class MainActivity : TauriActivity() {
   override fun onWebViewCreate(webView: WebView) {
     this.webView = webView
     webView.addJavascriptInterface(Bridge(), "PartyMixAndroid")
+    ViewCompat.setOnApplyWindowInsetsListener(webView) { v, insets ->
+      val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+      val d = resources.displayMetrics.density
+      val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+      val json = "{\"top\":${(bars.top / d).toInt()},\"bottom\":${(bars.bottom / d).toInt()},\"ime\":${(ime / d).toInt()}}"
+      if (json != insetsJson) {
+        insetsJson = json
+        v.post { (v as WebView).evaluateJavascript("window.dispatchEvent(new Event('partymix-insets'))", null) }
+      }
+      insets
+    }
     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
       WebViewCompat.addDocumentStartJavaScript(webView, ALWAYS_VISIBLE, setOf("*"))
     }
@@ -69,6 +97,12 @@ class MainActivity : TauriActivity() {
   override fun onPause() {
     super.onPause()
     webView?.onResume()
+  }
+
+  /** The phone switched between light and dark (uiMode is handled here, the activity is not recreated). */
+  override fun onConfigurationChanged(newConfig: Configuration) {
+    super.onConfigurationChanged(newConfig)
+    webView?.post { webView?.evaluateJavascript("window.dispatchEvent(new Event('partymix-theme'))", null) }
   }
 
   override fun onDestroy() {
@@ -115,6 +149,13 @@ class MainActivity : TauriActivity() {
         false
       }
     }
+
+    @JavascriptInterface
+    fun insets(): String = insetsJson
+
+    /** The phone's colours: light/dark and, from Android 12, the Material You palette. */
+    @JavascriptInterface
+    fun theme(): String = PhoneTheme.json(this@MainActivity)
 
     @JavascriptInterface
     fun castState(): String = cast?.state() ?: "{}"

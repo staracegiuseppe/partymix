@@ -19,12 +19,15 @@ Incolli una playlist YouTube o Spotify, premi un tasto e la musica va avanti da 
 
 - **Mix automatico a due deck.** Mentre un brano suona, il successivo è già pronto sull'altro deck: il passaggio parte da solo con una sfumatura morbida, standard o energica. Mai un attimo di silenzio.
 - **YouTube e Spotify.** Playlist YouTube, oppure playlist e album Spotify pubblici: PartyMix prende l'elenco e suona i brani da YouTube.
-- **Due playlist con il nome che vuoi, salvate sul PC.** Per esempio «Festa» e «Karaoke»: passi dall'una all'altra con un tocco, si aprono all'istante anche senza rileggere YouTube. Togli i brani che non vuoi, cambia l'ordine: la lista resta così.
+- **Quattro playlist con il nome che vuoi, salvate sul dispositivo.** Per esempio «Festa», «Karaoke», «Just Dance» e «Cena»: le scegli da un menu a tendina, si aprono all'istante anche senza rileggere YouTube. Togli i brani che non vuoi, cambia l'ordine: la lista resta così.
 - **Karaoke automatico.** In sottofondo cerca i testi di tutta la playlist e li mostra a tempo, con le parole che si illuminano (o senza, se preferisci).
 - **Proiettore.** Sul secondo schermo, a tutto schermo: forme che seguono la musica dal microfono con il testo da cantare, oppure il **video YouTube in grande** (perfetto per i balli tipo Just Dance), muto, allineato alla musica e senza pubblicità sullo schermo. Il video successivo viene precaricato: niente buchi neri tra un brano e l'altro.
+- **Android in stile Material Design.** Sul telefono l'app è pensata per il tocco: quattro sezioni nella barra in basso (In onda, Playlist, Proiettore, Altro), i colori del tuo telefono (tema chiaro o scuro e Material You), le azioni su ogni brano in un pannello dal basso.
 - **Android: proiettore in cast.** Dal telefono trasmetti a una TV o a un proiettore compatibile (schermo wireless) e lì compare il proiettore, mentre il telefono resta la console.
 - **Pubblicità più sopportabili.** Può abbassare da solo il volume quando sente parlare come in uno spot e saltare le clip brevi.
 - **Leggera e gratuita.** Circa 5 MB su Mac e Windows, nessun account, niente da scaricare sul disco: la musica arriva in streaming dai player ufficiali di YouTube.
+
+<p align="center"><img src="docs/img/android-now.png" alt="PartyMix su Android: in onda, tema scuro" width="250"> <img src="docs/img/android-playlist.png" alt="PartyMix su Android: le playlist, tema chiaro" width="250"> <img src="docs/img/android-sheet.png" alt="PartyMix su Android: azioni su un brano" width="250"></p>
 
 <p align="center"><img src="docs/img/projector-karaoke.png" alt="Il proiettore di PartyMix: forme a ritmo di musica" width="700"></p>
 
@@ -40,6 +43,8 @@ Tutti i file sono nella pagina [**Release**](https://github.com/staracegiuseppe/
 
 ## Come si usa
 
+📖 **La guida completa, con le schermate per computer e Android, è in [docs/GUIDA.md](docs/GUIDA.md).**
+
 1. Incolla il link di una playlist YouTube o Spotify e premi **Carica playlist** (al primo avvio una configurazione guidata ti accompagna).
 2. Dai un nome alla playlist, se vuoi: resta salvata sul PC insieme ai brani.
 3. Premi **▶ Avvia automix**. Il resto lo fa PartyMix.
@@ -52,7 +57,7 @@ Doppio clic su un brano in coda per suonarlo subito, trascina per cambiare ordin
 | Avvia / Ferma automix | Avvia; da avviato ferma tutto e riporta la coda all'inizio |
 | Prossimo brano · Pausa · Transizione immediata | Passa al successivo (non salta un brano **bloccato**) · congela i deck · sfuma subito |
 | Morbida / Standard / Energica / Manuale | Crossfade di 12 s / 8 s / 4 s / solo quando lo chiedi tu |
-| Playlist 1 / 2 | Le due playlist salvate: un tocco per passare all'altra (si apre dal PC). **Carica playlist** la rilegge da YouTube o Spotify da capo |
+| Menu playlist | Le quattro playlist salvate: scegline una dal menu a tendina (si apre dalla copia salvata). **Carica playlist** la rilegge da YouTube o Spotify da capo |
 | Coda | Su/Giù o trascina, **Blocca**, **✕ Togli**, **Casuale**, **Ripeti**, **Aggiorna ora** (aggiunge i brani nuovi senza rimettere quelli tolti) |
 | Testo | Allineamento in due tocchi (① ②), anticipa/ritarda, velocità; **Parole che si illuminano** on/off |
 | Proiettore | Karaoke o Video YouTube, schermo, ingresso audio, sensibilità |
@@ -67,7 +72,9 @@ Ti piace? Manca qualcosa? Nell'app premi **💬 Commenti**: scrivi il messaggio,
 
 ## Sostieni il progetto
 
-PartyMix è e resta gratuito. Se ti è utile e vuoi ringraziare, nella finestra **Info** dell'app trovi il codice QR per una piccola donazione PayPal, del tutto facoltativa.
+PartyMix è e resta gratuito, senza account e senza pubblicità aggiunte. Se ti ha fatto ballare e cantare, un piccolo contributo, del tutto facoltativo, aiuta a portare avanti nuove funzioni e aggiornamenti.
+
+<p align="center"><img src="docs/img/paypal-qr.png" alt="Codice QR PayPal per una donazione" width="180"><br>Inquadra il codice con l'app PayPal, oppure <a href="https://www.paypal.com/qrcodes/p2pqrc/8AXGQ7233LRNL">tocca qui dal telefono</a>. Lo stesso codice è nella finestra <b>Info</b> dell'app.</p>
 
 ## Privacy
 

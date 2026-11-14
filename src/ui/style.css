@@ -8,7 +8,7 @@ body { margin: 0; background: radial-gradient(1200px 600px at 50% -10%, #1a1f3a,
   font: 16px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; min-height: 100vh; }
 button { font: inherit; color: inherit; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
   padding: .55em 1em; cursor: pointer; transition: transform .08s, background .15s; }
-button:hover:not(:disabled) { background: #252c47; }
+body:not(.md) button:hover:not(:disabled) { background: #252c47; }
 button:active:not(:disabled) { transform: scale(.97); }
 button:disabled { opacity: .45; cursor: not-allowed; }
 button:focus-visible, input:focus-visible { outline: 3px solid var(--b); outline-offset: 2px; }
@@ -140,7 +140,7 @@ select { max-width: 100%; min-width: 0; font: inherit; color: var(--text); backg
 .top-tools { display: flex; gap: 8px; flex-wrap: wrap; }
 .top-tools button { padding: .35em .9em; font-size: .9rem; }
 button.primary { background: var(--b); color: #06202a; font-weight: 800; border-color: var(--b); }
-button.primary:hover:not(:disabled) { background: #7ee8ff; }
+body:not(.md) button.primary:hover:not(:disabled) { background: #7ee8ff; }
 button.link { background: transparent; border-color: transparent; color: var(--muted); text-decoration: underline; padding-left: 0; }
 .tour-block { position: fixed; inset: 0; z-index: 90; }
 .tour-hole { position: fixed; z-index: 91; border-radius: 14px; border: 2px solid var(--b); box-shadow: 0 0 0 9999px #05070dcc, 0 0 24px #3ddcff88; pointer-events: none; transition: left .2s, top .2s, width .2s, height .2s; }

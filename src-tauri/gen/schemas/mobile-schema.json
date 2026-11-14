@@ -213,12 +213,6 @@
           "markdownDescription": "Enables the list_displays command without any pre-configured scope."
         },
         {
-          "description": "Enables the open_external command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-open-external",
-          "markdownDescription": "Enables the open_external command without any pre-configured scope."
-        },
-        {
           "description": "Enables the open_feedback command without any pre-configured scope.",
           "type": "string",
           "const": "allow-open-feedback",
@@ -277,12 +271,6 @@
           "type": "string",
           "const": "deny-list-displays",
           "markdownDescription": "Denies the list_displays command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the open_external command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-open-external",
-          "markdownDescription": "Denies the open_external command without any pre-configured scope."
         },
         {
           "description": "Denies the open_feedback command without any pre-configured scope.",

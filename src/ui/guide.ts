@@ -9,7 +9,7 @@ export type TourStep = { target: () => HTMLElement | null; title: string; text: 
 const remove = (...els: (Element | null | undefined)[]) => els.forEach((e) => e?.remove());
 
 /** Highlights one part of the app at a time with a short explanation and Back / Next buttons. Resolves when the tour ends. */
-export function startTour(allSteps: TourStep[]): Promise<void> {
+export function startTour(allSteps: TourStep[], beforeStep?: (el: HTMLElement) => void): Promise<void> {
   const steps = allSteps.filter((s) => s.target());
   if (steps.length === 0) return Promise.resolve();
   return new Promise((done) => {
@@ -52,6 +52,7 @@ export function startTour(allSteps: TourStep[]): Promise<void> {
       text.textContent = steps[i].text;
       back.disabled = i === 0;
       next.textContent = i === steps.length - 1 ? 'Fine' : 'Avanti';
+      if (el) beforeStep?.(el);
       el?.scrollIntoView({ block: 'center', inline: 'nearest' });
       requestAnimationFrame(() => { place(); next.focus({ preventScroll: true }); });
     }

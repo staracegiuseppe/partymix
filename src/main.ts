@@ -1,5 +1,6 @@
-import { canCast, castMessage, castState, onSharedLink } from './androidBridge';
+import { canCast, castMessage, castState, isAndroidApp, onSharedLink } from './androidBridge';
 import './ui/style.css';
+import './ui/material.css';
 import { Automix } from './automix';
 import { log, setSinks } from './log';
 import { buildTracks, oembedMeta, parsePlaylistPage, verifyReplacement } from './playlistLoader';
@@ -7,7 +8,7 @@ import { diffPlaylist } from './playlistSync';
 import { parsePlaylistInput } from './playlistUrl';
 import { Queue, Track } from './queue';
 import { Align, alignFromAnchors, findLyrics, lyricsFrom, TransientError, IDENTITY, indexFor, Lyrics, shiftAlign, snapshotAt, toLyricTime, karaokeAlign, lineProgress } from './lyrics';
-import { loadSettings, saveSettings } from './settings';
+import { loadSettings, PLAYLIST_SLOTS, saveSettings } from './settings';
 import { buildConsole, DeckVM, ViewModel } from './ui/console';
 import { bindShortcuts } from './ui/shortcuts';
 import { AdGuard } from './adGuard';
@@ -26,6 +27,8 @@ import { createYouTubeDeck, YouTubeDeck } from './youtubeDeck';
 const store: Storage | undefined = (() => { try { return window.localStorage; } catch { return undefined; } })();
 const settings = store ? loadSettings(store) : loadSettings({ getItem: () => null, setItem: () => {} } as unknown as Storage);
 const save = () => store && saveSettings(store, settings);
+/** Where the saved playlists live, as the user calls it. */
+const DEVICE = isAndroidApp() ? 'telefono' : 'PC';
 
 // Problems the user should see, in plain Italian.
 const problems: string[] = [];
@@ -99,14 +102,14 @@ async function readIds(id: string): Promise<string[]> {
   return decks![0].readPlaylist(id);
 }
 
-/** Which playlist (1 or 2) the queue came from: its songs are saved again when they change. */
-let loadedSlot: 0 | 1 | undefined;
+/** Which playlist slot the queue came from: its songs are saved again when they change. */
+let loadedSlot: number | undefined;
 let loadedSource: 'YouTube' | 'Spotify' = 'YouTube';
 /** False when the list was opened from the PC: then it changes only when the user asks (Carica playlist / Aggiorna ora). */
 let autoRefreshable = true;
 
 function showSlots() {
-  const n = [0, 1].map((i) => loadSaved(store, i)?.tracks.length ?? 0) as [number, number];
+  const n = Array.from({ length: PLAYLIST_SLOTS }, (_, i) => loadSaved(store, i)?.tracks.length ?? 0);
   ui.setPlaylistSlots(settings.playlistSlot, settings.playlists, settings.playlistNames, n);
 }
 
@@ -119,7 +122,7 @@ function persistQueue() {
   showSlots();
 }
 
-/** The loaded link becomes the one saved in the playlist slot in use (1 or 2), together with its songs. */
+/** The loaded link becomes the one saved in the playlist slot in use, together with its songs. */
 function rememberLink(text: string, source: 'YouTube' | 'Spotify', ownName?: string) {
   const slot = settings.playlistSlot;
   settings.playlistText = text;
@@ -133,7 +136,7 @@ function rememberLink(text: string, source: 'YouTube' | 'Spotify', ownName?: str
 }
 
 /** Opens the copy saved on this computer: no waiting for YouTube or Spotify. A YouTube playlist is then checked for news in the background. */
-function openSaved(slot: 0 | 1): boolean {
+function openSaved(slot: number): boolean {
   const p = loadSaved(store, slot);
   if (!p || p.link !== settings.playlists[slot]) return false;
   setQueue(p.tracks.map((t) => ({ ...t })));
@@ -146,8 +149,8 @@ function openSaved(slot: 0 | 1): boolean {
   replaced.clear();
   for (const id of p.removed ?? []) replaced.add(id); // songs taken out stay out, also when the playlist is updated
   autoRefreshable = false;
-  ui.setRefreshInfo(listId ? 'Aperta dal PC: la lista non cambia da sola. «Aggiorna ora» aggiunge i brani nuovi di YouTube, «Carica playlist» la rilegge da capo.' : '');
-  ui.setStatus(`«${slotLabel(slot, settings.playlistNames[slot])}» aperta dal PC: ${p.tracks.length} ${p.tracks.length === 1 ? 'brano' : 'brani'}. Premi «Carica playlist» per rileggerla da ${p.source}.`);
+  ui.setRefreshInfo(listId ? `Aperta dal ${DEVICE}: la lista non cambia da sola. «Aggiorna ora» aggiunge i brani nuovi di YouTube, «Carica playlist» la rilegge da capo.` : '');
+  ui.setStatus(`«${slotLabel(slot, settings.playlistNames[slot])}» aperta dal ${DEVICE}: ${p.tracks.length} ${p.tracks.length === 1 ? 'brano' : 'brani'}. Premi «Carica playlist» per rileggerla da ${p.source}.`);
   return true;
 }
 
@@ -159,7 +162,7 @@ const ui = buildConsole(document.getElementById('app')!, {
     showSlots();
     if (loadedSlot === slot && am && am.state() !== 'idle') { ui.setStatus(`«${slotLabel(slot, settings.playlistNames[slot])}» sta già suonando.`); return; }
     if (text && openSaved(slot)) return;
-    if (!text) { ui.setStatus(`Playlist ${slot + 1} è vuota: incolla il link di una playlist YouTube o Spotify e premi «Carica playlist».`); ui.linkInput.focus(); return; }
+    if (!text) { ui.setStatus(`«${slotLabel(slot, settings.playlistNames[slot])}» è vuota: incolla il link di una playlist YouTube o Spotify e premi «Carica playlist».`); ui.linkInput.focus(); return; }
     if (!ui.loadBtn.disabled) ui.loadBtn.click();
   },
   setProjectorMode(m) { settings.projectorMode = m; save(); ui.setProjectorMode(m); },
@@ -256,7 +259,7 @@ const ui = buildConsole(document.getElementById('app')!, {
     if (!queue.remove(id)) { ui.setStatus('Il brano in onda non si può togliere: passa al successivo e poi toglilo.', true); return; }
     replaced.add(id); // a playlist update must not bring it back
     persistQueue();
-    ui.setStatus(`Tolto dalla playlist: «${titleOf(t)}»${loadedSlot !== undefined ? ' (salvato sul PC)' : ''}.`);
+    ui.setStatus(`Tolto dalla playlist: «${titleOf(t)}»${loadedSlot !== undefined ? ` (salvato sul ${DEVICE})` : ''}.`);
   },
   setShuffle(on) { settings.shuffle = on; save(); if (on) queue.shuffleUpcoming(); },
   setRepeat(r) { settings.repeat = r; queue.setRepeat(r); save(); },

@@ -62,15 +62,23 @@ describe('two playlists and projector mode settings', () => {
   const mem = (v: unknown) => ({ getItem: () => JSON.stringify(v), setItem: () => {} }) as unknown as Storage;
   it('turns the old single playlist into Playlist 1', () => {
     const s = loadSettings(mem({ playlistText: 'https://youtube.com/playlist?list=PL1' }));
-    expect(s.playlists).toEqual(['https://youtube.com/playlist?list=PL1', '']);
+    expect(s.playlists).toEqual(['https://youtube.com/playlist?list=PL1', '', '', '']);
     expect(s.playlistSlot).toBe(0);
     expect(s.projectorMode).toBe('karaoke');
   });
   it('keeps both links, the slot in use and the video mode', () => {
     const s = loadSettings(mem({ playlists: ['a', 'b'], playlistSlot: 1, projectorMode: 'video', playlistText: 'b' }));
-    expect(s.playlists).toEqual(['a', 'b']);
+    expect(s.playlists).toEqual(['a', 'b', '', '']);
     expect(s.playlistSlot).toBe(1);
     expect(s.projectorMode).toBe('video');
+  });
+  it('has four playlists: the fourth can be in use, a slot out of range falls back to the first', () => {
+    const s = loadSettings(mem({ playlists: ['a', 'b', 'c', 'd', 'e'], playlistNames: ['', '', '', 'Matrimonio'], playlistSlot: 3 }));
+    expect(s.playlists).toEqual(['a', 'b', 'c', 'd']);
+    expect(s.playlistNames[3]).toBe('Matrimonio');
+    expect(s.playlistSlot).toBe(3);
+    expect(loadSettings(mem({ playlistSlot: 4 })).playlistSlot).toBe(0);
+    expect(loadSettings(mem({ playlistSlot: 1.5 })).playlistSlot).toBe(0);
   });
   it('defaults do not share the playlists array', () => {
     const empty = { getItem: () => null, setItem: () => {} } as unknown as Storage;

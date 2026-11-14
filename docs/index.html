@@ -56,6 +56,12 @@
   .card h3 { margin: 8px 0 6px; font-size: 1.12rem; }
   .card p { margin: 0; color: var(--muted); font-size: .97rem; }
 
+  .donate { display: flex; gap: 16px; align-items: center; margin-top: 14px; }
+  .donate img { width: 120px; height: 120px; border-radius: 12px; background: #fff; padding: 6px; flex: none; border: 0; }
+  .donate p { margin: 0; }
+  .phones { display: grid; grid-template-columns: repeat(3, minmax(0, 260px)); gap: 20px; justify-content: center; }
+  .phones img { width: 100%; height: auto; border-radius: 28px; border: 1px solid var(--line); display: block; }
+  @media (max-width: 640px) { .phones { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .phones img { border-radius: 14px; } }
   .split { display: grid; grid-template-columns: 1.1fr 1fr; gap: 34px; align-items: center; }
   .split img { width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--line); display: block; }
   .split h3 { font-size: 1.6rem; margin: 0 0 10px; letter-spacing: -.01em; }
@@ -88,6 +94,7 @@
     <nav>
       <a class="small hide-m" href="#funzioni">Funzioni</a>
       <a class="small hide-m" href="#come">Come si usa</a>
+      <a class="small" href="https://github.com/staracegiuseppe/partymix/blob/main/docs/GUIDA.md">Guida</a>
       <a class="small" href="https://github.com/staracegiuseppe/partymix">GitHub</a>
     </nav>
   </header>
@@ -117,7 +124,7 @@
     <div class="grid">
       <div class="card"><div class="ic">🎛️</div><h3>Mix automatico a due deck</h3><p>Il brano successivo è già pronto sull'altro deck e il passaggio parte da solo, con sfumatura morbida, standard o energica.</p></div>
       <div class="card"><div class="ic">▶️</div><h3>YouTube e Spotify</h3><p>Playlist YouTube, oppure playlist e album Spotify pubblici: PartyMix prende l'elenco e suona i brani da YouTube.</p></div>
-      <div class="card"><div class="ic">💾</div><h3>Due playlist, salvate sul PC</h3><p>Dagli un nome, «Festa» e «Karaoke»: passi dall'una all'altra con un tocco. Togli brani, cambia ordine: resta tutto salvato.</p></div>
+      <div class="card"><div class="ic">💾</div><h3>Quattro playlist, sempre pronte</h3><p>Dagli un nome, «Festa», «Karaoke», «Just Dance»…: le scegli da un menu a tendina. Togli brani, cambia ordine: resta tutto salvato.</p></div>
       <div class="card"><div class="ic">🎤</div><h3>Karaoke automatico</h3><p>Cerca in sottofondo i testi di tutta la playlist e li mostra a tempo, con le parole che si illuminano. O senza, se preferisci.</p></div>
       <div class="card"><div class="ic">📽️</div><h3>Proiettore</h3><p>Forme che seguono la musica con il testo da cantare, oppure il video YouTube in grande per i balli di gruppo, senza buchi neri tra un brano e l'altro.</p></div>
       <div class="card"><div class="ic">📺</div><h3>Cast da Android</h3><p>Il telefono fa da console e trasmette il proiettore a una TV o a un proiettore con schermo wireless.</p></div>
@@ -141,6 +148,16 @@
     </div>
   </section>
 
+  <section id="android">
+    <h2>Sul telefono, come un'app Android</h2>
+    <p class="sub">Material Design: quattro sezioni in basso, un tocco su un brano per suonarlo, spostarlo o toglierlo, e i colori del tuo telefono (chiaro, scuro, Material You).</p>
+    <div class="phones">
+      <img src="img/android-now.png" alt="PartyMix su Android: il brano in onda e i comandi, tema scuro" width="554" height="1200" loading="lazy">
+      <img src="img/android-playlist.png" alt="PartyMix su Android: le quattro playlist e la coda, tema chiaro" width="554" height="1200" loading="lazy">
+      <img src="img/android-sheet.png" alt="PartyMix su Android: le azioni su un brano" width="554" height="1200" loading="lazy">
+    </div>
+  </section>
+
   <section id="come">
     <h2>Pronti in un minuto</h2>
     <p class="sub">Al primo avvio una configurazione guidata ti accompagna passo passo.</p>
@@ -156,7 +173,8 @@
       <div>
         <h3>Dimmi cosa ne pensi</h3>
         <p>PartyMix cresce con i suggerimenti di chi lo usa. Nell'app premi <b>💬 Commenti</b>: scrivi cosa ti piace, cosa manca o cosa non va, e il messaggio parte dalla tua posta, così posso risponderti.</p>
-        <p>Se ti è utile e vuoi ringraziare, nella finestra <b>Info</b> trovi una donazione PayPal facoltativa.</p>
+        <p>PartyMix è gratuito e lo resta. Se ti ha fatto ballare e cantare, un piccolo contributo, del tutto facoltativo, aiuta a portare avanti nuove funzioni e aggiornamenti.</p>
+        <div class="donate"><img src="img/paypal-qr.png" alt="Codice QR PayPal per una donazione" width="120" height="120" loading="lazy"><p>Inquadra il codice con l'app PayPal oppure <a href="https://www.paypal.com/qrcodes/p2pqrc/8AXGQ7233LRNL">tocca qui dal telefono</a>. Grazie! 💜</p></div>
       </div>
       <img src="img/feedback.png" alt="La finestra Commenti e suggerimenti di PartyMix" width="2160" height="1350" loading="lazy">
     </div>
@@ -164,7 +182,7 @@
 
   <div class="cta">
     <h2>La prossima festa la fa PartyMix</h2>
-    <p class="sub" style="margin-bottom:22px">Gratis, per macOS, Windows e Android.</p>
+    <p class="sub" style="margin-bottom:22px">Gratis, per macOS, Windows e Android. <a href="https://github.com/staracegiuseppe/partymix/blob/main/docs/GUIDA.md">📖 Leggi la guida con le schermate</a></p>
     <div class="dl"><a class="btn primary" href="#downloads">⬇️ Scarica PartyMix</a><a class="btn" href="https://github.com/staracegiuseppe/partymix">Codice su GitHub</a></div>
   </div>
 

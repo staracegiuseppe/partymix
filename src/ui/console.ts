@@ -4,11 +4,12 @@ import { isAndroidApp } from '../androidBridge';
 import { fmtTime, h, paintWords } from './dom';
 import { showAppPicker, showFeedback, showInfo, startTour, startWizard, TourStep } from './guide';
 import { UNAVAILABLE_WITH_YOUTUBE } from './unavailable';
+import { applyPhoneTheme, applySystemInsets, buildShell, materialUI, setLabel, SheetItem, withIcon } from './material';
 
 export type Actions = {
   loadPlaylist(text: string): void;
-  /** Switches to playlist 1 or 2: puts its saved link in the box and loads it. */
-  selectPlaylist(slot: 0 | 1): void;
+  /** Switches to another playlist: opens its saved copy, or puts its link in the box and loads it. */
+  selectPlaylist(slot: number): void;
   setProjectorMode(mode: 'karaoke' | 'video'): void;
   /** Gives the playlist in use a name of the user's choice. */
   renamePlaylist(name: string): void;
@@ -90,7 +91,11 @@ const fmtSpeed = (v: number) => '×' + v.toFixed(2).replace('.', ',');
 const ROLE_LABEL: Record<DeckVM['role'], string> = { live: 'IN ONDA', out: 'IN USCITA', ready: 'PRONTO', loading: 'PREPARAZIONE…', idle: 'FERMO' };
 
 export function buildConsole(root: HTMLElement, a: Actions) {
-  const pill = h('span', { class: 'pill empty', title: 'Incolla qui sotto il link di una playlist Spotify o YouTube' }, EMPTY_SOURCE);
+  /** Phone layout (Material Design 3) on Android; the classic console on a computer. */
+  const md = materialUI();
+  const label = (el: HTMLElement, t: string) => (md ? setLabel(el, t) : el.textContent !== t && (el.textContent = t));
+  let shell: ReturnType<typeof buildShell> | undefined;
+  const pill = h('span', { class: 'pill empty', title: 'Incolla qui sotto il link di una playlist Spotify o YouTube' }, md ? 'Nessuna playlist' : EMPTY_SOURCE);
   const status = h('div', { class: 'status', role: 'status' });
   const statusListeners = new Set<(text: string, error: boolean) => void>();
   let lastVm: ViewModel | undefined;
@@ -187,11 +192,12 @@ export function buildConsole(root: HTMLElement, a: Actions) {
       ? 'Il proiettore mostra a tutto schermo il video del brano in onda (es. Just Dance), muto e allineato alla musica. Quando YouTube mostra una pubblicità o il video non è ancora allineato, al suo posto restano le forme.'
       : 'Le forme seguono il suono della stanza tramite il microfono, con il testo del brano. Non viene registrato nulla.';
   }
+  const openProj = async () => { projMsg.textContent = ''; try { await a.openProjector(); } catch (e) { projMsg.textContent = `Non riesco ad aprire il proiettore: ${(e as Error)?.message ?? String(e)}`; } };
+  const projOpen = h('button', { class: md ? 'm-filled' : '', onClick: openProj }, md ? 'Trasmetti alla TV' : 'Apri proiettore');
+  const projClose = h('button', { class: md ? 'm-outlined' : '', onClick: () => a.closeProjector() }, md ? 'Interrompi' : 'Chiudi proiettore');
   const projPanel = h('section', { class: 'panel' }, h('h3', {}, 'Proiettore'),
     h('div', { class: 'seg', role: 'group', 'aria-label': 'Cosa mostrare sul proiettore' }, ...projModeBtns), projModeHint,
-    h('div', { class: 'btns' },
-      h('button', { onClick: async () => { projMsg.textContent = ''; try { await a.openProjector(); } catch (e) { projMsg.textContent = `Non riesco ad aprire il proiettore: ${(e as Error)?.message ?? String(e)}`; } } }, 'Apri proiettore'),
-      h('button', { onClick: () => a.closeProjector() }, 'Chiudi proiettore')),
+    h('div', { class: 'btns' }, projOpen, projClose),
     dispRow,
     h('div', { class: 'row' }, h('label', {}, 'Ingresso'), micSel), h('div', { class: 'row' }, micBtn),
     h('div', { class: 'row' }, h('label', {}, 'Sensibilità'), sens), projMsg);
@@ -232,7 +238,7 @@ export function buildConsole(root: HTMLElement, a: Actions) {
   const kAuto = h('input', { type: 'checkbox', 'aria-label': 'Cerca i testi in automatico', onChange: () => a.setKaraokeAuto(kAuto.checked) });
   const kRetry = h('button', { title: 'Cerca di nuovo i testi che non ho trovato', onClick: () => a.retryKaraoke() }, 'Cerca i testi mancanti');
   const karaokePanel = h('section', { class: 'panel' }, h('h3', {}, 'Karaoke automatico'),
-    h('div', { class: 'artist wrap' }, 'In sottofondo cerco i testi di tutti i brani, così sono pronti quando partono. «a tempo» = tempi esatti; «stimato» = testo trovato ma tempi calcolati: regolali con i due tasti ① ② della barra in basso.'),
+    h('div', { class: 'artist wrap' }, 'In sottofondo cerco i testi di tutti i brani, così sono pronti quando partono. «a tempo» = tempi esatti; «stimato» = testo trovato ma tempi calcolati: regolali con i due tasti ① ② ' + (md ? 'in «Proiettore › Testo da cantare».' : 'della barra in basso.')),
     kBar, kText, h('div', { class: 'row' }, kRetry), h('label', { class: 'row' }, kAuto, 'Cerca i testi in automatico'));
   const adOn = h('input', { type: 'checkbox', 'aria-label': 'Abbassa il volume durante le pubblicità', onChange: () => a.setAdGuard(adOn.checked) });
   const adMeter = h('div', { class: 'kbar' }, h('i'));
@@ -242,10 +248,12 @@ export function buildConsole(root: HTMLElement, a: Actions) {
   const adSpot = h('select', { 'aria-label': 'Brani brevi (spot)', onChange: () => a.setSpotMode(adSpot.value as 'off' | 'duck' | 'skip') },
     h('option', { value: 'off' }, 'Non fare niente'), h('option', { value: 'duck' }, 'Abbassa il volume'), h('option', { value: 'skip' }, 'Salta al brano dopo'));
   const adLog = h('div', { class: 'adlog' });
-  const adPanel = h('section', { class: 'panel' }, h('h3', {}, 'Pubblicità'),
+  // the listening part needs the computer's sound: on the phone only the short-track rule is shown
+  const adListen = h('div', { class: 'adlisten' },
     h('div', { class: 'artist wrap' }, 'Ascolto l’audio che sta suonando sul computer (non il microfono) e, se sembra una voce che parla come in uno spot e non una canzone, abbasso il volume da solo; quando torna la musica lo rialzo. L’audio non viene registrato né salvato.'),
     h('label', { class: 'row' }, adOn, 'Abbassa il volume durante le pubblicità'), adMeter, adText, adLog,
-    h('div', { class: 'row' }, h('label', {}, 'Sensibilità'), adSens),
+    h('div', { class: 'row' }, h('label', {}, 'Sensibilità'), adSens));
+  const adPanel = h('section', { class: 'panel' }, h('h3', {}, 'Pubblicità'), adListen,
     h('div', { class: 'artist wrap' }, 'Gli spot nelle playlist sono clip brevi, le canzoni durano minuti: un brano sotto i 75 secondi lo considero uno spot. Funziona anche senza ascoltare l’audio e anche quando sotto la voce c’è solo musica.'),
     h('div', { class: 'row' }, h('label', {}, 'Brani brevi (spot)'), adSpot));
   const side = h('div', { class: 'side' }, warnPanel, projPanel, adPanel, karaokePanel, lyricsPanel,
@@ -254,29 +262,39 @@ export function buildConsole(root: HTMLElement, a: Actions) {
 
   // Phone: no copy and paste. Pick the playlist in the YouTube or Spotify app, «Condividi → PartyMix», it loads by itself.
   const appsBtn = isAndroidApp() ? h('button', { class: 'primary apps-btn', onClick: () => showAppPicker((m) => setStatus(m, true)) }, '📱 Scegli dalle app') : null;
-  const slotBtns = ([0, 1] as const).map((i) => h('button', { 'aria-pressed': 'false', onClick: () => a.selectPlaylist(i) }, `Playlist ${i + 1}`));
-  const slotSeg = h('div', { class: 'seg slots', role: 'group', 'aria-label': 'Playlist in uso' }, ...slotBtns);
+  const slotSel = h('select', { class: 'slotsel', 'aria-label': 'Playlist in uso', title: 'Scegli la playlist da suonare', onChange: () => a.selectPlaylist(+slotSel.value) });
   const nameInput = h('input', { type: 'text', class: 'plname', maxlength: '60', placeholder: 'Nome della playlist', 'aria-label': 'Nome della playlist in uso',
     onChange: () => a.renamePlaylist(nameInput.value) });
   nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') nameInput.blur(); });
   const savedInfo = h('span', { class: 'artist saved' });
-  const loadRow = h('div', { class: 'load' }, slotSeg, nameInput, savedInfo, link, loadBtn, appsBtn);
-  /** Shows the two playlists by name, which one is in use, and how many songs of it are saved on this computer. */
+  const loadRow = md
+    ? h('div', { class: 'load m-card' },
+      h('label', { class: 'm-field' }, h('span', { class: 'm-field-label' }, 'Playlist in uso'), slotSel),
+      h('label', { class: 'm-field' }, h('span', { class: 'm-field-label' }, 'Nome'), nameInput),
+      savedInfo,
+      h('label', { class: 'm-field' }, h('span', { class: 'm-field-label' }, 'Link YouTube o Spotify'), link),
+      h('div', { class: 'm-btnrow' }, loadBtn, appsBtn))
+    : h('div', { class: 'load' }, slotSel, nameInput, savedInfo, link, loadBtn, appsBtn);
   /** A line about the projector that the app keeps up to date (Android: the cast screen). */
   function setProjectorInfo(text: string) { if (projMsg.textContent !== text) projMsg.textContent = text; }
-  function setPlaylistSlots(slot: 0 | 1, links: [string, string], names: [string, string] = ['', ''], saved: [number, number] = [0, 0]) {
-    slotBtns.forEach((b, i) => {
-      const label = names[i]?.trim() || `Playlist ${i + 1}`;
-      b.textContent = label;
-      b.setAttribute('aria-pressed', String(i === slot));
-      b.title = links[i] ? `${label}: ${links[i]}${saved[i] ? ` (${saved[i]} ${saved[i] === 1 ? 'brano salvato' : 'brani salvati'} sul PC)` : ''}` : `${label}: vuota. Sceglila, incolla un link e premi «Carica playlist».`;
-      b.classList.toggle('empty', !links[i]);
+  const where = md ? 'sul telefono' : 'sul PC';
+  /** Fills the playlist menu: each playlist by name with how many songs are saved, or «vuota»; the one in use is selected. */
+  function setPlaylistSlots(slot: number, links: string[], names: string[] = [], saved: number[] = []) {
+    const opts = links.map((l, i) => {
+      const name = names[i]?.trim() || `Playlist ${i + 1}`;
+      const n = saved[i] ?? 0;
+      const tail = !l ? 'vuota' : n ? `${n} ${n === 1 ? 'brano' : 'brani'}` : 'da caricare';
+      return h('option', { value: String(i), selected: i === slot }, `${i + 1} · ${name} — ${tail}`);
     });
+    const sig = opts.map((o) => o.textContent).join('|') + '#' + slot;
+    if (slotSel.dataset.sig !== sig) { slotSel.replaceChildren(...opts); slotSel.dataset.sig = sig; }
+    slotSel.value = String(slot);
+    slotSel.title = links[slot] ? `${names[slot]?.trim() || `Playlist ${slot + 1}`}: ${links[slot]}` : 'Questa playlist è vuota: incolla un link e premi «Carica playlist».';
     if (document.activeElement !== nameInput) nameInput.value = names[slot] ?? '';
     nameInput.placeholder = `Nome per «Playlist ${slot + 1}»`;
-    savedInfo.textContent = saved[slot] ? `💾 ${saved[slot]} ${saved[slot] === 1 ? 'brano salvato' : 'brani salvati'} sul PC` : '';
+    savedInfo.textContent = saved[slot] ? `💾 ${saved[slot]} ${saved[slot] === 1 ? 'brano salvato' : 'brani salvati'} ${where}` : '';
   }
-  const openTutorial = () => void startTour(tourSteps());
+  const openTutorial = () => void (md ? startTour(mdTourSteps(), (el) => shell?.reveal(el)) : startTour(tourSteps()));
   const openWizard = () => startWizard({
     loadPlaylist: (t) => a.loadPlaylist(t),
     onStatus: (fn) => { statusListeners.add(fn); fn(status.textContent ?? '', status.classList.contains('error')); return () => statusListeners.delete(fn); },
@@ -319,12 +337,63 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     h('button', { onClick: openTutorial }, 'Tutorial'),
     h('button', { onClick: openInfo }, 'Info'),
     h('button', { title: 'Scrivimi cosa ne pensi e cosa vorresti trovare in PartyMix', onClick: () => showFeedback() }, '💬 Commenti'));
-  root.append(h('div', { class: 'wrap' },
-    h('header', { class: 'top' }, h('div', { class: 'logo' }, 'Party', h('b', {}, 'Mix')),
-      pill, topTools),
-    loadRow, status,
-    h('div', { class: 'decks' }, dA.card, mixer, dB.card), syncBar,
-    h('div', { class: 'lower' }, queuePanel, side)));
+  const castTop = h('button', { class: 'm-icon-btn', 'aria-label': 'Trasmetti il proiettore alla TV', title: 'Trasmetti il proiettore alla TV', onClick: () => { shell?.go('proj'); void openProj(); } });
+  const helpItem = (ic: Parameters<typeof withIcon>[1], text: string, sub: string, run: () => void) =>
+    h('button', { class: 'm-list-item', type: 'button', onClick: run }, withIcon(h('span', { class: 'm-lead' }), ic, true), h('span', { class: 'm-text' }, h('span', { class: 't' }, text), h('span', { class: 'm-sub' }, sub)));
+  const helpPanel = h('section', { class: 'panel' }, h('h3', {}, 'Aiuto'),
+    helpItem('school', 'Configurazione guidata', 'Playlist, proiettore e primo avvio, passo per passo', openWizard),
+    helpItem('help', 'Tutorial', 'Cosa fa ogni parte dell’app', openTutorial),
+    helpItem('feedback', 'Commenti e suggerimenti', 'Scrivimi cosa ne pensi e cosa aggiungere', () => showFeedback()),
+    helpItem('info', 'Informazioni', 'Versione, autore e donazione facoltativa', openInfo));
+  /** Phone: the parts of the console grouped in four destinations, each one a screen. */
+  const mdTourSteps = (): TourStep[] => [
+    { target: () => root.querySelector('.m-nav'), title: 'Quattro sezioni', text: 'In basso passi da una sezione all’altra: «In onda» per suonare, «Playlist» per scegliere i brani, «Proiettore» per la TV e il testo, «Altro» per le impostazioni e l’aiuto. Il tasto Indietro torna a «In onda».' },
+    { target: () => loadRow, title: 'Le tue playlist', text: 'Puoi tenere quattro playlist: scegline una dal menu, dalle un nome e incolla il link di YouTube o Spotify. Ancora più comodo: «Scegli dalle app», apri la playlist in YouTube o Spotify e tocca Condividi › PartyMix. La lista resta salvata sul telefono.' },
+    { target: () => queuePanel, title: 'La coda', text: 'Tocca un brano per suonarlo subito, farlo partire dopo quello in onda, spostarlo, bloccarlo o toglierlo dalla playlist.' },
+    { target: () => (dA.card.classList.contains('is-live') ? dA.card : dB.card), title: 'In onda', text: 'Il brano che si sente, con il video e il tempo che manca. Trascina la barra per spostarti nel brano.' },
+    { target: () => bigBtn, title: 'Avvia automix', text: 'Il tasto principale: parte il primo brano e da lì l’app mixa da sola, un brano dopo l’altro, con una sfumatura.' },
+    { target: () => nextBtn.parentElement as HTMLElement, title: 'Pausa, mix, prossimo', text: '«Pausa» ferma tutto, «Mix ora» sfuma subito nel brano pronto, «Prossimo» salta al successivo.' },
+    { target: () => seg.parentElement as HTMLElement, title: 'Stile delle transizioni', text: 'Morbida (circa 12 secondi), Standard (8), Energica (4) oppure Manuale, dove il cambio avviene solo quando lo decidi tu.' },
+    { target: () => projPanel, title: 'Il proiettore sulla TV', text: '«Trasmetti alla TV» apre le impostazioni di Android «Trasmetti» o «Schermo wireless»: scegli la TV o il proiettore e lì compare il proiettore di PartyMix, mentre il telefono resta la console. Puoi mostrare le forme col testo (Karaoke) o il video del brano (Video YouTube).' },
+    { target: () => syncBar, title: 'Testo a tempo', text: 'La riga che si sta cantando. Se il testo non è a tempo con il video usa ① e ② quando il cantante inizia la prima e l’ultima riga, oppure Anticipa e Ritarda.' },
+    { target: () => helpPanel, title: 'Aiuto e commenti', text: 'Da qui rifai la configurazione guidata, rivedi questo tutorial e mi scrivi cosa ne pensi. Buona festa!' },
+  ];
+  if (md) {
+    applySystemInsets();
+    applyPhoneTheme();
+    withIcon(castTop, 'cast', true);
+    withIcon(loadBtn, 'refresh'); loadBtn.classList.add('m-tonal');
+    if (appsBtn) { appsBtn.textContent = 'Scegli dalle app'; withIcon(appsBtn, 'apps'); appsBtn.classList.add('m-filled'); }
+    withIcon(nextBtn, 'next'); label(nextBtn, 'Prossimo');
+    withIcon(mixBtn, 'mix'); label(mixBtn, 'Mix ora'); mixBtn.classList.remove('wide');
+    withIcon(pauseBtn, 'pause');
+    withIcon(shuffleBtn, 'shuffle'); withIcon(shuffleNow, 'shuffle'); withIcon(repeatBtn, 'repeat');
+    withIcon(refreshBtn, 'refresh'); withIcon(addBtn, 'add');
+    withIcon(projOpen, 'cast'); withIcon(projClose, 'stop');
+    withIcon(dA.duck, 'volumeDown'); withIcon(dB.duck, 'volumeDown');
+    master.parentElement?.prepend(withIcon(h('span', { class: 'm-vol-ic' }), 'volume', true));
+    nextBtn.parentElement?.append(nextBtn); // Pausa · Mix ora · Prossimo, like a player
+    status.classList.add('hidden');
+    projModeHint.after(lyShow.parentElement!, lyHl.parentElement!); // projector settings, also before any lyrics are found
+    syncBar.prepend(h('h3', {}, 'Testo da cantare'));
+    shell = buildShell(root, {
+      title: h('div', { class: 'logo' }, 'Party', h('b', {}, 'Mix')),
+      actions: [pill, castTop],
+      screens: [
+        { id: 'now', label: 'In onda', icon: 'nowPlaying', body: [h('div', { class: 'm-now' }, dA.card, mixer, dB.card)] },
+        { id: 'list', label: 'Playlist', icon: 'queue', body: [loadRow, warnPanel, queuePanel] },
+        { id: 'proj', label: 'Proiettore', icon: 'cast', body: [projPanel, syncBar, lyricsPanel] },
+        { id: 'more', label: 'Altro', icon: 'tune', body: [karaokePanel, adPanel, helpPanel, histPanel, probPanel, h('section', { class: 'panel' }, unav)] },
+      ],
+    });
+  } else {
+    root.append(h('div', { class: 'wrap' },
+      h('header', { class: 'top' }, h('div', { class: 'logo' }, 'Party', h('b', {}, 'Mix')),
+        pill, topTools),
+      loadRow, status,
+      h('div', { class: 'decks' }, dA.card, mixer, dB.card), syncBar,
+      h('div', { class: 'lower' }, queuePanel, side)));
+  }
 
   let dragFrom = -1;
   /** «Togli» asks once more («Sicuro?») before taking a song out, so a slip of the mouse does not delete it. */
@@ -345,6 +414,30 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     }, sure ? 'Sicuro?' : '✕ Togli');
     return b;
   };
+  /** Phone: a song is one two-line row; tapping it opens a sheet with what can be done with it. */
+  const tagsOf = (r: QueueRowVM) => [r.locked ? 'bloccato' : '', r.bad ? 'non riproducibile' : '', r.lyr === 'synced' ? 'testo a tempo' : r.lyr === 'plain' ? 'testo stimato' : r.lyr === 'none' ? 'senza testo' : ''].filter(Boolean);
+  function songSheet(r: QueueRowVM, i: number, rows: QueueRowVM[]) {
+    const cur = rows.findIndex((x) => x.current);
+    const after = cur < 0 ? 0 : i > cur ? cur + 1 : cur;
+    const items: SheetItem[] = [
+      { label: 'Suona adesso', icon: 'play', disabled: r.bad || r.current, run: () => a.playNow(r.id) },
+      { label: 'Suona dopo quello in onda', icon: 'playNext', disabled: r.current || i === after, run: () => a.move(i, after) },
+      { label: 'Sposta su', icon: 'up', disabled: i === 0, run: () => a.move(i, i - 1) },
+      { label: 'Sposta giù', icon: 'down', disabled: i === rows.length - 1, run: () => a.move(i, i + 1) },
+      { label: r.locked ? 'Sblocca (si può saltare)' : 'Blocca (non si salta)', icon: 'lock', run: () => a.toggleLock(r.id) },
+      { label: r.current ? 'In onda: non si può togliere' : 'Togli dalla playlist', icon: 'del', danger: true, disabled: r.current, run: () => a.removeTrack(r.id) },
+    ];
+    shell?.sheet(r.title, [r.artist, ...tagsOf(r)].filter(Boolean).join(' · '), items);
+  }
+  const mdRow = (r: QueueRowVM, i: number, rows: QueueRowVM[]) => h('div', {
+    class: 'item m-item' + (r.current ? ' cur' : '') + (r.bad ? ' bad' : ''), role: 'button', tabindex: '0',
+    'aria-label': `${i + 1}. ${r.title}${r.artist ? `, ${r.artist}` : ''}${r.current ? ', in onda' : ''}. Tocca per le azioni`,
+    onClick: () => songSheet(r, i, rows),
+    onKeydown: (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); songSheet(r, i, rows); } },
+  },
+    h('span', { class: 'm-lead' }, r.current ? withIcon(h('span'), 'nowPlaying', true) : String(i + 1)),
+    h('span', { class: 'm-text' }, h('span', { class: 't' }, r.title), h('span', { class: 'm-sub' }, [r.current ? 'In onda' : '', r.artist, ...tagsOf(r)].filter(Boolean).join(' · '))),
+    withIcon(h('span', { class: 'm-trail', 'aria-hidden': 'true' }), 'more', true));
   const clearOver = () => queueList.querySelectorAll('.over').forEach((n) => n.classList.remove('over'));
   const memo = new Map<string, string>();
   const replMsg = new Map<string, { ok: boolean; text: string }>();
@@ -353,9 +446,13 @@ export function buildConsole(root: HTMLElement, a: Actions) {
   const paintDeck = (d: ReturnType<typeof mkDeck>, v: DeckVM) => {
     d.role.textContent = ROLE_LABEL[v.role];
     d.role.className = 'role' + (v.role === 'live' || v.role === 'out' ? ' live' : '');
-    d.title.textContent = v.title || '—';
+    // phone: the deck being heard is the big card on top, the other one a small «Poi» card below the controls
+    const big = v.role === 'live' || (v.role === 'idle' && d === (lastVm?.active === 1 ? dB : dA));
+    d.card.classList.toggle('is-live', big);
+    d.title.textContent = v.title || (md ? (v.role === 'idle' ? 'Nessun brano in onda' : '…') : '—');
     d.artist.textContent = v.artist || '';
     d.cover.style.backgroundImage = v.thumb ? `url("${v.thumb.replace(/"/g, '')}")` : '';
+    d.cover.classList.toggle('none', !v.thumb);
     const canSeek = (v.role === 'live' || v.role === 'out') && v.duration > 0;
     d.seek.disabled = !canSeek;
     if (!d.isSeeking()) {
@@ -366,7 +463,7 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     }
     if (document.activeElement !== d.vol) d.vol.value = String(v.volume);
     d.duck.setAttribute('aria-pressed', String(v.duck));
-    d.duck.textContent = v.duck ? 'Volume abbassato: ripristina' : v.autoDuck ? 'Pubblicità: volume abbassato (auto)' : 'Abbassa volume';
+    label(d.duck, v.duck ? 'Volume abbassato: ripristina' : v.autoDuck ? 'Pubblicità: volume abbassato (auto)' : 'Abbassa volume');
   };
 
   function update(vm: ViewModel) {
@@ -374,7 +471,7 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     const ly = vm.lyrics;
     lyStatus.textContent = ly.status;
     lyPrev.textContent = ly.prev; lyNext.textContent = ly.next;
-    if (ly.cur && ly.highlight !== false) paintWords(lyCur, ly.cur, ly.progress, '#ffd23f', '#eef1fb'); else lyCur.textContent = ly.cur || (ly.canShift ? '♪' : '');
+    if (ly.cur && ly.highlight !== false) paintWords(lyCur, ly.cur, ly.progress, md ? 'var(--md-primary)' : '#ffd23f', md ? 'var(--md-on-surface)' : '#eef1fb'); else lyCur.textContent = ly.cur || (ly.canShift ? '♪' : '');
     lyPlain.textContent = ly.plain ?? ''; lyPlain.classList.toggle('hidden', !ly.plain);
     lyBack.disabled = lyForward.disabled = lyFirst.disabled = lyLast.disabled = lyEarly.disabled = lyLate.disabled = lyEarlyFine.disabled = lyLateFine.disabled = !ly.canShift;
     lyOffset.textContent = ly.canShift ? `Spostamento: ${ly.offset > 0 ? '+' : ''}${ly.offset.toFixed(1).replace('.', ',')} s` + (Math.abs(ly.speed - 1) > 0.005 ? ` · velocità ×${ly.speed.toFixed(2).replace('.', ',')}` : '') : '';
@@ -407,6 +504,7 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     adSens.disabled = !ad.available;
     if (document.activeElement !== adSpot) adSpot.value = ad.spotMode ?? 'off';
     (adMeter.firstChild as HTMLElement).style.width = `${Math.round(ad.level * 100)}%`;
+    adListen.classList.toggle('hidden', md && !ad.available);
     adText.textContent = !ad.available ? 'Disponibile solo nell’app installata (non nel browser).'
       : ad.error ? `Non riesco ad ascoltare l’audio: ${ad.error}`
       : !ad.on ? 'Spento.'
@@ -423,21 +521,23 @@ export function buildConsole(root: HTMLElement, a: Actions) {
     const pos = vm.mix > 0 ? (vm.active === 0 ? vm.mix : 1 - vm.mix) : vm.active;
     knob.style.left = `calc(${pos * 100}% - 7px)`;
     mixText.textContent = vm.mix > 0 ? `Transizione in corso ${Math.round(vm.mix * 100)}%` : idle ? 'Automix fermo' : vm.state === 'paused' ? 'In pausa' : vm.state === 'preparing' ? 'Preparo il brano successivo…' : 'In riproduzione';
-    bigBtn.textContent = idle ? '▶ AVVIA AUTOMIX' : '■ FERMA AUTOMIX';
+    if (md) { withIcon(bigBtn, idle ? 'play' : 'stop'); setLabel(bigBtn, idle ? 'Avvia automix' : 'Ferma automix'); } else bigBtn.textContent = idle ? '▶ AVVIA AUTOMIX' : '■ FERMA AUTOMIX';
     bigBtn.className = 'big' + (idle ? '' : ' on');
     bigBtn.onclick = () => (idle ? a.start() : a.stop());
     bigBtn.disabled = !vm.ready;
     nextBtn.disabled = mixBtn.disabled = pauseBtn.disabled = idle;
-    pauseBtn.textContent = vm.state === 'paused' ? 'Riprendi' : 'Pausa';
+    if (md) withIcon(pauseBtn, vm.state === 'paused' ? 'play' : 'pause');
+    label(pauseBtn, vm.state === 'paused' ? 'Riprendi' : 'Pausa');
     if (document.activeElement !== master) master.value = String(vm.master);
     segBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(PROFILES[i].id === vm.profile)));
     shuffleBtn.setAttribute('aria-pressed', String(vm.shuffle));
     const nextRepeat = { off: 'all', all: 'one', one: 'off' }[vm.repeat] as 'off' | 'all' | 'one';
     repeatBtn.dataset.next = nextRepeat;
-    repeatBtn.textContent = { off: 'Ripeti: no', all: 'Ripeti: tutta la playlist', one: 'Ripeti: questo brano' }[vm.repeat];
+    label(repeatBtn, { off: 'Ripeti: no', all: 'Ripeti: tutta la playlist', one: 'Ripeti: questo brano' }[vm.repeat]);
+    repeatBtn.setAttribute('aria-pressed', String(vm.repeat !== 'off'));
 
     once('queue', JSON.stringify(vm.queue), () => {
-      queueList.replaceChildren(...vm.queue.map((r, i) => h('div', {
+      queueList.replaceChildren(...vm.queue.map((r, i) => md ? mdRow(r, i, vm.queue) : h('div', {
         class: 'item' + (r.current ? ' cur' : '') + (r.bad ? ' bad' : ''),
         draggable: 'true',
         title: 'Doppio clic: suona subito questo brano. Trascina per cambiare ordine.',
@@ -489,9 +589,10 @@ export function buildConsole(root: HTMLElement, a: Actions) {
   function setAutoRefreshValue(min: number) { refreshSel.value = String(min); }
   function setSensitivity(v: number) { sens.value = String(v); }
 
-  function setSource(name: string) { pill.textContent = `Sorgente: ${name}`; pill.className = 'pill ' + (name.startsWith('Spotify') ? 'sp' : 'yt'); }
+  function setSource(name: string) { pill.textContent = md ? name : `Sorgente: ${name}`; pill.className = 'pill ' + (name.startsWith('Spotify') ? 'sp' : 'yt'); }
 
   function setStatus(msg: string, error = false) {
+    if (md && msg && msg !== status.textContent) shell?.toast(msg, error);
     status.textContent = msg;
     status.className = 'status' + (error ? ' error' : '');
     statusListeners.forEach((fn) => fn(msg, error));
