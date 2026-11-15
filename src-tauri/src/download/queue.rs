@@ -69,31 +69,56 @@ impl Manager {
     /// POST /api/download: creates a job and returns at once; the download runs in the background.
     /// The same content already downloaded (file still there) is not downloaded again: the earlier job comes back with `already`.
     pub fn create(&self, req: Request) -> Result<Job, ApiError> {
-        let url = validate_url(&req.url)?;
-        let mut req = req;
-        req.url = url.to_string();
-        super::downloader::build_args(&req, &self.inner.dirs, "check", Some(std::path::Path::new("ffmpeg")))?; // format and quality are valid
-        let key = key_of(&req);
-        let job = {
+        self.create_many(vec![req]).pop().unwrap_or_else(|| Err(ApiError::new(ErrorCode::Unknown, "Download non creato.")))
+    }
+
+    /// Many downloads at once («Scarica tutta la playlist»): one result per request, in the same order.
+    /// The list is saved once and the queue started once, whatever the number (thousands of songs stay quick).
+    pub fn create_many(&self, reqs: Vec<Request>) -> Vec<Result<Job, ApiError>> {
+        let mut out = Vec::with_capacity(reqs.len());
+        let mut fresh = Vec::new();
+        {
             let mut st = self.inner.state.lock().unwrap();
-            if let Some(j) = st.jobs.iter().find(|j| key_of(&j.request) == key && !matches!(j.status, Status::Failed | Status::Cancelled)) {
-                let file_ok = j.meta.as_ref().map(|m| self.inner.dirs.root.join(&m.local_filename).is_file()).unwrap_or(false);
-                if j.status != Status::Completed || file_ok {
-                    let mut out = j.clone();
-                    out.already = j.status == Status::Completed;
-                    return Ok(out);
-                }
+            let mut index: HashMap<String, usize> = HashMap::new();
+            for (i, j) in st.jobs.iter().enumerate() {
+                if !matches!(j.status, Status::Failed | Status::Cancelled) { index.insert(key_of(&j.request), i); }
             }
-            let t = now_ms();
-            let job = Job { id: new_id(), request: req, status: Status::Queued, progress: 0.0, speed: None, eta: None, downloaded_bytes: 0, total_bytes: None,
-                filename: None, error_code: None, message: None, meta: None, created_at: t, updated_at: t, already: false };
-            st.jobs.push(job.clone());
-            job
-        };
-        self.save();
-        (self.inner.notify)(&job);
-        pump(&self.inner);
-        Ok(self.get(&job.id).unwrap_or(job))
+            for req in reqs {
+                let prepared = (|| {
+                    let url = validate_url(&req.url)?;
+                    let mut r = req.clone();
+                    r.url = url.to_string();
+                    super::downloader::build_args(&r, &self.inner.dirs, "check", Some(std::path::Path::new("ffmpeg")))?; // format and quality are valid
+                    Ok::<_, ApiError>(r)
+                })();
+                let r = match prepared { Ok(r) => r, Err(e) => { out.push(Err(e)); continue; } };
+                let key = key_of(&r);
+                if let Some(&i) = index.get(&key) {
+                    let j = &st.jobs[i];
+                    let file_ok = j.meta.as_ref().map(|m| self.inner.dirs.root.join(&m.local_filename).is_file()).unwrap_or(false);
+                    if j.status != Status::Completed || file_ok {
+                        let mut o = j.clone();
+                        o.already = j.status == Status::Completed;
+                        out.push(Ok(o));
+                        continue;
+                    }
+                }
+                let t = now_ms();
+                let job = Job { id: new_id(), request: r, status: Status::Queued, progress: 0.0, speed: None, eta: None, downloaded_bytes: 0, total_bytes: None,
+                    filename: None, error_code: None, message: None, meta: None, created_at: t, updated_at: t, already: false };
+                st.jobs.push(job.clone());
+                index.insert(key, st.jobs.len() - 1);
+                fresh.push(job.clone());
+                out.push(Ok(job));
+            }
+        }
+        if !fresh.is_empty() {
+            self.save();
+            for j in &fresh { (self.inner.notify)(j); }
+            pump(&self.inner);
+        }
+        // the first ones may have started already: give back their current state
+        out.into_iter().map(|r| r.map(|j| { let already = j.already; let mut cur = self.get(&j.id).unwrap_or(j); cur.already = already; cur })).collect()
     }
 
     /// GET /api/downloads
@@ -406,6 +431,31 @@ mod tests {
         assert_eq!(m.create(Request { url: "http://192.168.1.1/x".into(), ..req(1) }).unwrap_err().error_code, ErrorCode::InvalidUrl);
         assert_eq!(m.create(Request { quality: "8k".into(), ..req(1) }).unwrap_err().error_code, ErrorCode::UnsupportedFormat);
         assert!(m.list().is_empty());
+    }
+
+    #[test]
+    fn a_whole_playlist_at_once_respects_the_limit_and_skips_what_is_there() {
+        let fake = Fake::new();
+        let d = dir();
+        let (m, seen) = mk(&fake, false, &d);
+        let first = m.create(req(0)).unwrap();
+        let mut reqs: Vec<Request> = (0..300).map(req).collect();
+        reqs.push(Request { url: "file:///etc/passwd".into(), ..req(1) });
+        let t = std::time::Instant::now();
+        let r = m.create_many(reqs);
+        assert!(t.elapsed() < Duration::from_secs(2), "300 songs must be quick");
+        assert_eq!(r.len(), 301);
+        assert_eq!(r[0].as_ref().unwrap().id, first.id); // already in the queue: the same job
+        assert_eq!(r[300].as_ref().unwrap_err().error_code, ErrorCode::InvalidUrl);
+        assert_eq!(m.list().len(), 300);
+        std::thread::sleep(Duration::from_millis(50));
+        assert_eq!(m.list().iter().filter(|j| j.status == Status::Downloading).count(), 2);
+        assert!(seen.lock().unwrap().len() >= 300);
+        fake.go.store(true, Ordering::SeqCst);
+        for j in m.list() { wait(&m, &j.id, Status::Completed); }
+        let again = m.create_many((0..300).map(req).collect());
+        assert!(again.iter().all(|x| x.as_ref().unwrap().already));
+        let _ = std::fs::remove_dir_all(&d.root);
     }
 
     #[test]

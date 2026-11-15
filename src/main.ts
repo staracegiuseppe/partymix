@@ -34,6 +34,8 @@ import { readPlaylistApi, searchYouTube } from './ytSearch';
 import { tauriDownloadClient } from './download/client';
 import { DownloadCoordinator } from './download/manager';
 import { listen } from '@tauri-apps/api/event';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { followSystemTheme } from './ui/systemTheme';
 import { listInputs } from './projector/mic';
 import { createYouTubeDeck } from './youtubeDeck';
 
@@ -78,7 +80,7 @@ const desktopUI = !materialUI() && !isIOSApp() && !isAndroidApp();
 const plStore = new PlaylistStore(kv);
 const library = new MusicLibrary({
   kv,
-  blobs: desktopUI && tauriInvoke ? new NativeBlobStore((c, a, o) => tauriInvoke(c, a, o)) : new KvBlobStore(kv),
+  blobs: desktopUI && tauriInvoke ? new NativeBlobStore((c, a, o) => tauriInvoke(c, a, o), convertFileSrc) : new KvBlobStore(kv),
   probe: (b) => probeWithAudio(b),
 });
 window.addEventListener('pagehide', () => void plStore.flush().catch(() => {}));
@@ -199,7 +201,8 @@ function rememberLink(text: string, source: 'YouTube' | 'Spotify', ownName?: str
 function openSaved(id: string | undefined): boolean {
   const p = plStore.get(id);
   if (!p || !p.tracks.length) return false;
-  setQueue(p.tracks.map((t) => ({ ...t })));
+  // «non riproducibile» is decided again at every opening (a mark saved by mistake must not hide a song forever)
+  setQueue(p.tracks.map((t) => ({ ...t, status: 'ok' as const })));
   startKaraoke();
   const src = p.source === 'Spotify' ? 'Spotify' : 'YouTube';
   ui.setSource(p.source === 'Locale' ? 'Libreria' : src);
@@ -515,6 +518,7 @@ const ui: ReturnType<typeof buildConsole> & { selectById(id: string): void } = O
     if (t && am && t.status !== 'unplayable') am.playNow(t.videoId);
   },
 }, { hasMusic: !!settings.currentPlaylistId, desktop: desktopPages }), { selectById: selectPlaylist });
+if (desktopUI) followSystemTheme(tauriInvoke ? (c, args) => tauriInvoke(c, args) : undefined);
 ui.setSensitivity(settings.micSensitivity);
 ui.setProjectorMode(settings.projectorMode);
 if (canCast()) window.setInterval(() => ui.setProjectorInfo(castMessage(castState())), 1000);

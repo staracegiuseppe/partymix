@@ -8,7 +8,7 @@ import type { DownloadCoordinator } from '../download/manager';
 import { youtubeUrl } from '../download/client';
 import { fmtTime, h } from './dom';
 import { buildSongList, SongVM } from './songList';
-import { buildDownloadsUI } from './downloadsUI';
+import { buildDownloadsUI, DlPrefs, loadPrefs, storePrefs } from './downloadsUI';
 import type { SheetItem } from './material';
 
 /** What the computer's pages need from the app. */
@@ -147,8 +147,50 @@ export function buildDesktopPages(d: PagesDeps) {
   const canDownload = (id: string) => !id.startsWith('local:') && !!d.downloads?.available();
   /** ⬇ on a song: the Download Manager for a YouTube song, else the user's own audio file. */
   function offline(id: string) {
-    if (canDownload(id)) { void d.downloads!.download(dl ? dl.request(youtubeUrl(id)) : { url: youtubeUrl(id), type: 'audio', format: 'mp3', quality: 'best' }); return; }
+    if (canDownload(id)) {
+      const t = trackOf(id);
+      chooseFormat(t?.title ? `«${t.title}»` : 'il brano', 1, (c) => void d.downloads!.download({ url: youtubeUrl(id), type: c.type, format: c.format, quality: c.quality }));
+      return;
+    }
     pickOneFor = id; pickOne.click();
+  }
+
+  /** MP3 or MP4? Asked before every download; the last choice comes first. Video keeps the pictures (lyrics and karaoke versions). */
+  const CHOICES: (DlPrefs & { label: string })[] = [
+    { type: 'audio', format: 'mp3', quality: 'best', label: '🎵 Audio MP3 — solo la musica, file piccoli' },
+    { type: 'video', format: 'mp4', quality: 'best', label: '🎬 Video MP4 — con le immagini: per versioni lyrics e karaoke' },
+    { type: 'video', format: 'mp4', quality: '720', label: '🎬 Video MP4 720p — con le immagini, file più leggeri' },
+  ];
+  function chooseFormat(what: string, n: number, go: (c: DlPrefs) => void) {
+    const last = loadPrefs(d.store);
+    const same = (c: DlPrefs) => c.type === last.type && c.format === last.format && c.quality === last.quality;
+    const sorted = [...CHOICES.filter(same), ...CHOICES.filter((c) => !same(c))];
+    d.menu(`Scarica ${what}`, `${n === 1 ? '1 brano' : `${n.toLocaleString('it-IT')} brani`} · scegli il formato`, sorted.map((c) => ({
+      label: c.label + (same(c) ? ' · ultima scelta' : ''), icon: c.type === 'audio' ? 'nowPlaying' : 'cast',
+      run: () => { const p = { type: c.type, format: c.format, quality: c.quality }; storePrefs(d.store, p); dl?.setPrefs(p); go(p); },
+    })));
+  }
+  /** Downloads many songs (a playlist, a selection) with one choice of format and one request to the app. */
+  function downloadTracks(ids: string[], what: string) {
+    if (!d.downloads?.available()) { d.status('Il download funziona nell’app installata sul computer, con yt-dlp.', true); return; }
+    const todo = ids.filter((id) => !id.startsWith('local:'));
+    const local = ids.length - todo.length;
+    if (!todo.length) { d.status(local ? 'Questi brani sono già file sul computer.' : 'Niente da scaricare.'); return; }
+    chooseFormat(what, todo.length, (c) => void d.downloads!.downloadMany(todo.map((id) => ({ url: youtubeUrl(id), type: c.type, format: c.format, quality: c.quality })), what));
+  }
+
+  /** «☑ Seleziona»: a bar with the count and what can be done with the songs ticked. */
+  function selectionBar(sl: ReturnType<typeof buildSongList>, what: () => string) {
+    const count = h('span', { class: 'sel-count' });
+    const dlSel = btn('⬇ Scarica selezionati', 'm-filled', () => downloadTracks(sl.selected(), `${sl.selected().length} brani selezionati di ${what()}`));
+    const addSel = btn('＋ Aggiungi a playlist', 'm-tonal', () => { const ids = sl.selected(); if (ids.length) pickPlaylist(ids); });
+    const bar = h('div', { class: 'selbar hidden', role: 'toolbar', 'aria-label': 'Brani selezionati' }, count,
+      btn('Seleziona tutti', 'm-text-btn', () => sl.selectAll()), btn('Nessuno', 'm-text-btn', () => sl.selectNone()),
+      h('span', { class: 'm-spacer' }), d.downloads ? dlSel : null, addSel, btn('✕ Fine', 'm-text-btn', () => toggle(false)));
+    const toggleBtn = btn('☑ Seleziona', 'm-tonal', () => toggle(!sl.isSelecting()), { title: 'Scegli più brani da scaricare o aggiungere a una playlist' });
+    function toggle(on: boolean) { sl.setSelecting(on); bar.classList.toggle('hidden', !on); toggleBtn.classList.toggle('on', on); paint([]); }
+    function paint(ids: string[]) { count.textContent = `${ids.length} ${ids.length === 1 ? 'selezionato' : 'selezionati'}`; dlSel.disabled = addSel.disabled = !ids.length; }
+    return { bar, toggleBtn, paint, toggle };
   }
   /** ⋮ on a song: the actions that make sense for it, in its state (Material menu). */
   function songMenu(t: Track, extra: { inPlaylist?: string } = {}) {
@@ -297,7 +339,10 @@ export function buildDesktopPages(d: PagesDeps) {
   const dtBack = btn('← Tutte le playlist', 'm-text-btn', () => closeDetail());
   const dtPlay = btn('▶ Suona', 'm-filled', () => detailId && d.playPlaylist(detailId));
   const dtMore = btn('⋮', 'icon-btn', () => detailId && playlistMenu(detailId), { title: 'Altre azioni', 'aria-label': 'Altre azioni sulla playlist' });
-  const dtHead = pageHeader('', dtPlay, dtMore);
+  const dtAll = btn('⬇ Scarica tutta la playlist', 'm-tonal', () => { const p = d.playlists.get(detailId); if (p) downloadTracks(p.tracks.map((t) => t.videoId), `la playlist «${p.name}»`); },
+    { title: 'Scarica tutti i brani della playlist (scegli MP3 o MP4): diventano la tua discografia offline' });
+  let dtSel: ReturnType<typeof selectionBar> | undefined;
+  const dtHead = pageHeader('', dtPlay, d.downloads ? dtAll : null, h('span', { class: 'sel-slot' }), dtMore);
   const dtLink = h('input', { type: 'url', class: 'pg-input', placeholder: 'Link di una playlist YouTube o Spotify', 'aria-label': 'Link della playlist YouTube o Spotify' });
   const dtLoad = btn('Carica', 'm-tonal', () => { if (detailId && dtLink.value.trim()) d.loadLink(detailId, dtLink.value.trim()); }, { title: 'Legge (o rilegge da capo) la playlist da YouTube o Spotify' });
   dtLink.addEventListener('keydown', (e) => { if (e.key === 'Enter') dtLoad.click(); });
@@ -311,15 +356,18 @@ export function buildDesktopPages(d: PagesDeps) {
     reorder: (from, to) => { if (detailId && d.playlists.moveTrack(detailId, from, to)) d.edited(detailId); },
     onPlay: (r) => detailId && d.playPlaylist(detailId, r.id),
     onMore: (r) => { const t = trackOf(r.id); if (t) songMenu(t, { inPlaylist: detailId }); },
+    onSelectionChange: (ids) => dtSel?.paint(ids),
     endLabel: 'Fine playlist',
     endNote: () => 'Per ricominciare dal primo brano a fine playlist attiva «Ripeti: tutta la playlist» nel Player.',
     empty: dtEmpty,
     dragToPlaylists: true,
   });
-  const detail = h('div', { class: 'pl-detail hidden' }, dtBack, dtHead.el, dtSource, cols('g3', '#', 'Titolo · Artista', 'Durata', 'Stato'), dtList.el);
+  dtSel = selectionBar(dtList, () => `«${d.playlists.get(detailId)?.name ?? 'playlist'}»`);
+  dtHead.el.querySelector('.sel-slot')!.replaceWith(dtSel.toggleBtn);
+  const detail = h('div', { class: 'pl-detail hidden' }, dtBack, dtHead.el, dtSource, dtSel.bar, cols('g3', '#', 'Titolo · Artista', 'Durata', 'Stato'), dtList.el);
   const listView = h('div', { class: 'pl-listview' }, plHead.el, h('div', { class: 'pg-toolbar' }, plSearch, plSort), plList, plEmpty);
   let lastDetailSig = '';
-  function openDetail(id: string) { detailId = id; lastDetailSig = ''; listView.classList.add('hidden'); detail.classList.remove('hidden'); paintDetail(true, true); d.go('playlists'); }
+  function openDetail(id: string) { if (detailId !== id) dtSel?.toggle(false); detailId = id; lastDetailSig = ''; listView.classList.add('hidden'); detail.classList.remove('hidden'); paintDetail(true, true); d.go('playlists'); }
   function closeDetail() { detailId = undefined; detail.classList.add('hidden'); listView.classList.remove('hidden'); paintPlaylists(true); }
   function paintDetail(force = false, start = false) {
     const p = d.playlists.get(detailId);
@@ -362,6 +410,7 @@ export function buildDesktopPages(d: PagesDeps) {
   const hitTrack = (x: SearchHit): Track => ({ videoId: x.videoId, title: x.title, artist: x.channel.replace(/ - Topic$/, ''), durationSec: x.seconds || undefined, thumb: x.thumb, status: 'ok', manual: true });
   const sList = buildSongList({
     label: 'Risultati della ricerca', cover: true, head: false, endLabel: 'Fine dei risultati', empty: sEmpty, dragToPlaylists: true,
+    onSelectionChange: (ids) => sSel?.paint(ids),
     onPlay: (r) => { const t = trackOf(r.id); if (t) d.playTrack(t); },
     onMore: (r) => { const t = trackOf(r.id); if (!t) return; songMenu(t); },
   });
@@ -408,12 +457,15 @@ export function buildDesktopPages(d: PagesDeps) {
     sList.set(rows, sameQuery ? 'keep' : 'start');
     sMore.classList.toggle('hidden', src !== 'youtube' || !searchRes?.next || searching);
   }
-  const searchHead = pageHeader('Cerca');
+  // eslint-disable-next-line prefer-const
+  let sSel: ReturnType<typeof selectionBar> | undefined;
+  sSel = selectionBar(sList, () => `«${searchQ}»`);
+  const searchHead = pageHeader('Cerca', sSel.toggleBtn);
   const sCols = cols('g2', '#', 'Titolo · Canale', 'Durata', 'Stato');
   paintTabs();
   const searchPage = h('div', { class: 'pg pg-search' }, searchHead.el,
     h('div', { class: 'pg-card search-card' }, h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Dove cercare' }, ...tabs), h('div', { class: 'pg-row' }, sInput, sGo)),
-    sInfo, sCols, sList.el, sMore);
+    sInfo, sSel.bar, sCols, sList.el, sMore);
 
   // =====================================================================================
   // 🎧 LIBRERIA

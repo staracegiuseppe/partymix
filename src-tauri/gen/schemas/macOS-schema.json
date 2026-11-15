@@ -219,6 +219,12 @@
           "markdownDescription": "Enables the dl_create command without any pre-configured scope."
         },
         {
+          "description": "Enables the dl_create_many command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dl-create-many",
+          "markdownDescription": "Enables the dl_create_many command without any pre-configured scope."
+        },
+        {
           "description": "Enables the dl_get command without any pre-configured scope.",
           "type": "string",
           "const": "allow-dl-get",
@@ -261,6 +267,12 @@
           "markdownDescription": "Enables the lib_read command without any pre-configured scope."
         },
         {
+          "description": "Enables the lib_root command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-lib-root",
+          "markdownDescription": "Enables the lib_root command without any pre-configured scope."
+        },
+        {
           "description": "Enables the lib_write command without any pre-configured scope.",
           "type": "string",
           "const": "allow-lib-write",
@@ -295,6 +307,12 @@
           "type": "string",
           "const": "allow-stop-audio-capture",
           "markdownDescription": "Enables the stop_audio_capture command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the system_accent command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-system-accent",
+          "markdownDescription": "Enables the system_accent command without any pre-configured scope."
         },
         {
           "description": "Denies the ad_debug_log command without any pre-configured scope.",
@@ -339,6 +357,12 @@
           "markdownDescription": "Denies the dl_create command without any pre-configured scope."
         },
         {
+          "description": "Denies the dl_create_many command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dl-create-many",
+          "markdownDescription": "Denies the dl_create_many command without any pre-configured scope."
+        },
+        {
           "description": "Denies the dl_get command without any pre-configured scope.",
           "type": "string",
           "const": "deny-dl-get",
@@ -381,6 +405,12 @@
           "markdownDescription": "Denies the lib_read command without any pre-configured scope."
         },
         {
+          "description": "Denies the lib_root command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-lib-root",
+          "markdownDescription": "Denies the lib_root command without any pre-configured scope."
+        },
+        {
           "description": "Denies the lib_write command without any pre-configured scope.",
           "type": "string",
           "const": "deny-lib-write",
@@ -415,6 +445,12 @@
           "type": "string",
           "const": "deny-stop-audio-capture",
           "markdownDescription": "Denies the stop_audio_capture command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the system_accent command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-system-accent",
+          "markdownDescription": "Denies the system_accent command without any pre-configured scope."
         },
         {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",

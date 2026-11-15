@@ -176,9 +176,6 @@ body.md.desk { --nav-w: 280px; --pg-max: 1280px; --row-h: 56px; overscroll-behav
 .desk .player-col { display: grid; gap: 12px; }
 @media (max-width: 1199px) { .desk .player-grid { grid-template-columns: minmax(0, 1fr); } .desk .player-col { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); } }
 .desk .player-col .deck { background: var(--md-surface-low); border-radius: 12px; }
-.desk .mixer .transport { display: flex; gap: 8px; justify-content: center; }
-.desk .mixer .transport button { width: 56px; height: 56px; border-radius: 28px; font-size: 20px; padding: 0; }
-.desk .mixer .btns { display: grid; gap: 8px; justify-items: center; }
 .desk .queue-panel { display: grid; gap: 12px; }
 .desk .qp-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .desk .qp-title { font: 400 22px/28px Roboto, system-ui, sans-serif; margin: 0; }
@@ -209,4 +206,166 @@ body.md.desk { --nav-w: 280px; --pg-max: 1280px; --row-h: 56px; overscroll-behav
   .desk .song, .desk .songlist.with-cover .song { grid-template-columns: 32px minmax(0, 1fr) 48px 40px 40px; }
   .desk .songlist.with-cover .song .cover { display: none; }
   .desk .sl-cols { display: none; }
+}
+
+/* Info e dona */
+.desk .about-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
+.desk .about-card, .desk .donate-card { display: grid; gap: 12px; justify-items: start; }
+.desk .donate-card { justify-items: center; text-align: center; }
+.desk .about-logo { font: 700 40px/48px Roboto, 'Google Sans', system-ui, sans-serif; }
+.desk .about-logo b { color: var(--md-primary); }
+.desk .credit-name { font: 500 22px/28px Roboto, system-ui, sans-serif; }
+.desk .paypal-qr { width: 260px; height: 260px; border-radius: 16px; background: #fff; padding: 12px; box-sizing: content-box; }
+.desk .about-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.desk .heart-btn { color: var(--md-primary) !important; }
+
+/* Selection («☑ Seleziona») */
+.desk .selbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-radius: 12px; background: var(--md-secondary-container); color: var(--md-on-secondary-container); position: sticky; top: 72px; z-index: 5; }
+.desk .selbar.hidden { display: none; }
+.desk .sel-count { font: 500 14px/20px Roboto, system-ui, sans-serif; margin-right: 8px; }
+.desk .songlist.selecting .song { cursor: pointer; }
+.desk .song.sel { background: color-mix(in srgb, var(--md-primary) 14%, transparent); }
+.desk .songlist.selecting .song .lead { font-size: 18px; text-align: center; color: var(--md-primary); }
+.desk .pg button.on, .desk .selbar button.on { box-shadow: inset 0 0 0 2px var(--md-primary); }
+
+/* ===================== Spacing system (8 px grid) and the player — refined ===================== */
+body.md.desk { --nav-w: 256px; --pad: 20px; }
+@media (max-width: 1199px) { body.md.desk { --nav-w: 88px; } }
+.desk .m-main { padding: 96px 40px 56px; }
+.desk .m-screen { gap: 24px; }
+.desk .panel { padding: var(--pad); border-radius: 16px; }
+.desk .pg-head { padding: 0; }
+.desk .pg { gap: 20px; }
+.desk .m-nav { padding: 16px 12px; gap: 2px; }
+.desk .m-appbar { padding-left: 24px; }
+
+/* Player page: now-playing column + play queue */
+.desk .player-grid { grid-template-columns: minmax(360px, 400px) minmax(0, 1fr); gap: 24px; }
+.desk .player-col { gap: 16px; }
+.desk .deck { display: grid; gap: 8px; border-top: 0; }
+.desk .deck h2 { margin: 0; font: 500 12px/16px Roboto, system-ui, sans-serif; letter-spacing: .5px; text-transform: uppercase; color: var(--md-on-surface-variant); align-items: center; }
+.desk .deck .role { font-size: 11px; letter-spacing: .5px; padding: 2px 8px; border-radius: 8px; background: var(--md-surface-highest); color: var(--md-on-surface-variant); }
+.desk .deck .role.live { background: var(--md-primary); color: var(--md-on-primary); }
+.desk .deck .meta { display: flex; gap: 12px; align-items: center; min-height: 48px; }
+.desk .deck .title { font: 500 16px/24px Roboto, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desk .deck .times { display: flex; justify-content: space-between; font-size: 12px; color: var(--md-on-surface-variant); font-variant-numeric: tabular-nums; }
+.desk .deck .row { margin: 0; gap: 12px; }
+.desk .deck .row label { min-width: auto; font-size: 13px; }
+
+.desk .mixer.np { display: grid; gap: 20px; padding: 24px 20px; }
+.desk .np-status { text-align: center; }
+.desk .np-status .artist { font-size: 14px; }
+.desk .np-xf .xlabels { font: 500 11px/16px Roboto, system-ui, sans-serif; letter-spacing: .5px; margin-bottom: 8px; color: var(--md-on-surface-variant); }
+.desk .np-xf .xfade { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--md-primary), var(--md-tertiary)); opacity: 1; }
+.desk .np-xf .xfade i { top: -7px; width: 20px; height: 20px; margin-left: -10px; border-radius: 50%; background: var(--md-on-surface); box-shadow: 0 1px 4px rgb(0 0 0 / .4); }
+.desk .transport { display: flex; align-items: center; justify-content: center; gap: 24px; }
+.desk button.tp { flex: none; padding: 0; border-radius: 50%; transition: border-radius .2s, background .15s, transform .1s; }
+.desk button.tp .m-icon { width: 28px; height: 28px; }
+.desk button.tp-side { width: 56px; height: 56px; min-height: 56px; background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.desk button.tp-main { width: 80px; height: 80px; min-height: 80px; background: var(--md-primary); color: var(--md-on-primary); box-shadow: 0 2px 8px rgb(0 0 0 / .3); }
+.desk button.tp-main .m-icon { width: 40px; height: 40px; }
+.desk button.tp-main.playing { border-radius: 24px; } /* MD3 shape change while playing */
+.desk button.tp:disabled { opacity: .38; box-shadow: none; }
+.desk .np-actions { display: flex; justify-content: center; gap: 12px; }
+.desk .np-btn { min-width: 136px; height: 40px; }
+.desk button.m-outlined { background: transparent; color: var(--md-primary); box-shadow: inset 0 0 0 1px var(--md-outline); }
+.desk .np-vol { display: flex; align-items: center; gap: 12px; color: var(--md-on-surface-variant); }
+.desk .np-vol input[type=range] { flex: 1; width: auto; min-width: 0; }
+.desk .np-vol .np-vol-ic { display: grid; }
+.desk .np-trans { display: grid; gap: 8px; }
+.desk .np-label { font: 500 12px/16px Roboto, system-ui, sans-serif; letter-spacing: .5px; text-transform: uppercase; color: var(--md-on-surface-variant); }
+.desk .np-trans .seg { width: 100%; display: flex; }
+.desk .np-trans .seg button { flex: 1 1 0; min-height: 40px; font-size: 13px; }
+
+/* Play queue header: filter-chip style toggles */
+.desk .queue-panel { gap: 16px; }
+.desk .queue-panel .opts { gap: 8px; }
+.desk .queue-panel .opts button { height: 32px; min-height: 32px; padding: 0 12px; border-radius: 8px; font-size: 13px; background: transparent; color: var(--md-on-surface-variant); box-shadow: inset 0 0 0 1px var(--md-outline); }
+.desk .queue-panel .opts button[aria-pressed=true] { background: var(--md-secondary-container); color: var(--md-on-secondary-container); box-shadow: none; }
+.desk .queue-panel .songlist { height: calc(100vh - 290px); min-height: 360px; }
+
+/* Lists and cards breathe a little more */
+.desk .songlist { border-radius: 16px; }
+.desk .pl-grid { gap: 16px; }
+.desk .pl-card { padding: 16px; border-radius: 16px; }
+.desk .settings-grid, .desk .about-grid { gap: 24px; }
+.desk .pg-card { padding: 20px; border-radius: 16px; gap: 16px; }
+.desk .empty-state { padding: 56px 24px; border-radius: 16px; }
+
+/* Impostazioni: Aiuto on top, then cards in columns (no holes between cards of different heights) */
+.desk .settings-page { display: grid; gap: 24px; }
+.desk .help-card { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.desk .help-card h3 { margin: 0 0 4px; }
+.desk .help-text { min-width: 240px; flex: 1 1 280px; }
+.desk .help-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.desk .settings-grid { display: block; columns: 2 380px; column-gap: 24px; }
+.desk .settings-grid > .panel { break-inside: avoid; margin: 0 0 24px; display: grid; gap: 12px; }
+.desk .settings-grid .panel h3 { margin: 0; }
+.desk .settings-grid .row { margin: 0; }
+.desk .settings-grid .row select { flex: 1; }
+
+/* ===================== More room for the song titles ===================== */
+body.md.desk { --nav-w: 216px; }
+@media (max-width: 1439px) { body.md.desk { --nav-w: 88px; } } /* rail: icons with a small label */
+@media (max-width: 1439px) {
+  .desk .m-nav { padding: 12px 0; align-items: center; }
+  .desk .m-nav-item { flex-direction: column; gap: 4px; height: auto; padding: 6px 0; width: 80px; border-radius: 0; background: none !important; }
+  .desk .m-nav-item .m-ind { width: 56px; height: 32px; border-radius: 16px; display: grid; place-items: center; }
+  .desk .m-nav-item.on .m-ind { background: var(--md-secondary-container) !important; }
+  .desk .m-nav-item .m-nav-label { font-size: 12px; line-height: 16px; text-align: center; }
+  .desk .m-nav-item:hover .m-ind { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent) !important; }
+}
+.desk .m-nav-item { padding: 0 12px; gap: 12px; }
+.desk .m-main { padding: 88px 28px 40px; }
+.desk .m-screen { max-width: 1600px; }
+
+/* Player: a compact now-playing column, the rest to the play queue */
+.desk .player-grid { grid-template-columns: minmax(280px, 320px) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 1023px) { .desk .player-grid { grid-template-columns: minmax(0, 1fr); } }
+.desk .mixer.np { gap: 16px; padding: 20px 16px; }
+.desk .transport { gap: 16px; }
+.desk .np-btn { min-width: 0; flex: 1; }
+.desk .deck { padding: 16px; }
+.desk .queue-panel { padding: 16px 12px; }
+.desk .queue-panel .qp-head { padding: 0 8px; }
+
+/* Queue rows: state as icon only (word in the tooltip), smaller numbers, the title gets the width */
+.desk .queue-panel .song { grid-template-columns: 16px 36px minmax(0, 1fr) 44px 28px 36px 36px; gap: 6px; padding: 0 4px 0 6px; }
+.desk .queue-panel .song .st { padding: 0; justify-self: center; font-size: 14px; background: none !important; }
+.desk .queue-panel .song .st .st-w { display: none; }
+.desk .queue-panel .song .t { font-size: 15px; }
+.desk .queue-panel .song .s { font-size: 13px; }
+.desk .queue-panel .song .tag { display: none; }
+.desk .queue-panel .song .tag.on { display: inline; }
+.desk .queue-panel .song button.icon-btn { width: 36px; min-width: 36px; height: 36px; }
+.desk .queue-panel .song .lead { font-size: 13px; }
+@media (max-width: 1439px) {
+  .desk .m-nav { gap: 12px; padding: 16px 0; overflow-x: hidden; }
+  .desk .m-nav-item { padding: 0; min-height: 56px; justify-content: center; }
+}
+
+/* ===================== Navigation (final): Material 3 drawer ≥ 1440 px, rail below ===================== */
+body.md.desk .m-nav { background: var(--md-surface-low); border-right: 0; }
+body.md.desk .m-nav .m-nav-item { box-shadow: none !important; outline: none; background: none; color: var(--md-on-surface-variant); }
+body.md.desk .m-nav .m-nav-item .m-icon { width: 24px; height: 24px; }
+body.md.desk .m-nav .m-nav-item.on { color: var(--md-on-secondary-container); }
+/* drawer */
+@media (min-width: 1440px) {
+  body.md.desk .m-nav { padding: 12px; gap: 4px; }
+  body.md.desk .m-nav .m-nav-item { flex-direction: row; height: 56px; width: auto; padding: 0 16px; gap: 12px; border-radius: 28px; }
+  body.md.desk .m-nav .m-nav-item .m-ind { width: auto; height: auto; background: none !important; }
+  body.md.desk .m-nav .m-nav-item:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
+  body.md.desk .m-nav .m-nav-item.on { background: var(--md-secondary-container); }
+  body.md.desk .m-nav .m-nav-item:focus-visible { box-shadow: inset 0 0 0 2px var(--md-primary) !important; }
+}
+/* rail */
+@media (max-width: 1439px) {
+  body.md.desk .m-nav { padding: 12px 0; gap: 4px; align-items: center; }
+  body.md.desk .m-nav .m-nav-item { flex-direction: column; justify-content: center; width: 88px; min-height: 64px; height: auto; padding: 4px 0; gap: 4px; border-radius: 0; background: none !important; }
+  body.md.desk .m-nav .m-nav-item .m-ind { width: 56px; height: 32px; border-radius: 16px; display: grid; place-items: center; background: transparent !important; transition: background .15s; }
+  body.md.desk .m-nav .m-nav-item:hover .m-ind { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent) !important; }
+  body.md.desk .m-nav .m-nav-item.on .m-ind { background: var(--md-secondary-container) !important; }
+  body.md.desk .m-nav .m-nav-item .m-nav-label { font: 500 12px/16px Roboto, system-ui, sans-serif; letter-spacing: .5px; }
+  body.md.desk .m-nav .m-nav-item.on .m-nav-label { font-weight: 700; color: var(--md-on-surface); }
+  body.md.desk .m-nav .m-nav-item:focus-visible .m-ind { box-shadow: 0 0 0 2px var(--md-primary); }
 }

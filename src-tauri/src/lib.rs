@@ -150,10 +150,47 @@ fn lib_write(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> Result<
     Ok(path.strip_prefix(&root).map_err(|e| e.to_string())?.to_string_lossy().replace('\\', "/"))
 }
 
+/// Where the library folder is (absolute), so the page can stream its files (asset protocol) instead of reading them whole.
+#[tauri::command]
+fn lib_root(app: tauri::AppHandle) -> Result<String, String> {
+    Ok(library_root(&app)?.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 fn lib_read(app: tauri::AppHandle, path: String) -> Result<tauri::ipc::Response, String> {
     let p = library_path(&app, &path)?;
     std::fs::read(p).map(tauri::ipc::Response::new).map_err(|e| e.to_string())
+}
+
+/// The computer's accent colour («#007AFF»), so the app takes the same colours as the system. None = not known.
+#[tauri::command]
+fn system_accent() -> Option<String> {
+    let run = |cmd: &str, args: &[&str]| -> Option<String> {
+        let o = std::process::Command::new(cmd).args(args).stdin(std::process::Stdio::null()).output().ok()?;
+        o.status.success().then(|| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    };
+    #[cfg(target_os = "macos")]
+    {
+        // missing key = the default (multicolour → blue); -1 graphite, 0 red … 6 pink
+        let v = run("defaults", &["read", "-g", "AppleAccentColor"]).and_then(|x| x.parse::<i32>().ok()).unwrap_or(4);
+        let hex = match v { -1 => "#8C8C8C", 0 => "#FF5257", 1 => "#F7821B", 2 => "#FFC600", 3 => "#62BA46", 5 => "#A550A7", 6 => "#F74F9E", _ => "#007AFF" };
+        return Some(hex.into());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let out = run("reg", &["query", r"HKCU\Software\Microsoft\Windows\DWM", "/v", "AccentColor"])?;
+        let word = out.split_whitespace().find(|w| w.starts_with("0x"))?;
+        let v = u32::from_str_radix(word.trim_start_matches("0x"), 16).ok()?; // 0xAABBGGRR
+        return Some(format!("#{:02X}{:02X}{:02X}", v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let name = run("gsettings", &["get", "org.gnome.desktop.interface", "accent-color"])?.trim_matches('\'').to_string();
+        let hex = match name.as_str() { "teal" => "#2190A4", "green" => "#3A944A", "yellow" => "#C88800", "orange" => "#ED5B00", "red" => "#E62D42", "pink" => "#D56199", "purple" => "#9141AC", "slate" => "#6F8396", "blue" => "#3584E4", _ => return None };
+        return Some(hex.into());
+    }
+    #[allow(unreachable_code)]
+    { let _ = run; None }
 }
 
 #[tauri::command]
@@ -277,7 +314,7 @@ pub fn run() {
     builder
         .manage(capture::CaptureState::default())
         .plugin(tauri_plugin_localhost::Builder::new(PORT).build())
-        .invoke_handler(tauri::generate_handler![list_displays, open_projector, close_projector, http_get, capture::start_audio_capture, capture::stop_audio_capture, capture::ad_debug_log, capture::ad_debug_playlist, capture::ad_debug_spot, open_feedback, keep_awake, lib_write, lib_read, lib_delete, download::dl_create, download::dl_list, download::dl_get, download::dl_cancel, download::dl_remove, download::dl_config])
+        .invoke_handler(tauri::generate_handler![list_displays, open_projector, close_projector, http_get, capture::start_audio_capture, capture::stop_audio_capture, capture::ad_debug_log, capture::ad_debug_playlist, capture::ad_debug_spot, open_feedback, keep_awake, lib_write, lib_read, lib_root, lib_delete, download::dl_create, download::dl_create_many, download::dl_list, download::dl_get, download::dl_cancel, download::dl_remove, download::dl_config, system_accent])
         .setup(|app| {
             // download manager: jobs in Music/PartyMix Library/metadata, started at once (interrupted downloads resume)
             match library_root(app.handle()) {

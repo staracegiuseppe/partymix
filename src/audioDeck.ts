@@ -100,7 +100,18 @@ export class HybridDeck implements Deck {
     if (url) {
       if (this.mode === 'yt') this.yt?.stop();
       this.mode = 'audio';
-      return this.audio.load(url);
+      try {
+        return await this.audio.load(url);
+      } catch (e) {
+        if (tok !== this.token) throw e;
+        // the local copy does not play (moved, damaged, too slow): a YouTube song plays from the internet instead,
+        // it is never marked «non riproducibile» because of its file
+        if (isLocalId(id) || !this.yt || !this.deps.canStream()) throw e;
+        log('warn', 'deck.local_failed_fallback_youtube', { videoId: id, error: String(e) });
+        this.audio.stop();
+        this.mode = 'yt';
+        return this.yt.load(id);
+      }
     }
     if (isLocalId(id)) throw err('Il file di questo brano non è più nella libreria.', 'unplayable');
     if (!this.yt || !this.deps.canStream()) throw err('Sei offline: questo brano è solo online.', 'offline');

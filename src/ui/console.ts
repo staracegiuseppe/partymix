@@ -5,6 +5,7 @@ import { isIOSApp } from '../platform';
 import { fmtTime, h, paintWords } from './dom';
 import { showAppPicker, showFeedback, showInfo, startTour, startWizard, TourStep } from './guide';
 import { UNAVAILABLE_WITH_YOUTUBE } from './unavailable';
+import { APP_VERSION, AUTHOR, PAYPAL_QR } from '../info';
 import { buildQueueList, QueueRowVM } from './queueList';
 import type { SheetItem as MenuItem } from './material';
 import { applyPhoneTheme, applySystemInsets, buildShell, materialUI, setLabel, SheetItem, withIcon } from './material';
@@ -338,7 +339,9 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     nameInput.placeholder = 'Nome della playlist';
     savedInfo.textContent = cur?.count ? `💾 ${cur.count} ${cur.count === 1 ? 'brano salvato' : 'brani salvati'} ${where}` : '';
   }
-  const openTutorial = () => void (md ? startTour(mdTourSteps(), (el) => shell?.reveal(el)) : startTour(tourSteps()));
+  /** Computer: the tour of the pages (each step opens its page). Set when the computer layout is built. */
+  let deskTour: (() => TourStep[]) | undefined;
+  const openTutorial = () => void (md ? startTour(mdTourSteps(), (el) => shell?.reveal(el)) : deskTour ? startTour(deskTour(), (el) => shell?.reveal(el)) : startTour(tourSteps()));
   const openWizard = () => startWizard({
     loadPlaylist: (t) => a.loadPlaylist(t),
     onStatus: (fn) => { statusListeners.add(fn); fn(status.textContent ?? '', status.classList.contains('error')); return () => statusListeners.delete(fn); },
@@ -405,6 +408,9 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     { target: () => helpPanel, title: 'Aiuto e commenti', text: 'Da qui rifai la configurazione guidata, rivedi questo tutorial e mi scrivi cosa ne pensi. Buona festa!' },
   ];
   let desk: DesktopPages | undefined;
+  /** Computer: one ⏯ that starts the automix, then pauses and resumes it; «Ferma» stops it. */
+  const playMain = h('button', { type: 'button', onClick: () => (lastVm?.state === 'idle' ? a.start() : a.togglePause()) });
+  const stopBtn = h('button', { type: 'button', title: 'Ferma l’automix e riporta la lista all’inizio', onClick: () => a.stop() }, 'Ferma');
   let emptyNowRef: HTMLElement | undefined;
   const prevBtn = h('button', { class: 'icon-btn', onClick: () => a.prev?.() }, '⏮');
   /** «In riproduzione da: 🎵 Party · 3 / 124». */
@@ -444,26 +450,81 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
   } else {
     // ---------- computer: Material 3 with a navigation drawer, one page per job ----------
     document.body.classList.add('desk');
-    // light or dark like the computer
-    try { const mq = matchMedia('(prefers-color-scheme: light)'); const f = () => document.body.classList.toggle('light', mq.matches); f(); mq.addEventListener('change', f); } catch { /* keep dark */ }
+    // colours: the computer's accent colour and light/dark (followSystemTheme, started by the app)
     const parts: DesktopParts = { menu: (t, sub, items) => shell?.sheet(t, sub, items), go: (id) => shell?.go(id) };
     desk = opts.desktop?.(parts);
     const ph = (title: string, sub?: HTMLElement) => h('header', { class: 'pg-head' }, h('div', { class: 'pg-tt' }, h('h1', { class: 'pg-title' }, title), sub ?? null));
     withIcon(castTop, 'cast', true);
-    prevBtn.textContent = '⏮'; prevBtn.setAttribute('aria-label', 'Brano precedente'); prevBtn.title = 'Brano precedente';
-    nextBtn.textContent = '⏭'; nextBtn.setAttribute('aria-label', 'Brano successivo'); nextBtn.title = 'Brano successivo (con sfumatura)';
-    mixBtn.textContent = 'Mix ora'; mixBtn.title = 'Sfuma subito nel brano già pronto'; mixBtn.classList.remove('wide');
-    const transport = h('div', { class: 'transport' }, prevBtn, pauseBtn, nextBtn);
-    mixer.querySelector('.btns')?.replaceWith(h('div', { class: 'btns' }, transport, mixBtn));
+    // Player controls (Material 3): ⏮ and ⏭ tonal icon buttons, ⏯ big and filled in the middle (it also starts the automix),
+    // then «Mix ora» and «Ferma»; volume across the whole width; the transition style under it.
+    prevBtn.className = 'tp tp-side'; prevBtn.setAttribute('aria-label', 'Brano precedente'); prevBtn.title = 'Brano precedente'; withIcon(prevBtn, 'prev', true);
+    nextBtn.className = 'tp tp-side'; nextBtn.setAttribute('aria-label', 'Brano successivo'); nextBtn.title = 'Brano successivo (con sfumatura)'; withIcon(nextBtn, 'next', true);
+    playMain.className = 'tp tp-main'; withIcon(playMain, 'play', true);
+    mixBtn.className = 'm-tonal np-btn'; mixBtn.title = 'Sfuma subito nel brano già pronto'; mixBtn.textContent = 'Mix ora'; withIcon(mixBtn, 'mix');
+    stopBtn.className = 'm-outlined np-btn'; withIcon(stopBtn, 'stop');
+    const xlabels = mixer.querySelector('.xlabels'), xfade = mixer.querySelector('.xfade');
+    mixer.replaceChildren(
+      h('div', { class: 'np-status' }, mixText),
+      h('div', { class: 'np-xf' }, xlabels, xfade),
+      h('div', { class: 'transport' }, prevBtn, playMain, nextBtn),
+      h('div', { class: 'np-actions' }, mixBtn, stopBtn),
+      h('label', { class: 'np-vol' }, withIcon(h('span', { class: 'np-vol-ic' }), 'volume', true), master),
+      h('div', { class: 'np-trans' }, h('span', { class: 'np-label' }, 'Transizione'), seg));
+    mixer.classList.add('np');
     const emptyNowDesk = h('section', { class: 'panel empty-state m-empty hidden' }, h('div', { class: 'es-ic', 'aria-hidden': 'true' }, '🎵'), h('div', { class: 'es-t' }, 'Nessuna musica in riproduzione'),
       h('p', { class: 'es-p' }, 'Scegli una playlist e premi ▶, oppure cerca un brano.'),
       h('div', { class: 'es-b' }, h('button', { class: 'm-filled', onClick: () => shell?.go('playlists') }, '📋 Scegli una playlist'), h('button', { class: 'm-tonal', onClick: () => shell?.go('search') }, '🔎 Cerca musica')));
-    const settingsGrid = h('div', { class: 'settings-grid' },
-      h('section', { class: 'panel' }, h('h3', {}, 'Aggiornamento delle playlist YouTube'), h('div', { class: 'row' }, refreshBtn, refreshSel), refreshInfo),
-      desk?.settingsCard ?? null, karaokePanel, adPanel, helpPanel, histPanel, probPanel, h('section', { class: 'panel' }, unav));
+    // credits and the optional PayPal donation, always in sight (a page of its own and a ♥ in the top bar)
+    const aboutPage = h('div', { class: 'about-grid' },
+      h('section', { class: 'panel about-card' },
+        h('div', { class: 'about-logo' }, h('span', {}, 'Party'), h('b', {}, 'Mix')),
+        APP_VERSION ? h('div', { class: 'pg-sub' }, `Versione ${APP_VERSION}`) : null,
+        h('p', {}, 'Un DJ virtuale gratuito per feste e serate: playlist, mix automatico, testi da cantare e proiettore.'),
+        h('div', { class: 'credit' }, h('div', { class: 'pg-sub' }, 'Creato da'), h('div', { class: 'credit-name' }, AUTHOR)),
+        h('div', { class: 'about-btns' },
+          h('button', { class: 'm-tonal', onClick: openTutorial }, 'Tutorial'),
+          h('button', { class: 'm-tonal', onClick: openWizard }, 'Configurazione guidata'),
+          h('button', { class: 'm-tonal', onClick: () => showFeedback() }, '💬 Commenti e suggerimenti')),
+        h('p', { class: 'pg-hint' }, 'I brani sono riprodotti da YouTube; con Spotify l’app usa solo l’elenco dei brani. Spotify e YouTube sono marchi dei rispettivi proprietari, estranei a questo progetto.')),
+      h('section', { class: 'panel donate-card' },
+        h('h3', {}, '💜 Sostieni PartyMix'),
+        h('p', {}, 'Se PartyMix ti è utile e ti va di ringraziare chi lo ha creato, puoi fare una piccola donazione con PayPal: è facoltativa e tutto funziona uguale anche senza.'),
+        h('img', { class: 'paypal-qr', src: PAYPAL_QR, alt: `Codice QR PayPal di ${AUTHOR}`, width: '260', height: '260' }),
+        h('div', { class: 'credit-name paypal-name' }, AUTHOR.toLowerCase()),
+        h('p', { class: 'pg-hint' }, 'Per donare: apri l’app PayPal sul telefono, scegli «Scansiona» e inquadra questo codice.')));
+    const heartTop = withIcon(h('button', { class: 'm-icon-btn heart-btn', title: 'Info e dona', 'aria-label': 'Info e dona', onClick: () => shell?.go('about') }), 'heart', true);
+    // Aiuto first, in sight: four buttons in a row (the phone keeps its list)
+    const helpBtn = (ic: Parameters<typeof withIcon>[1], text: string, run: () => void, cls = 'm-tonal') => withIcon(h('button', { class: cls, type: 'button', onClick: run }, text), ic);
+    const helpDesk = h('section', { class: 'panel help-card' },
+      h('div', { class: 'help-text' }, h('h3', {}, 'Aiuto'), h('p', { class: 'pg-hint' }, 'Hai un dubbio? Il tutorial mostra a cosa serve ogni parte; la configurazione guidata rifà i primi passi.')),
+      h('div', { class: 'help-btns' },
+        helpBtn('help', 'Tutorial', openTutorial, 'm-filled'),
+        helpBtn('school', 'Configurazione guidata', openWizard),
+        helpBtn('feedback', 'Commenti e suggerimenti', () => showFeedback()),
+        helpBtn('heart', 'Info e dona', () => shell?.go('about'))));
+    const refreshCard = h('section', { class: 'panel' }, h('h3', {}, 'Aggiornamento delle playlist YouTube'),
+      h('p', { class: 'pg-hint' }, 'Ogni quanto PartyMix controlla se una playlist YouTube è cambiata (brani aggiunti o tolti).'),
+      h('div', { class: 'row' }, refreshSel, refreshBtn), refreshInfo);
+    deskTour = () => [
+      { target: () => root.querySelector('.m-nav') as HTMLElement, title: 'Il menu', text: 'Da qui vai alle pagine: ▶ Player (quello che suona), 📋 Playlist, 🔎 Cerca, ⬇ Download, 🎧 Libreria. In fondo 📺 Proiettore, ⚙ Impostazioni e 💜 Info e dona.' },
+      { target: () => playMain, title: 'Avvia, pausa, riprendi', text: 'Il tasto grande avvia l’automix: parte il primo brano e la musica va avanti da sola, con le sfumature. Poi mette in pausa e riprende. ⏮ e ⏭ passano al brano prima o dopo.' },
+      { target: () => mixBtn.parentElement as HTMLElement, title: 'Mix ora e Ferma', text: '«Mix ora» sfuma subito nel brano già pronto; «Ferma» ferma tutto e riporta la lista all’inizio.' },
+      { target: () => seg.parentElement as HTMLElement, title: 'Stile delle transizioni', text: 'Morbida (circa 12 secondi), Standard (8), Energica (4) o Manuale (il cambio solo quando lo chiedi tu).' },
+      { target: () => queuePanel, title: 'La lista di riproduzione', text: 'I brani in ordine, con un inizio e una fine ben visibili. ▶ o doppio clic suona un brano; ⋮ (o clic destro) apre le altre azioni; trascina ⋮⋮ per cambiare ordine. «Ripeti» decide cosa succede dopo l’ultimo brano.' },
+      ...(desk ? [
+        { target: () => desk!.pages.playlists, title: 'Le tue playlist', text: 'Tutte le playlist che vuoi. Aprine una per vederne i brani, caricarla da YouTube o Spotify, scaricarla tutta (⬇) o scegliere i brani con ☑ Seleziona.' },
+        { target: () => desk!.pages.search, title: 'Cerca', text: 'Cerca su YouTube o nella tua musica: i risultati compaiono subito sotto il campo, con ▶ e ⋮ per metterli in coda o in una playlist.' },
+        ...(desk.pages.downloads ? [{ target: () => desk!.pages.downloads!, title: 'Download', text: 'Incolla un indirizzo e scegli MP3 o MP4: i download vanno in coda, ne partono due alla volta, e alla fine il brano è nella Libreria.' }] : []),
+        { target: () => desk!.pages.library, title: 'La tua libreria', text: 'La musica sul computer: importa i tuoi MP3 (anche cartelle intere) e ritrova quello che hai scaricato. Suona anche senza internet.' },
+      ] : []),
+      { target: () => projPanel, title: 'Il proiettore', text: 'Apre una seconda finestra sullo schermo che scegli (TV, proiettore): forme a tempo con il testo da cantare, oppure il video del brano.' },
+      { target: () => helpDesk, title: 'Aiuto', text: 'Qui ritrovi questo tutorial, la configurazione guidata e i commenti. Buona festa!' },
+    ];
+    const settingsGrid = h('div', { class: 'settings-page' }, helpDesk,
+      h('div', { class: 'settings-grid' }, refreshCard, desk?.settingsCard ?? null, karaokePanel, adPanel, histPanel, probPanel, h('section', { class: 'panel' }, h('h3', {}, 'Limiti di YouTube'), unav)));
     shell = buildShell(root, {
       title: h('div', { class: 'logo' }, 'Party', h('b', {}, 'Mix')),
-      actions: [pill, castTop],
+      actions: [pill, heartTop, castTop],
       home: 'now',
       start: 'now',
       screens: [
@@ -474,6 +535,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
         { id: 'library', label: 'Libreria', icon: 'library', body: [desk?.pages.library ?? null] },
         { id: 'proj', label: 'Proiettore', icon: 'cast', secondary: true, body: [ph('Proiettore e testo'), projPanel, syncBar, lyricsPanel] },
         { id: 'settings', label: 'Impostazioni', icon: 'settings', secondary: true, body: [ph('Impostazioni'), settingsGrid] },
+        { id: 'about', label: 'Info e dona', icon: 'heart', secondary: true, body: [ph('Info e dona'), aboutPage] },
       ],
     });
     emptyNowRef = emptyNowDesk;
@@ -578,6 +640,13 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
       ql?.refreshEnds();
       emptyNowRef?.classList.toggle('hidden', vm.queue.length > 0);
       prevBtn.disabled = vm.state === 'idle' || (p?.pos ?? 0) <= 1;
+      const idle = vm.state === 'idle', paused = vm.state === 'paused';
+      withIcon(playMain, idle || paused ? 'play' : 'pause', true);
+      const pl = idle ? 'Avvia l’automix' : paused ? 'Riprendi' : 'Pausa';
+      playMain.setAttribute('aria-label', pl); playMain.title = pl;
+      playMain.disabled = idle && !vm.ready;
+      playMain.classList.toggle('playing', !idle && !paused);
+      stopBtn.disabled = idle;
       if (shell && desk) desk.update(shell.current());
     }
     const ly = vm.lyrics;

@@ -9,6 +9,9 @@ const AUDIO_FORMATS: [string, string][] = [['mp3', 'MP3'], ['m4a', 'M4A'], ['opu
 const VIDEO_FORMATS: [string, string][] = [['mp4', 'MP4'], ['webm', 'WebM']];
 const QUALITIES: [string, string][] = [['best', 'Best'], ['1080', '1080p'], ['720', '720p'], ['480', '480p'], ['360', '360p']];
 
+/** Remembers the last choice (MP3 or MP4…), proposed first next time. */
+export function storePrefs(store: Storage | undefined, p: DlPrefs): void { try { store?.setItem(PREFS_KEY, JSON.stringify(p)); } catch { /* not important */ } }
+
 export function loadPrefs(store?: Storage): DlPrefs {
   try {
     const j = JSON.parse(store?.getItem(PREFS_KEY) ?? '{}');
@@ -156,6 +159,8 @@ export function buildDownloadsUI(d: Deps) {
     tools, empty, ...SECTIONS.map(([k]) => secs[k].el));
   return {
     el, update, request,
+    /** A choice made elsewhere (the format dialog) becomes the form's default too. */
+    setPrefs(p: DlPrefs) { prefs = p; savePrefs(); type.value = p.type; fillFormats(); format.value = p.format; quality.value = p.quality; },
     /** Puts a link in the box (pasted in the search bar) and focuses it. */
     prefill(u: string) { url.value = u; setTimeout(() => url.focus()); },
   };

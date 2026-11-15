@@ -333,8 +333,8 @@ export class MusicLibrary {
     delete e.state; delete e.error; delete e.progress;
     if (d.thumbFile && !e.cover) {
       try {
-        const u = await this.d.blobs.url(d.thumbFile);
-        if (u) { e.cover = await (await fetch(u)).blob(); this.d.blobs.release(d.thumbFile); }
+        const b = await this.d.blobs.read(d.thumbFile);
+        if (b) e.cover = b;
       } catch { /* the picture is a nice-to-have */ }
     }
     this.byId.set(e.id, e);

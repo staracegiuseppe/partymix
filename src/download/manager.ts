@@ -109,6 +109,36 @@ export class DownloadCoordinator {
     }
   }
 
+  /**
+   * «Scarica tutta la playlist» / «Scarica i selezionati»: every song in one request to the app (saved once,
+   * started 2 at a time). Songs already offline are not asked again; one message sums it all up.
+   */
+  async downloadMany(reqs: DlRequest[], what = 'brani'): Promise<{ queued: number; already: number; failed: number }> {
+    const r = { queued: 0, already: 0, failed: 0 };
+    const ask: DlRequest[] = [];
+    for (const q of reqs) {
+      const yt = youtubeIdOf(q.url);
+      if (yt && this.lib.isOffline(yt) && !(q.type === 'video' && !/video/.test(this.lib.get(yt)?.mime ?? ''))) r.already++; else ask.push(q);
+    }
+    if (ask.length) {
+      try {
+        const res = await this.c.createMany(ask);
+        res.jobs.forEach((j, i) => {
+          if (!j) { r.failed++; return; }
+          this.apply(j);
+          if (j.already) { r.already++; this.integrated.delete(j.id); void this.integrate(j, false); } else r.queued++;
+          void i;
+        });
+      } catch (e) {
+        this.hooks.status(e instanceof DlError ? e.message : 'Download non riuscito.', true);
+        return { ...r, failed: r.failed + ask.length };
+      }
+    }
+    const parts = [r.queued ? `⬇ ${r.queued} ${r.queued === 1 ? 'brano' : 'brani'} in coda per il download` : '', r.already ? `✓ ${r.already} già ${r.already === 1 ? 'scaricato' : 'scaricati'}` : '', r.failed ? `⚠ ${r.failed} non ${r.failed === 1 ? 'scaricabile' : 'scaricabili'}` : ''].filter(Boolean);
+    this.hooks.status(parts.length ? `${parts.join(' · ')} (${what}). Segui l’avanzamento in «Download».` : `Niente da scaricare (${what}).`, !r.queued && !r.already);
+    return r;
+  }
+
   async cancel(id: string): Promise<void> { try { this.apply(await this.c.cancel(id)); } catch (e) { this.hooks.status((e as Error).message, true); } }
   async remove(id: string): Promise<void> {
     try { await this.c.remove(id); this.jobs.delete(id); this.version++; } catch (e) { this.hooks.status((e as Error).message, true); }

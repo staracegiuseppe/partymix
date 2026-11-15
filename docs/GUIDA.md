@@ -54,7 +54,8 @@ L'app è divisa in pagine, come una vera app musicale. Il **menu a sinistra** (s
 - **🔎 Cerca** — cerca una canzone su YouTube o nella tua musica: i risultati compaiono subito sotto il campo.
 - **⬇ Download** — i download in corso, in coda, completati e con errori.
 - **🎧 Libreria** — la tua musica sul computer: importati, scaricati, preferiti, artisti, album.
-- In fondo: **📺 Proiettore** (proiettore e testo da cantare) e **⚙ Impostazioni** (karaoke, pubblicità, aggiornamento playlist, chiave YouTube, aiuto).
+- In fondo: **📺 Proiettore** (proiettore e testo da cantare), **⚙ Impostazioni** (karaoke, pubblicità, aggiornamento playlist, chiave YouTube, aiuto) e **💜 Info e dona** (crediti e donazione facoltativa con PayPal, anche dal ♥ in alto).
+- I colori seguono il computer: il colore di evidenziazione scelto nelle impostazioni di sistema (Mac, Windows, Linux GNOME) e il tema chiaro o scuro.
 
 Ogni brano ha il menu **⋮** (o clic destro) con le azioni che ha senso fare in quel momento: suona adesso, suona dopo, metti in coda, aggiungi a playlist, scarica, preferiti, togli.
 
@@ -100,6 +101,9 @@ Puoi tenere **tutte le playlist che vuoi**: non c'è più il limite di quattro. 
 - **⋮** su una scheda: Suona, Apri, Rinomina, Duplica, Elimina (chiede conferma; i brani della libreria restano).
 - Dentro una playlist: in cima «▲ Inizio · PLAYLIST: nome», poi i brani numerati (#, titolo, artista, durata, stato), in fondo «■ Fine playlist». Trascina la maniglia **⋮⋮** per cambiare ordine; **⋮** su un brano per toglierlo o aggiungerlo a un'altra playlist.
 - **Sorgente YouTube / Spotify**: incolla il link e premi **Carica** per riempire la playlist da lì.
+- **⬇ Scarica tutta la playlist**: scarica in un colpo tutti i brani (quelli già nella libreria vengono saltati), per crearti subito la tua discografia sul computer.
+- **☑ Seleziona**: tocca i brani che vuoi (Maiuscolo+clic per un intervallo), oppure **Seleziona tutti**, poi **⬇ Scarica selezionati** o **＋ Aggiungi a playlist**. **✕ Fine** chiude la selezione. C'è anche nella pagina Cerca.
+- Prima di ogni download l'app chiede il formato: **🎵 Audio MP3** (solo musica, file piccoli) oppure **🎬 Video MP4** (con le immagini: è quello giusto per le versioni *lyrics* e karaoke, dove il testo è nel video), anche in 720p più leggero. L'ultima scelta viene proposta per prima.
 - Una playlist contiene solo riferimenti ai brani: lo stesso brano in più playlist non occupa spazio due volte.
 
 **Android e iPhone:** scegli la playlist dal **menu a tendina**, che mostra il nome e quanti brani ha salvato, oppure «vuota».

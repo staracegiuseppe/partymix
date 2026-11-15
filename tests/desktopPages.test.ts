@@ -136,3 +136,67 @@ describe('🎧 Libreria page', () => {
     expect(shown(ui.pages.library).map((r) => r.querySelector('.t')!.firstChild!.textContent)).toEqual(['Solo in libreria']);
   });
 });
+
+describe('⬇ Scarica tutta la playlist, ☑ Seleziona, MP3 o MP4', () => {
+  const fakeDownloads = () => ({ available: () => true, downloadMany: vi.fn(async () => ({ queued: 1, already: 0, failed: 0 })), download: vi.fn(async () => undefined), list: () => [], active: () => 0, version: 0, cfg: { max: 2, ytdlp: true, ffmpeg: true, root: '/x' }, libraryId: async () => '', cancel: vi.fn(), remove: vi.fn(), retry: vi.fn(), setMax: vi.fn(), get: () => undefined, start: vi.fn(), apply: vi.fn() });
+  const choose = (fns: { menu: ReturnType<typeof vi.fn> }, startsWith: string) => {
+    const [title, sub, items] = fns.menu.mock.calls.at(-1) as [string, string, { label: string; run(): void }[]];
+    const it = items.find((i) => i.label.startsWith(startsWith))!;
+    it.run();
+    return { title, sub, labels: items.map((i) => i.label) };
+  };
+  it('the whole playlist: asks MP3 or MP4 first, then downloads every song in one go (local files skipped)', () => {
+    localStorage.clear();
+    const dl = fakeDownloads();
+    const { ui, fns, playlists } = setup({ downloads: dl as never, store: localStorage });
+    const p = playlists.list()[0];
+    playlists.addTracks(p.id, [tr('local:0011223344556677', 'Mio file')]);
+    ui.openPlaylist(p.id);
+    const all = [...ui.pages.playlists.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === '⬇ Scarica tutta la playlist')!;
+    all.click();
+    const { title, sub, labels } = choose(fns, '🎬 Video MP4 —');
+    expect(title).toBe('Scarica la playlist «Festa di Marco»');
+    expect(sub).toBe('2 brani · scegli il formato');
+    expect(labels[0]).toMatch(/^🎵 Audio MP3/);
+    expect(dl.downloadMany).toHaveBeenCalledWith([
+      { url: 'https://www.youtube.com/watch?v=aaaaaaaaaaa', type: 'video', format: 'mp4', quality: 'best' },
+      { url: 'https://www.youtube.com/watch?v=bbbbbbbbbbb', type: 'video', format: 'mp4', quality: 'best' },
+    ], 'la playlist «Festa di Marco»');
+    all.click(); // the last choice comes first next time
+    expect((fns.menu.mock.calls.at(-1) as [string, string, { label: string }[]])[2][0].label).toMatch(/^🎬 Video MP4 — .*ultima scelta$/);
+  });
+  it('select songs (click, Shift+click, all, none) and download only those', () => {
+    localStorage.clear();
+    const dl = fakeDownloads();
+    const { ui, fns, playlists } = setup({ downloads: dl as never, store: localStorage });
+    const k = playlists.list()[1];
+    ui.openPlaylist(k.id);
+    const page = ui.pages.playlists;
+    [...page.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === '☑ Seleziona')!.click();
+    const bar = page.querySelector('.selbar')!;
+    expect(bar.classList.contains('hidden')).toBe(false);
+    const rows = () => shown(page);
+    expect(rows()[0].querySelector('.lead')!.textContent).toBe('☐');
+    rows()[1].click();
+    rows()[4].dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+    expect(bar.querySelector('.sel-count')!.textContent).toBe('4 selezionati');
+    expect(rows()[2].querySelector('.lead')!.textContent).toBe('☑');
+    [...bar.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === '⬇ Scarica selezionati')!.click();
+    choose(fns, '🎵 Audio MP3');
+    expect((dl.downloadMany.mock.calls[0] as unknown as [{ type: string }[]])[0]).toHaveLength(4);
+    expect((dl.downloadMany.mock.calls[0] as unknown as [{ type: string; format: string }[]])[0][0]).toMatchObject({ type: 'audio', format: 'mp3' });
+    [...bar.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Seleziona tutti')!.click();
+    expect(bar.querySelector('.sel-count')!.textContent).toMatch(/^3\.?001 selezionati$/);
+    [...bar.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === '✕ Fine')!.click();
+    expect(bar.classList.contains('hidden')).toBe(true);
+    expect(rows()[0].querySelector('.lead')!.textContent).toBe('1');
+  });
+  it('one song: ⬇ also asks MP3 or MP4', () => {
+    localStorage.clear();
+    const dl = fakeDownloads();
+    const { ui, fns } = setup({ downloads: dl as never, store: localStorage, trackById: (id) => (id === 'aaaaaaaaaaa' ? tr(id, 'Blinding Lights') : undefined) });
+    ui.offline('aaaaaaaaaaa');
+    choose(fns, '🎬 Video MP4 720p');
+    expect(dl.download).toHaveBeenCalledWith({ url: 'https://www.youtube.com/watch?v=aaaaaaaaaaa', type: 'video', format: 'mp4', quality: '720' });
+  });
+});

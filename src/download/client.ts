@@ -40,6 +40,8 @@ export class DlError extends Error { constructor(readonly code: DlErrorCode, mes
 
 export interface DownloadClient {
   create(req: DlRequest): Promise<DlJob>;
+  /** Many at once (a whole playlist): one job or one error per request, same order. */
+  createMany(reqs: DlRequest[]): Promise<{ jobs: (DlJob | null)[]; errors: ({ error_code: DlErrorCode; message: string } | null)[] }>;
   list(): Promise<DlJob[]>;
   get(id: string): Promise<DlJob>;
   cancel(id: string): Promise<DlJob>;
@@ -60,6 +62,7 @@ const wrap = <T>(p: Promise<unknown>): Promise<T> => p.then((x) => x as T, (e) =
 export function tauriDownloadClient(invoke: Invoke, listen: Listen): DownloadClient {
   return {
     create: (request) => wrap(invoke('dl_create', { request })),
+    createMany: (requests) => wrap(invoke('dl_create_many', { requests })),
     list: () => wrap(invoke('dl_list')),
     get: (id) => wrap(invoke('dl_get', { id })),
     cancel: (id) => wrap(invoke('dl_cancel', { id })),

@@ -171,7 +171,7 @@ describe('offline library: persistence, download, delete', () => {
     const hang = vi.fn((_u: string, o: { signal: AbortSignal }) => new Promise<Response>((_, ko) => o.signal.addEventListener('abort', () => ko(Object.assign(new Error('aborted'), { name: 'AbortError' })))));
     const lib = new MusicLibrary({ kv, blobs: new KvBlobStore(kv), fetch: hang as unknown as typeof fetch });
     const p = lib.downloadUrl('https://example.org/lungo.mp3');
-    await new Promise((r) => setTimeout(r, 0));
+    for (let i = 0; i < 100 && !lib.all().length; i++) await new Promise((r) => setTimeout(r, 5));
     lib.cancel(lib.all()[0].id);
     await expect(p).rejects.toThrow('Download interrotto.');
     const off = new MusicLibrary({ kv, blobs: new KvBlobStore(kv), fetch: (async () => { throw new TypeError('Failed to fetch'); }) as unknown as typeof fetch });

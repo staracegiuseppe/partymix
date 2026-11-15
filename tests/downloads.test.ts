@@ -18,6 +18,13 @@ function fakeClient() {
       jobs.set(j.id, j);
       return j;
     }),
+    createMany: vi.fn(async (reqs: DlRequest[]) => {
+      const out = { jobs: [] as (DlJob | null)[], errors: [] as ({ error_code: DlJob['error_code'] & string; message: string } | null)[] };
+      for (const r of reqs) {
+        try { out.jobs.push(await c.create(r)); out.errors.push(null); } catch (e) { out.jobs.push(null); out.errors.push({ error_code: (e as DlError).code, message: (e as Error).message }); }
+      }
+      return out;
+    }) as DownloadClient['createMany'],
     list: async () => [...jobs.values()],
     get: async (id) => jobs.get(id)!,
     cancel: vi.fn(async (id: string) => { const j = { ...jobs.get(id)!, status: 'CANCELLED' as const }; jobs.set(id, j); return j; }),
@@ -138,6 +145,21 @@ describe('download → library → playlist → offline', () => {
     expect(coord.get(k.id)!.status).toBe('CANCELLED');
     await coord.remove(k.id);
     expect(coord.get(k.id)).toBeUndefined();
+  });
+});
+
+describe('download a whole playlist', () => {
+  it('asks the app once for all the songs, skips the ones already offline, and sums it up', async () => {
+    const { c, coord, status } = await setup();
+    const j = (await coord.download(req(ZOO)))!;
+    c.finish(j.id);
+    await flush(); await flush();
+    const ids = ['jNQXAC9IVRw', 'aaaaaaaaaaa', 'bbbbbbbbbbb', 'ccccccccccc'];
+    const r = await coord.downloadMany([...ids.map((id) => req(`https://www.youtube.com/watch?v=${id}`)), req('file:///x')], 'playlist «Festa»');
+    expect(r).toEqual({ queued: 3, already: 1, failed: 1 });
+    expect(c.createMany).toHaveBeenCalledTimes(1);
+    expect((c.createMany as unknown as { mock: { calls: DlRequest[][][] } }).mock.calls[0][0]).toHaveLength(4); // the offline one is not even asked
+    expect(status).toHaveBeenLastCalledWith('⬇ 3 brani in coda per il download · ✓ 1 già scaricato · ⚠ 1 non scaricabile (playlist «Festa»). Segui l’avanzamento in «Download».', false);
   });
 });
 

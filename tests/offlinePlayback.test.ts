@@ -104,3 +104,23 @@ describe('offline queue', () => {
     expect(q.all()[1].status).toBe('ok'); // …not marked broken
   });
 });
+
+describe('downloaded songs: local first, internet if the file does not play', () => {
+  it('a YouTube song whose local file fails falls back to YouTube (not marked broken)', async () => {
+    const yt = ytFake();
+    const d = new HybridDeck(new AudioDeck(fakeAudio()), { localUrl: async () => 'blob:bad-file', canStream: () => true }, yt);
+    await d.load('dQw4w9WgXcQ');
+    expect(yt.load).toHaveBeenCalledWith('dQw4w9WgXcQ');
+    expect(d.videoIdForProjector()).toBe('dQw4w9WgXcQ');
+  });
+  it('offline and the file fails: the error is reported (no network to fall back to)', async () => {
+    const d = new HybridDeck(new AudioDeck(fakeAudio()), { localUrl: async () => 'blob:bad-file', canStream: () => false }, ytFake());
+    await expect(d.load('dQw4w9WgXcQ')).rejects.toMatchObject({ kind: 'unplayable' });
+  });
+  it('a downloaded song with a good file never touches YouTube', async () => {
+    const yt = ytFake();
+    const d = new HybridDeck(new AudioDeck(fakeAudio()), { localUrl: async () => 'asset://localhost/x.mp4', canStream: () => true }, yt);
+    await d.load('dQw4w9WgXcQ');
+    expect(yt.load).not.toHaveBeenCalled();
+  });
+});

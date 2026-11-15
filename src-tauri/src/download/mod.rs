@@ -4,6 +4,7 @@
 //! | REST                               | command        |
 //! |------------------------------------|----------------|
 //! | POST   /api/download               | `dl_create`    |
+//! | POST   /api/download (a list)      | `dl_create_many` |
 //! | GET    /api/downloads              | `dl_list`      |
 //! | GET    /api/downloads/{id}         | `dl_get`       |
 //! | POST   /api/downloads/{id}/cancel  | `dl_cancel`    |
@@ -36,6 +37,19 @@ pub fn init(app: &tauri::AppHandle, root: std::path::PathBuf) {
 
 #[tauri::command]
 pub fn dl_create(state: State<'_, DlState>, request: Request) -> Result<Job, ApiError> { state.0.create(request) }
+/// One result per request: the job, or the error for that link.
+#[derive(Serialize)]
+pub struct Many { pub jobs: Vec<Option<Job>>, pub errors: Vec<Option<ApiError>> }
+
+/// POST /api/download with a list («Scarica tutta la playlist»).
+#[tauri::command]
+pub fn dl_create_many(state: State<'_, DlState>, requests: Vec<Request>) -> Many {
+    let mut m = Many { jobs: Vec::new(), errors: Vec::new() };
+    for r in state.0.create_many(requests) {
+        match r { Ok(j) => { m.jobs.push(Some(j)); m.errors.push(None); } Err(e) => { m.jobs.push(None); m.errors.push(Some(e)); } }
+    }
+    m
+}
 #[tauri::command]
 pub fn dl_list(state: State<'_, DlState>) -> Vec<Job> { state.0.list() }
 #[tauri::command]

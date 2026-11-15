@@ -10,6 +10,8 @@ export interface BlobStore {
   delete(ref: string): Promise<void>;
   /** Forgets the link made by url() (frees memory); the file stays. */
   release(ref: string): void;
+  /** The whole file (small files only: covers). */
+  read(ref: string): Promise<Blob | undefined>;
   /** Where the files are, as the user sees it (shown in the library). */
   readonly where: string;
 }
@@ -36,6 +38,7 @@ export class KvBlobStore implements BlobStore {
     const u = this.urls.get(ref);
     if (u) { URL.revokeObjectURL(u); this.urls.delete(ref); }
   }
+  async read(ref: string): Promise<Blob | undefined> { return this.kv.get<Blob>('blobs', ref); }
   async delete(ref: string): Promise<void> {
     this.release(ref);
     await this.kv.delete('blobs', ref);
@@ -56,7 +59,7 @@ export const safeName = (s: string, fallback: string) => s.replace(/[\\/:*?"<>|\
 export class NativeBlobStore implements BlobStore {
   readonly where = 'nella cartella Musica › PartyMix Library';
   private urls = new Map<string, string>();
-  constructor(private invoke: Invoke) {}
+  constructor(private invoke: Invoke, private toAsset?: (absolutePath: string) => string) {}
   async put(_id: string, data: Blob, hint: { artist: string; title: string; ext: string }): Promise<string> {
     const rel = `${safeName(hint.artist, 'Artista sconosciuto')}/${safeName(hint.title, 'Brano')}.${hint.ext || 'mp3'}`;
     const body = new Uint8Array(await blobBytes(data));
@@ -67,23 +70,41 @@ export class NativeBlobStore implements BlobStore {
       throw e;
     }
   }
+  /**
+   * A link the player streams from the disk (Tauri asset protocol): the file is read while it plays, so a 400 MB video
+   * starts at once and does not fill the memory. Older app versions without it: the whole file through IPC.
+   */
   async url(ref: string): Promise<string | undefined> {
     const known = this.urls.get(ref);
     if (known) return known;
+    const root = await this.rootDir();
+    if (root && this.toAsset) {
+      const u = this.toAsset(`${root.replace(/\/+$/, '')}/${ref}`);
+      this.urls.set(ref, u);
+      return u;
+    }
+    const b = await this.read(ref);
+    if (!b) return undefined;
+    const u = URL.createObjectURL(b);
+    this.urls.set(ref, u);
+    return u;
+  }
+  async read(ref: string): Promise<Blob | undefined> {
     try {
       const bytes = await this.invoke('lib_read', { path: ref });
       const buf = bytes instanceof ArrayBuffer ? bytes : new Uint8Array(bytes as number[]).buffer;
-      const u = URL.createObjectURL(new Blob([buf], { type: mimeOf(ref) })); // WebKit needs the type to play MP4/WebM
-      this.urls.set(ref, u);
-      return u;
+      return new Blob([buf], { type: mimeOf(ref) }); // WebKit needs the type to play MP4/WebM
     } catch {
       return undefined; // moved or deleted outside the app
     }
   }
+  private root?: Promise<string | undefined>;
+  private rootDir() { return (this.root ??= this.invoke('lib_root').then((r) => String(r), () => undefined)); }
   /** Frees the memory of a file that is not playing any more (files can be big, thousands of them would fill the RAM). */
   release(ref: string): void {
     const u = this.urls.get(ref);
-    if (u) { URL.revokeObjectURL(u); this.urls.delete(ref); }
+    if (u?.startsWith('blob:')) URL.revokeObjectURL(u);
+    this.urls.delete(ref);
   }
   async delete(ref: string): Promise<void> {
     this.release(ref);

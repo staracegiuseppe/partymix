@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-lib-root"
+description = "Enables the lib_root command without any pre-configured scope."
+commands.allow = ["lib_root"]
+
+[[permission]]
+identifier = "deny-lib-root"
+description = "Denies the lib_root command without any pre-configured scope."
+commands.deny = ["lib_root"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dl-create-many"
+description = "Enables the dl_create_many command without any pre-configured scope."
+commands.allow = ["dl_create_many"]
+
+[[permission]]
+identifier = "deny-dl-create-many"
+description = "Denies the dl_create_many command without any pre-configured scope."
+commands.deny = ["dl_create_many"]

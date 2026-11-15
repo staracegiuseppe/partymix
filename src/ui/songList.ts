@@ -45,6 +45,8 @@ export type SongListOpts = {
   empty?: HTMLElement;
   /** A drag of a song can be dropped on a playlist (sets the song id on the drag). */
   dragToPlaylists?: boolean;
+  /** «Seleziona»: in selection mode a click ticks a song (Shift+click a range) instead of opening it. */
+  onSelectionChange?: (ids: string[]) => void;
 };
 
 export const STATE: Record<NonNullable<SongVM['off']>, [string, string, string]> = {
@@ -64,6 +66,10 @@ const plural = (n: number, a: string, b: string) => `${n.toLocaleString('it-IT')
 export function buildSongList(o: SongListOpts) {
   let rows: SongVM[] = [];
   let dragFrom = -1;
+  let selecting = false;
+  const sel = new Set<string>();
+  let anchor = -1;
+  const changed = () => { list.refresh(); o.onSelectionChange?.([...sel]); };
   const headTitle = h('span', { class: 'sl-title' });
   const headSub = h('span', { class: 'sl-sub' });
   const headEl = h('div', { class: 'sl-head', role: 'presentation' }, h('span', { class: 'sl-cap' }, '▲ Inizio'), headTitle, headSub);
@@ -99,7 +105,10 @@ export function buildSongList(o: SongListOpts) {
       el.setAttribute('aria-label', `${i + 1}. ${r.title}${r.artist ? `, ${r.artist}` : ''}${r.current ? (r.paused ? ', in pausa' : ', in riproduzione') : ''}`);
       el.title = r.skip ? (r.reason ?? 'Non si può riprodurre adesso (sei offline e il brano è solo online).') : '';
       const lead = q('.lead');
-      lead.textContent = r.current ? (r.paused ? '⏸' : '▶') : String(i + 1);
+      const ticked = selecting && sel.has(r.id);
+      el.classList.toggle('sel', ticked);
+      el.setAttribute('aria-selected', selecting ? String(ticked) : 'false');
+      lead.textContent = selecting ? (ticked ? '☑' : '☐') : r.current ? (r.paused ? '⏸' : '▶') : String(i + 1);
       lead.classList.toggle('now', !!r.current);
       lead.title = r.current ? (r.paused ? 'In pausa' : 'In riproduzione') : `Brano ${i + 1}`;
       const img = el.querySelector('img');
@@ -113,12 +122,13 @@ export function buildSongList(o: SongListOpts) {
       const st = q('.st');
       if (r.off) {
         const [ic, word, tip] = STATE[r.off];
-        st.textContent = r.off === 'downloading' && r.pct !== undefined ? `${ic} ${Math.round(r.pct * 100)}%` : `${ic} ${word}`;
+        // icon and word in two spans: narrow lists (the play queue) show the icon only, the word stays in the tooltip
+        st.replaceChildren(h('span', { class: 'st-ic' }, ic), h('span', { class: 'st-w' }, r.off === 'downloading' && r.pct !== undefined ? ` ${Math.round(r.pct * 100)}%` : ` ${word}`));
         st.title = r.reason ?? tip;
         st.className = `st ${r.off}`;
-      } else { st.textContent = ''; st.className = 'st'; }
+      } else { st.replaceChildren(); st.className = 'st'; }
       (q('.play') as HTMLButtonElement).disabled = !!r.bad || !!r.current || !!r.skip || !o.onPlay;
-      (q('.play') as HTMLButtonElement).hidden = !o.onPlay;
+      (q('.play') as HTMLButtonElement).hidden = !o.onPlay || selecting;
       if (el.querySelector('.cover')) (q('.cover') as HTMLElement).dataset.id = r.id;
     },
   });
@@ -128,11 +138,19 @@ export function buildSongList(o: SongListOpts) {
   el.setAttribute('aria-label', o.label);
   const rowOf = (t: EventTarget | null) => { const r = (t as Element | null)?.closest?.('.item') as HTMLElement | null; const i = r ? Number(r.dataset.i) : -1; return { el: r, i, row: rows[i] }; };
   const canPlay = (r?: SongVM) => !!r && !r.bad && !r.current && !r.skip;
-  el.addEventListener('dblclick', (e) => { const { row, i } = rowOf(e.target); if (canPlay(row) && !(e.target as Element).closest('button')) o.onPlay?.(row, i); });
+  el.addEventListener('dblclick', (e) => { if (selecting) return; const { row, i } = rowOf(e.target); if (canPlay(row) && !(e.target as Element).closest('button')) o.onPlay?.(row, i); });
   el.addEventListener('click', (e) => {
     const t = e.target as Element;
     const { row, i, el: r } = rowOf(t);
     if (!row) return;
+    if (selecting && !t.closest('button.more')) {
+      e.preventDefault();
+      if (e.shiftKey && anchor >= 0) { const [a, b] = anchor < i ? [anchor, i] : [i, anchor]; for (let k = a; k <= b; k++) sel.add(rows[k].id); }
+      else if (sel.has(row.id)) sel.delete(row.id); else sel.add(row.id);
+      anchor = i;
+      changed();
+      return;
+    }
     const b = t.closest('button');
     if (b?.classList.contains('play')) { if (canPlay(row)) o.onPlay?.(row, i); return; }
     if (b?.classList.contains('more')) { o.onMore(row, i, b as HTMLElement); return; }
@@ -194,6 +212,12 @@ export function buildSongList(o: SongListOpts) {
       paintEnds();
     },
     setHead(title: string, sub = '') { headTitle.textContent = title; headSub.textContent = sub; },
+    /** Selection mode on/off (off clears the selection). */
+    setSelecting(on: boolean) { selecting = on; if (!on) sel.clear(); anchor = -1; el.classList.toggle('selecting', on); changed(); },
+    isSelecting: () => selecting,
+    selected: () => rows.filter((r) => sel.has(r.id)).map((r) => r.id),
+    selectAll() { for (const r of rows) sel.add(r.id); changed(); },
+    selectNone() { sel.clear(); changed(); },
     refreshEnds: paintEnds,
   };
 }
