@@ -147,14 +147,14 @@ export function startWizard(ctx: WizardCtx): void {
         msg,
         nav());
     } else if (n === 2) {
-      const sel = h('select', { 'aria-label': 'Ingresso audio', onChange: () => ctx.setMic(sel.value) }, h('option', { value: '' }, 'Predefinito'));
+      const sel = h('select', { 'aria-label': 'Microfono per le forme del proiettore', onChange: () => ctx.setMic(sel.value) }, h('option', { value: '' }, 'Microfono del computer (predefinito)'));
       const msg = h('div', { class: 'status wizard-status' });
       const fill = async () => {
         try {
           const list = await ctx.refreshInputs();
-          sel.replaceChildren(h('option', { value: '' }, 'Predefinito'), ...list.map((d) => h('option', { value: d.id }, d.label)));
-          msg.textContent = list.length ? '' : 'Nessun ingresso audio trovato: collega un microfono o usa quello del computer.';
-        } catch { msg.textContent = 'Non riesco a leggere gli ingressi audio: concedi il permesso al microfono se il sistema lo chiede.'; }
+          sel.replaceChildren(h('option', { value: '' }, 'Microfono del computer (predefinito)'), ...list.map((d) => h('option', { value: d.id }, d.label)));
+          msg.textContent = list.length ? '' : 'Nessun microfono trovato: collegane uno (USB, cuffie) o usa quello del computer.';
+        } catch { msg.textContent = 'Non riesco a vedere i microfoni: concedi il permesso al microfono se il sistema lo chiede.'; }
       };
       box.append(
         h('h2', {}, '2. Proiettore e microfono'),
@@ -163,7 +163,7 @@ export function startWizard(ctx: WizardCtx): void {
         h('div', { class: 'row' },
           h('button', { onClick: () => { msg.textContent = ''; ctx.openProjector().catch((e: Error) => { msg.textContent = `Non riesco ad aprire il proiettore: ${e?.message ?? e}`; }); } }, 'Prova il proiettore'),
           h('button', { onClick: () => ctx.closeProjector() }, 'Chiudi proiettore')),
-        h('div', { class: 'row' }, h('label', {}, 'Ingresso audio'), sel, h('button', { onClick: () => void fill() }, 'Cerca ingressi')),
+        h('div', { class: 'row' }, h('label', {}, '🎤 Microfono'), sel, h('button', { onClick: () => void fill() }, '🔄 Cerca microfoni')),
         msg,
         h('p', { class: 'artist' }, 'Se hai più schermi, la finestra va sullo schermo diverso da quello principale; puoi cambiarlo dal pannello «Proiettore». Non è obbligatorio: puoi anche farlo dopo.'),
         nav());

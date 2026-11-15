@@ -1,4 +1,4 @@
-import { AudioDeck, AudioLike, HybridDeck } from '../src/audioDeck';
+import { AudioDeck, AudioLike, HybridDeck, sourceText } from '../src/audioDeck';
 import { Automix } from '../src/automix';
 import { Queue, Track } from '../src/queue';
 import type { YouTubeDeck } from '../src/youtubeDeck';
@@ -41,6 +41,64 @@ describe('hybrid deck: local file or YouTube', () => {
     await d.load('dQw4w9WgXcQ');
     expect(yt.load).not.toHaveBeenCalled();
     expect(d.videoIdForProjector()).toBe('dQw4w9WgXcQ');
+  });
+  it('projector on «Karaoke»: own file first; on «Video YouTube»: sound and video from YouTube; always said where from', async () => {
+    const files: Record<string, string> = { KsfMFpWcVYx: 'asset://localhost/%2FMusic%2FPartyMix%20Library%2Fmusic%2FVasco%20Rossi%20-%20Io%20No%20%5BKsfMFpWcVYx%5D.mp3', abcdefghijk: 'asset://localhost/%2Fvideo%2FX%20%5Babcdefghijk%5D.mp4', brokenbroke: 'asset://localhost/bad.mp3' };
+    const mode = { video: false }, net = { v: true };
+    const yt = ytFake();
+    const a = fakeAudio();
+    const d = new HybridDeck(new AudioDeck(a), { localUrl: async (id) => files[id], canStream: () => net.v, preferYouTube: () => mode.video }, yt);
+    // Karaoke: the MP3 on the computer
+    await d.load('KsfMFpWcVYx');
+    expect(yt.load).not.toHaveBeenCalled();
+    expect(sourceText(d.source(), false)).toBe('💾 Audio dal tuo file MP3 sul computer');
+    await d.load('abcdefghijk');
+    expect(d.source()).toBe('video-file');
+    // Video YouTube: the same song from YouTube, sound and picture together
+    mode.video = true;
+    await d.load('KsfMFpWcVYx');
+    expect(yt.load).toHaveBeenCalledWith('KsfMFpWcVYx');
+    expect(d.source()).toBe('youtube-video-mode');
+    expect(sourceText(d.source(), true)).toContain('Audio e video da YouTube');
+    // …but offline the file still plays, and the user is told the video cannot be shown
+    net.v = false;
+    await d.load('KsfMFpWcVYx');
+    expect(d.source()).toBe('sound-file');
+    expect(sourceText(d.source(), true)).toContain('niente internet');
+    // a file that does not open → YouTube, said so
+    net.v = true; mode.video = false;
+    await d.load('brokenbroke');
+    expect(sourceText(d.source(), false)).toContain('non si apre: suona da YouTube');
+    await d.load('9bZkp7q19f0');
+    expect(sourceText(d.source(), false)).toBe('☁ Audio e video da YouTube (internet)');
+  });
+  it('mode change mid-song (user rule): to Karaoke → the file from the beginning; to Video → YouTube leads, same point', async () => {
+    const files: Record<string, string> = { KsfMFpWcVYx: 'asset://localhost/Io%20No%20%5BKsfMFpWcVYx%5D.mp3' };
+    const mode = { video: true };
+    const yt = ytFake();
+    const a = fakeAudio();
+    const audio = new AudioDeck(a);
+    const seek = vi.spyOn(audio, 'seekTo');
+    const d = new HybridDeck(audio, { localUrl: async (id) => files[id], canStream: () => true, preferYouTube: () => mode.video }, yt);
+    await d.load('KsfMFpWcVYx'); d.setVolume(70); d.play();
+    expect(d.source()).toBe('youtube-video-mode');
+    expect(await d.reselect()).toBe(false); // already right
+    mode.video = false;
+    expect(await d.reselect()).toBe('file-from-start');
+    expect(d.source()).toBe('sound-file');
+    expect(seek).toHaveBeenLastCalledWith(0);
+    expect((a as unknown as { paused: boolean }).paused).toBe(false);
+    expect(yt.stop).toHaveBeenCalled();
+    mode.video = true;
+    expect(await d.reselect()).toBe('youtube');
+    expect(d.source()).toBe('youtube-video-mode');
+    expect(yt.play).toHaveBeenCalled();
+    expect(yt.setVolume).toHaveBeenLastCalledWith(70);
+    // a song that is not on the computer: Karaoke restarts it on YouTube
+    await d.load('9bZkp7q19f0'); d.play();
+    mode.video = false;
+    expect(await d.reselect()).toBe('from-start');
+    expect(yt.seekTo).toHaveBeenLastCalledWith(0);
   });
   it('online: a song without a local copy goes to YouTube', async () => {
     const yt = ytFake();

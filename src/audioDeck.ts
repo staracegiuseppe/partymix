@@ -61,6 +61,8 @@ type HybridDeps = {
   localUrl: (id: string) => Promise<string | undefined>;
   /** False offline: a song without a local copy is not even tried (no endless attempts to reach the network). */
   canStream: () => boolean;
+  /** Projector on «Video YouTube»: sound and video both from YouTube (in sync), even when there is a local copy. */
+  preferYouTube?: () => boolean;
 };
 
 /**
@@ -68,9 +70,31 @@ type HybridDeps = {
  * The automix sees a single deck, so crossfades work the same between a file and a video.
  * YouTube is optional: offline (or before its player is ready) the deck plays the library only.
  */
+export type DeckSource = 'none' | 'file' | 'sound-file' | 'video-file' | 'youtube' | 'youtube-video-mode' | 'youtube-fallback';
+
+/** The line under the song: where its sound comes from and, with the projector on «Video YouTube», where the video does. */
+export function sourceText(s: DeckSource, projectorVideo: boolean): string {
+  // a local copy while the projector wants «Video YouTube» only happens offline (or before YouTube is ready)
+  const yt = projectorVideo ? ' · ⚠ niente internet: il video di YouTube non si vede' : '';
+  switch (s) {
+    case 'file': return '💾 Dal tuo file sul computer';
+    case 'sound-file': return `💾 Audio dal tuo file MP3 sul computer${yt}`;
+    case 'video-file': return `💾 Dal tuo video scaricato sul computer${yt}`;
+    case 'youtube': return '☁ Audio e video da YouTube (internet)';
+    case 'youtube-video-mode': return '☁ Audio e video da YouTube (proiettore su «Video YouTube»; con «Karaoke» suona il tuo file, se c’è)';
+    case 'youtube-fallback': return '⚠ Il file sul computer non si apre: suona da YouTube (internet)';
+    default: return '';
+  }
+}
+
 export class HybridDeck implements Deck {
   private id = '';
   private mode: 'audio' | 'yt' = 'audio';
+  private audioOnly = false; // the local copy is a sound file (MP3…), without its video
+  private fellBack = false; // the local copy did not open: the song plays from YouTube
+  private chosenYt = false; // played from YouTube because the projector is on «Video YouTube»
+  private playing = false;
+  private vol = 100;
   private token = 0;
   private endedCb: () => void = () => {};
   private errorCb: (code: number) => void = () => {};
@@ -95,8 +119,18 @@ export class HybridDeck implements Deck {
   async load(id: string): Promise<void> {
     const tok = ++this.token;
     this.id = id;
+    // «Video YouTube» on the projector and the internet is there: the song plays from YouTube, sound and picture together
+    if (!isLocalId(id) && this.yt && this.deps.canStream() && this.deps.preferYouTube?.()) {
+      this.fellBack = false; this.audioOnly = false; this.chosenYt = true;
+      if (this.mode === 'audio') this.audio.stop();
+      this.mode = 'yt';
+      return this.yt.load(id);
+    }
+    this.chosenYt = false;
     const url = await this.deps.localUrl(id);
     if (tok !== this.token) throw err('Caricamento sostituito', 'superseded');
+    this.audioOnly = !!url && isSoundFile(url);
+    this.fellBack = false;
     if (url) {
       if (this.mode === 'yt') this.yt?.stop();
       this.mode = 'audio';
@@ -110,6 +144,7 @@ export class HybridDeck implements Deck {
         log('warn', 'deck.local_failed_fallback_youtube', { videoId: id, error: String(e) });
         this.audio.stop();
         this.mode = 'yt';
+        this.fellBack = true;
         return this.yt.load(id);
       }
     }
@@ -121,16 +156,50 @@ export class HybridDeck implements Deck {
   }
 
   private get on(): Deck { return this.mode === 'yt' && this.yt ? this.yt : this.audio; }
-  play(): void { this.on.play(); }
-  pause(): void { this.on.pause(); }
-  stop(): void { this.token++; this.audio.stop(); this.yt?.stop(); }
-  setVolume(v: number): void { this.on.setVolume(v); }
+  play(): void { this.playing = true; this.on.play(); }
+  pause(): void { this.playing = false; this.on.pause(); }
+  stop(): void { this.playing = false; this.token++; this.audio.stop(); this.yt?.stop(); }
+  setVolume(v: number): void { this.vol = v; this.on.setVolume(v); }
+
+  /**
+   * The projector mode changed (the user's rule):
+   * - to «Video YouTube»: sound and picture both from YouTube, which leads; the song goes on from the same point;
+   * - to «Karaoke»: the song starts again from the beginning, from the file on the computer when there is one.
+   * Same volume, still playing if it was. Returns what was done, or false when there was nothing to do.
+   */
+  async reselect(): Promise<'youtube' | 'file-from-start' | 'from-start' | false> {
+    const id = this.id;
+    if (!id || isLocalId(id)) return false;
+    const playing = this.playing, vol = this.vol;
+    if (this.deps.preferYouTube?.()) {
+      if (!this.yt || !this.deps.canStream() || (this.mode === 'yt' && !this.fellBack)) return false;
+      const pos = this.position();
+      await this.load(id); // goes to YouTube: preferYouTube is on
+      this.setVolume(vol);
+      if (pos > 1) this.seekTo(pos);
+      if (playing) this.play();
+      return 'youtube';
+    }
+    const hasFile = !!(await this.deps.localUrl(id));
+    if (hasFile && this.mode !== 'audio') await this.load(id); // to the file on the computer
+    this.setVolume(vol);
+    this.seekTo(0); // Karaoke: from the beginning, so words and music start together
+    if (playing) this.play();
+    return hasFile ? 'file-from-start' : 'from-start';
+  }
   position(): number { return this.on.position(); }
   duration(): number { return this.on.duration(); }
   seekTo(s: number): void { if (this.mode === 'yt') this.yt?.seekTo(s); else this.audio.seekTo(s); }
   currentVideoId(): string { return this.id; }
   /** The YouTube video id shown by the projector («Video YouTube»): none for a local file. */
   videoIdForProjector(): string { return isLocalId(this.id) ? '' : this.id; }
+  /** Where the sound comes from, so the user always knows (a file on the computer, or YouTube over the internet). */
+  source(): DeckSource {
+    if (!this.id) return 'none';
+    if (this.mode === 'yt') return this.fellBack ? 'youtube-fallback' : this.chosenYt ? 'youtube-video-mode' : 'youtube';
+    if (isLocalId(this.id)) return 'file';
+    return this.audioOnly ? 'sound-file' : 'video-file';
+  }
   onEnded(cb: () => void): void { this.endedCb = cb; }
   onError(cb: (code: number) => void): void { this.errorCb = cb; }
 
@@ -143,4 +212,11 @@ export class HybridDeck implements Deck {
     this.id = '';
     return this.yt.readPlaylist(listId);
   }
+}
+
+/** A sound-only file (MP3, M4A…): the song was saved without its video, so the projector shows no YouTube video. */
+export function isSoundFile(url: string): boolean {
+  let u = url;
+  try { u = decodeURIComponent(url); } catch { /* keep it as it is */ }
+  return /\.(mp3|m4a|aac|ogg|oga|opus|flac|wav)(\?|#|$)/i.test(u);
 }

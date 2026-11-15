@@ -12,8 +12,8 @@ let msg = 'Avvio del microfono…';
 
 const REASON: Record<string, string> = {
   denied: 'Microfono non disponibile: concedi il permesso al microfono per questa app.',
-  nodevice: 'Microfono non trovato: collega un ingresso audio o sceglilo dalla console.',
-  error: 'Il microfono non risponde: riprova a scegliere un ingresso dalla console.',
+  nodevice: 'Microfono non trovato: collegane uno o sceglilo dalla console (Proiettore → 🎤 Microfono).',
+  error: 'Il microfono non risponde: riprova a sceglierlo dalla console (Proiettore → 🎤 Microfono).',
 };
 
 async function openMic() {

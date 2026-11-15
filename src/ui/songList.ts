@@ -194,6 +194,7 @@ export function buildSongList(o: SongListOpts) {
   }
 
   const wrap = h('div', { class: 'songlist-wrap' }, el, o.empty ?? null);
+  fitToWindow(el, wrap);
   function paintEnds() {
     endText.textContent = `■ ${o.endLabel ?? 'Fine'} · ${plural(rows.length, 'brano', 'brani')}`;
     endNote.textContent = o.endNote?.() ?? '';
@@ -220,4 +221,32 @@ export function buildSongList(o: SongListOpts) {
     selectNone() { sel.clear(); changed(); },
     refreshEnds: paintEnds,
   };
+}
+
+/**
+ * Computer: the list ends at the bottom of the window, so its last song and «Fine» are reached by scrolling the list
+ * only — never the list *and* the page. Height = what is left under the list's top (minus what follows it).
+ */
+function fitToWindow(el: HTMLElement, wrap: HTMLElement) {
+  if (typeof window === 'undefined' || typeof ResizeObserver !== 'function') return;
+  let raf = 0;
+  const fit = () => {
+    raf = 0;
+    if (!document.body.classList.contains('desk') || !el.isConnected || !el.offsetParent) return;
+    let after = 0; // what sits under the list in the same page (e.g. «Altri risultati»)
+    for (let n = wrap.nextElementSibling as HTMLElement | null; n; n = n.nextElementSibling as HTMLElement | null) if (n.offsetHeight) after += n.offsetHeight + 16;
+    const top = el.getBoundingClientRect().top + window.scrollY;
+    const main = el.closest<HTMLElement>('.m-main');
+    const pad = main ? parseFloat(getComputedStyle(main).paddingBottom) || 24 : 24; // the page's own bottom margin
+    const hgt = Math.max(280, Math.floor(window.innerHeight - top - after - pad - 1));
+    el.style.minHeight = '0'; // the stylesheet's minimum would push the end under the window again
+    if (Math.abs(el.offsetHeight - hgt) > 1) el.style.height = `${hgt}px`;
+  };
+  const later = () => { if (!raf) raf = window.setTimeout(fit, 16); }; // not rAF: it does not run while the window is in the background
+  const ro = new ResizeObserver(later);
+  ro.observe(document.body); // anything above grows or shrinks
+  ro.observe(wrap); // the page with the list is shown
+  window.addEventListener('resize', later);
+  window.setInterval(later, 700); // what moves the list's top without resizing anything (a page shown, a bar above)
+  later();
 }

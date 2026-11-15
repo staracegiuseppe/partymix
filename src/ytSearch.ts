@@ -1,4 +1,23 @@
-export type YtResult = { videoId: string; title: string; channel: string; seconds: number };
+export type YtResult = { videoId: string; title: string; channel: string; seconds: number; views?: number; ageDays?: number };
+
+/** «1.234.567 visualizzazioni», «1,2 Mln di visualizzazioni», «987K views» → a number. */
+export function parseViews(t: string): number | undefined {
+  const s = t.toLowerCase().replace(/\s+/g, ' ');
+  const m = /([\d.,]+)\s*(mld|mln|mila|k|m|b)?/.exec(s);
+  if (!m) return undefined;
+  const unit = m[2];
+  const num = unit ? Number(m[1].replace(',', '.')) : Number(m[1].replace(/[.,]/g, ''));
+  if (!Number.isFinite(num)) return undefined;
+  const mult = unit === 'mld' || unit === 'b' ? 1e9 : unit === 'mln' || unit === 'm' ? 1e6 : unit === 'mila' || unit === 'k' ? 1e3 : 1;
+  return Math.round(num * mult);
+}
+/** «3 anni fa», «2 months ago», «1 settimana fa» → days. */
+export function parseAge(t: string): number | undefined {
+  const m = /(\d+)\s*(anno|anni|year|years|mese|mesi|month|months|settiman[ae]|weeks?|giorn[oi]|days?|or[ae]|hours?|minut[oi]|minutes?)/i.exec(t);
+  if (!m) return undefined;
+  const n = Number(m[1]), u = m[2].toLowerCase();
+  return /^ann|^year/.test(u) ? n * 365 : /^mes|^month/.test(u) ? n * 30 : /^settiman|^week/.test(u) ? n * 7 : /^giorn|^day/.test(u) ? n : 0;
+}
 export type Wanted = { title: string; artist: string; durationSec: number };
 
 export const ytSearchUrl = (q: string) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q).replace(/%20/g, '+')}&sp=EgIQAQ%253D%253D`;
@@ -23,6 +42,8 @@ export function parseYtResults(html: string): YtResult[] {
         title: String(v.title?.runs?.[0]?.text ?? ''),
         channel: String(v.ownerText?.runs?.[0]?.text ?? ''),
         seconds: seconds(String(v.lengthText?.simpleText ?? '')),
+        views: parseViews(String(v.viewCountText?.simpleText ?? v.viewCountText?.runs?.[0]?.text ?? '')),
+        ageDays: parseAge(String(v.publishedTimeText?.simpleText ?? '')),
       });
     }
     Object.values(r).forEach(walk);
@@ -62,7 +83,7 @@ export function rankResults(results: YtResult[], want: Wanted): YtResult[] {
 
 // --- «🔎 Cerca su YouTube»: official YouTube Data API v3 (needs the user's free API key); the page reading above stays as a fallback. ---
 
-export type SearchHit = { videoId: string; title: string; channel: string; seconds: number; thumb: string; available: boolean; reason?: string };
+export type SearchHit = { videoId: string; title: string; channel: string; seconds: number; thumb: string; available: boolean; reason?: string; views?: number; likes?: number; ageDays?: number };
 export type SearchResult = { hits: SearchHit[]; via: 'api' | 'web'; next?: string };
 
 /** A search problem, in words for the user (never a raw HTTP or JSON error). */
@@ -102,10 +123,10 @@ export async function searchYouTube(q: string, o: { apiKey?: string; fetch?: typ
   if (!query) throw new SearchError('Scrivi il titolo, l’artista o entrambi.', 'empty');
   const f = o.fetch ?? fetch;
   if (o.apiKey) {
-    const s = await apiGet(f, 'search', { part: 'snippet', type: 'video', maxResults: String(o.max ?? 25), q: query, key: o.apiKey, ...(o.pageToken ? { pageToken: o.pageToken } : {}) });
+    const s = await apiGet(f, 'search', { part: 'snippet', type: 'video', maxResults: String(Math.min(50, o.max ?? 25)), q: query, key: o.apiKey, ...(o.pageToken ? { pageToken: o.pageToken } : {}) });
     const ids: string[] = (s.items ?? []).map((i: any) => i?.id?.videoId).filter((x: unknown): x is string => typeof x === 'string');
     if (!ids.length) return { hits: [], via: 'api' };
-    const v = await apiGet(f, 'videos', { part: 'contentDetails,status,snippet', id: ids.join(','), key: o.apiKey });
+    const v = await apiGet(f, 'videos', { part: 'contentDetails,status,snippet,statistics', id: ids.join(','), key: o.apiKey });
     const details = new Map<string, any>((v.items ?? []).map((i: any) => [i.id, i]));
     const hits = ids.map((id): SearchHit => {
       const sn = (s.items as any[]).find((i) => i?.id?.videoId === id)?.snippet ?? {};
@@ -118,6 +139,9 @@ export async function searchYouTube(q: string, o: { apiKey?: string; fetch?: typ
       return {
         videoId: id, title: decodeEntities(String(sn.title ?? d?.snippet?.title ?? '')), channel: decodeEntities(String(sn.channelTitle ?? '')),
         seconds: isoSeconds(d?.contentDetails?.duration ?? ''), thumb: sn.thumbnails?.medium?.url ?? thumbOf(id), available: !reason, ...(reason ? { reason } : {}),
+        views: d?.statistics?.viewCount ? Number(d.statistics.viewCount) : undefined,
+        likes: d?.statistics?.likeCount ? Number(d.statistics.likeCount) : undefined,
+        ageDays: sn.publishedAt ? Math.max(0, Math.round((Date.now() - Date.parse(sn.publishedAt)) / 86_400_000)) : undefined,
       };
     });
     return { hits, via: 'api', next: typeof s.nextPageToken === 'string' ? s.nextPageToken : undefined };

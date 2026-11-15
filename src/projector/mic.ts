@@ -5,7 +5,7 @@ export type MicResult =
 export async function listInputs(): Promise<{ id: string; label: string }[]> {
   try {
     const devs = await navigator.mediaDevices.enumerateDevices();
-    return devs.filter((d) => d.kind === 'audioinput').map((d, i) => ({ id: d.deviceId, label: d.label || `Ingresso ${i + 1}` }));
+    return devs.filter((d) => d.kind === 'audioinput').map((d, i) => ({ id: d.deviceId, label: d.label || `Microfono ${i + 1}` }));
   } catch { return []; }
 }
 

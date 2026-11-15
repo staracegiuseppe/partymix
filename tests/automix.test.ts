@@ -56,6 +56,8 @@ class FakeDeck implements Deck {
   pause() { this.halt(); }
   stop() { this.stops++; this.halt(); this.pos = 0; }
   setVolume(v: number) { this.vols.push(v); }
+  seeks: number[] = [];
+  seekTo(sec: number) { this.seeks.push(sec); this.pos = sec; }
   position() { return this.playing ? this.pos + (this.clock.now - this.startedAt) / 1000 : this.pos; }
   duration() { return this.dur; }
   onEnded(cb: () => void) { this.endCb = cb; }
@@ -65,7 +67,7 @@ class FakeDeck implements Deck {
 
 const tr = (id: string): Track => ({ videoId: id, status: 'ok' });
 
-function setup(opts: { ids?: string[]; profile?: Profile; master?: number; never?: string[]; dur?: number } = {}) {
+function setup(opts: { ids?: string[]; profile?: Profile; master?: number; never?: string[]; dur?: number; cues?: Record<string, { start: number; end: number }> } = {}) {
   const clock = new Clock();
   const never = new Set(opts.never ?? []);
   const decks: [FakeDeck, FakeDeck] = [new FakeDeck(clock, never, opts.dur), new FakeDeck(clock, never, opts.dur)];
@@ -76,9 +78,24 @@ function setup(opts: { ids?: string[]; profile?: Profile; master?: number; never
   const am = new Automix({
     decks, queue, profile: () => profile, masterVolume: () => master,
     now: () => clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer, log: () => {}, online: () => online,
+    cues: opts.cues ? (id) => opts.cues![id] : undefined,
   });
   return { clock, decks, queue, am, setOnline: (v: boolean) => (online = v), setProfile: (p: Profile) => (profile = p), setMaster: (m: number) => (master = m) };
 }
+
+describe('Automix: silence and near-silent intros', () => {
+  it('fades out before the silent tail and brings the next song in where its music starts', async () => {
+    const s = setup({ cues: { A: { start: 0, end: 40 }, B: { start: 5, end: 60 } } }); // A: 20 s of silence at the end; B: 5 s before the music
+    s.am.start(); await s.clock.advance(100);
+    await s.clock.advance(30_000);
+    expect(s.am.state()).toBe('playing');
+    await s.clock.advance(8_000); // 38 s: inside the mix window before A's real end (40 s), not 52 s
+    expect(s.am.state()).toBe('crossfading');
+    expect(s.decks[1].seeks).toEqual([5]);
+    await s.clock.advance(10_000);
+    expect(s.queue.current()?.videoId).toBe('B');
+  });
+});
 
 describe('Automix', () => {
   it('(a) crossfades before the end and hands over to the next deck', async () => {

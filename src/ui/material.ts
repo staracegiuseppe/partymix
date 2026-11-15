@@ -143,6 +143,7 @@ export function buildShell(root: HTMLElement, o: { title: Node; actions: Node[];
   }
   history.replaceState({ screen: home }, '');
   addEventListener('popstate', (e) => {
+    if (backPending) { flushBack(); return; } // our own back after closing a sheet: nothing else to do
     if (sheetOpen) { closeSheet(false); return; }
     show((e.state as { screen?: string } | null)?.screen ?? home);
   });
@@ -162,17 +163,28 @@ export function buildShell(root: HTMLElement, o: { title: Node; actions: Node[];
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && sheetOpen) closeSheet(); });
 
   let sheetOpen: HTMLElement | undefined;
+  let backPending = false; // a history.back() of a closed sheet whose «popstate» has not arrived yet
+  let afterBack: (() => void)[] = [];
   function closeSheet(viaHistory = true) {
     const s = sheetOpen;
     if (!s) return;
     sheetOpen = undefined;
     s.classList.remove('on');
     setTimeout(() => s.remove(), 220);
-    if (viaHistory && history.state?.sheet) history.back();
+    if (viaHistory && history.state?.sheet) { backPending = true; history.back(); }
   }
+  /** Run after the closing sheet's «back» has landed: otherwise it would close the sheet `run` opens (MP3/MP4). */
+  function whenClosed(run: () => void) {
+    if (!backPending) { run(); return; }
+    afterBack.push(run);
+    setTimeout(flushBack, 400); // a browser that never sends popstate
+  }
+  function flushBack() { backPending = false; const r = afterBack; afterBack = []; r.forEach((f) => f()); }
   /** A modal bottom sheet listing the actions for one item. */
   function sheet(title: string, subtitle: string, items: SheetItem[]) {
-    closeSheet();
+    if (backPending) { whenClosed(() => sheet(title, subtitle, items)); return; } // a sheet is still closing
+    const replacing = !!sheetOpen; // one sheet after another: same history entry, no back/forward race
+    closeSheet(false);
     const panel = h('div', { class: 'm-sheet-panel', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
       h('div', { class: 'm-handle' }),
       h('div', { class: 'm-sheet-head' }, h('div', { class: 'm-sheet-title' }, title), subtitle ? h('div', { class: 'm-sheet-sub' }, subtitle) : null),
@@ -181,7 +193,7 @@ export function buildShell(root: HTMLElement, o: { title: Node; actions: Node[];
     const s = h('div', { class: 'm-sheet', onClick: (e: Event) => { if (e.target === s) closeSheet(); } }, panel);
     document.body.append(s);
     sheetOpen = s;
-    history.pushState({ ...history.state, sheet: true }, '');
+    if (replacing && history.state?.sheet) history.replaceState(history.state, ''); else history.pushState({ ...history.state, sheet: true }, '');
     requestAnimationFrame(() => s.classList.add('on'));
     panel.tabIndex = -1;
     panel.focus({ preventScroll: true }); // focus moves into the sheet without ringing the first action

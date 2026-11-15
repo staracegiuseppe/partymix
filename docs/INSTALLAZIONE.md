@@ -49,4 +49,4 @@ Scarica il nuovo installer e installalo sopra quello vecchio: impostazioni e pla
 ## Se qualcosa non va
 - *"Non riesco ad avviare i player YouTube"*: controlla la connessione e riavvia l'app.
 - *Un brano è sbarrato nella coda*: YouTube non ne consente la riproduzione incorporata; usa l'avviso a destra per sostituirlo.
-- *Il proiettore dice "Microfono non disponibile"*: concedi il permesso nelle impostazioni di privacy del sistema o scegli un altro ingresso dalla console (**Cerca ingressi**).
+- *Il proiettore dice "Microfono non disponibile"*: concedi il permesso nelle impostazioni di privacy del sistema oppure scegli un altro microfono dalla console: Proiettore → **🎤 Microfono** → **🔄 Cerca microfoni**.

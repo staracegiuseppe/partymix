@@ -300,6 +300,26 @@ const KARAOKE = /karaoke|base musicale|instrumental|backing track|\bbasi?\b/i;
  * The extra length of the video over the studio track is mostly intro (measured: 22 s extra, ~10 s of it before the first line),
  * so about 45 % of it, within 5-20 s, is used as a starting point. Returns undefined for anything that is not a karaoke.
  */
+/**
+ * A music video often opens with a scene before the song (Vasco Rossi «Vita spericolata»: 29 s of film, a breath of
+ * silence, then the record). Timed lyrics follow the record, so they run ahead. Given the loudness of the file
+ * (dB, one value every `step` s), finds the deepest near-silent gap within the first `maxSec` seconds: the song starts
+ * where the sound comes back. Undefined when there is no clear gap (then nothing is moved).
+ */
+export function introEnd(levels: number[], step: number, maxSec: number): number | undefined {
+  const last = Math.min(levels.length - 2, Math.floor(maxSec / step));
+  const first = Math.ceil(2 / step); // a fade-in at 0 s is not an intro
+  if (last <= first) return undefined;
+  const sorted = [...levels.slice(0, Math.min(levels.length, last + Math.ceil(20 / step)))].sort((x, y) => x - y);
+  const typical = sorted[Math.floor(sorted.length / 2)];
+  let best = -1;
+  for (let i = first; i <= last; i++) if (best < 0 || levels[i] < levels[best]) best = i;
+  if (best < 0 || typical - levels[best] < 12) return undefined; // no real silence: maybe the extra time is at the end
+  let j = best;
+  while (j < levels.length - 1 && levels[j] < levels[best] + 10) j++; // the song is back
+  return Math.round(j * step * 2) / 2;
+}
+
 export function karaokeAlign(title: string, videoDuration: number, trackDuration?: number): Align | undefined {
   if (!KARAOKE.test(title)) return undefined;
   const extra = trackDuration && videoDuration > 0 ? videoDuration - trackDuration : 0;

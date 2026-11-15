@@ -9,6 +9,8 @@ import { youtubeUrl } from '../download/client';
 import { fmtTime, h } from './dom';
 import { buildSongList, SongVM } from './songList';
 import { buildDownloadsUI, DlPrefs, loadPrefs, storePrefs } from './downloadsUI';
+import { Command, EXAMPLES, isCommand, parseCommand, WORDS } from '../commands/parse';
+import { fmtViews, pickResults } from '../commands/pick';
 import type { SheetItem } from './material';
 
 /** What the computer's pages need from the app. */
@@ -26,13 +28,15 @@ export type PagesDeps = {
   playPlaylist(id: string, startAt?: string): void;
   /** Loads a YouTube/Spotify link into a playlist (it becomes its source). */
   loadLink(id: string, link: string): void;
+  /** Adds the songs added on YouTube and drops the ones removed there; your other changes stay. Returns what changed. */
+  syncFromYouTube?(id: string): Promise<string>;
   /** A playlist was changed here: if it is the one playing, the queue follows. */
   edited(id: string): void;
   deleted(id: string): void;
   playTrack(t: Track): void;
   enqueue(t: Track, next: boolean): void;
   trackById(id: string): Track | undefined;
-  search(q: string, pageToken?: string): Promise<SearchResult>;
+  search(q: string, pageToken?: string, max?: number): Promise<SearchResult>;
   status(text: string, error?: boolean): void;
   /** The song menu (Material: bottom sheet / dialog) and the page navigation of the shell. */
   menu(title: string, subtitle: string, items: SheetItem[]): void;
@@ -342,7 +346,16 @@ export function buildDesktopPages(d: PagesDeps) {
   const dtAll = btn('⬇ Scarica tutta la playlist', 'm-tonal', () => { const p = d.playlists.get(detailId); if (p) downloadTracks(p.tracks.map((t) => t.videoId), `la playlist «${p.name}»`); },
     { title: 'Scarica tutti i brani della playlist (scegli MP3 o MP4): diventano la tua discografia offline' });
   let dtSel: ReturnType<typeof selectionBar> | undefined;
-  const dtHead = pageHeader('', dtPlay, d.downloads ? dtAll : null, h('span', { class: 'sel-slot' }), dtMore);
+  const dtSync = btn('🔄 Aggiorna da YouTube', 'm-tonal', async () => {
+    const id = detailId;
+    if (!id || !d.syncFromYouTube) return;
+    dtSync.disabled = true;
+    const label = dtSync.textContent;
+    dtSync.textContent = '🔄 Aggiorno…';
+    try { d.status(await d.syncFromYouTube(id)); } catch (e) { d.status(`Aggiornamento non riuscito: ${(e as Error).message}`, true); }
+    finally { dtSync.disabled = false; dtSync.textContent = label; }
+  }, { title: 'Aggiunge i brani che hai messo nella playlist su YouTube e toglie quelli che hai cancellato. Il tuo ordine e le tue sostituzioni restano.' });
+  const dtHead = pageHeader('', dtPlay, dtSync, d.downloads ? dtAll : null, h('span', { class: 'sel-slot' }), dtMore);
   const dtLink = h('input', { type: 'url', class: 'pg-input', placeholder: 'Link di una playlist YouTube o Spotify', 'aria-label': 'Link della playlist YouTube o Spotify' });
   const dtLoad = btn('Carica', 'm-tonal', () => { if (detailId && dtLink.value.trim()) d.loadLink(detailId, dtLink.value.trim()); }, { title: 'Legge (o rilegge da capo) la playlist da YouTube o Spotify' });
   dtLink.addEventListener('keydown', (e) => { if (e.key === 'Enter') dtLoad.click(); });
@@ -381,6 +394,7 @@ export function buildDesktopPages(d: PagesDeps) {
     dtHead.sub.textContent = [plural(p.tracks.length, 'brano', 'brani'), dur ? fmtLong(dur) : '', `${offline} offline`, p.id === d.playingId() ? '▶ in riproduzione' : ''].filter(Boolean).join(' · ');
     dtPlay.disabled = !p.tracks.length;
     if (document.activeElement !== dtLink) dtLink.value = p.link ?? '';
+    dtSync.classList.toggle('hidden', !d.syncFromYouTube || !p.link || p.source === 'Spotify' || !/[?&]list=/.test(p.link));
     dtSource.open = !p.tracks.length;
     dtList.setHead(`PLAYLIST: ${p.name}`, plural(p.tracks.length, 'brano', 'brani'));
     dtList.set(p.tracks.map((t) => songVM(t)), start ? 'start' : 'keep');
@@ -396,8 +410,9 @@ export function buildDesktopPages(d: PagesDeps) {
   let searching = false;
   let lastErr = '';
   const sInput = h('input', { type: 'search', class: 'pg-input big', placeholder: 'Cerca una canzone, un artista o un album', 'aria-label': 'Cosa cercare' });
-  const sGo = btn('🔎 Cerca', 'm-filled', () => runSearch(sInput.value));
-  sInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(sInput.value); });
+  const sGo = btn('🔎 Cerca', 'm-filled', () => submit(sInput.value));
+  sInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(sInput.value); });
+  sInput.placeholder = 'Cerca una canzone… o scrivi un comando: «i 10 Just Dance più visti, aggiungili a Festa»';
   sInput.addEventListener('input', () => { if (src === 'library') { searchQ = sInput.value; paintSearch(); } });
   const tabs = (['youtube', 'library'] as const).map((k) => btn(k === 'youtube' ? '▶ YouTube' : '🎧 La mia musica', 'seg-btn', () => { src = k; paintTabs(); if (k === 'library') { searchQ = sInput.value; paintSearch(); } else if (sInput.value.trim() && sInput.value.trim() !== searchQ) runSearch(sInput.value); else paintSearch(); }, { role: 'tab' }));
   const paintTabs = () => {
@@ -410,7 +425,7 @@ export function buildDesktopPages(d: PagesDeps) {
   const hitTrack = (x: SearchHit): Track => ({ videoId: x.videoId, title: x.title, artist: x.channel.replace(/ - Topic$/, ''), durationSec: x.seconds || undefined, thumb: x.thumb, status: 'ok', manual: true });
   const sList = buildSongList({
     label: 'Risultati della ricerca', cover: true, head: false, endLabel: 'Fine dei risultati', empty: sEmpty, dragToPlaylists: true,
-    onSelectionChange: (ids) => sSel?.paint(ids),
+    onSelectionChange: (ids) => { sSel?.paint(ids); paintCmdGo(); },
     onPlay: (r) => { const t = trackOf(r.id); if (t) d.playTrack(t); },
     onMore: (r) => { const t = trackOf(r.id); if (!t) return; songMenu(t); },
   });
@@ -435,6 +450,94 @@ export function buildDesktopPages(d: PagesDeps) {
       if (!page) searchRes = undefined;
     } finally { searching = false; paintSearch(); }
   }
+  // ---------- commands in Italian: understood here, results proposed, nothing changes before «✓» ----------
+  let cmd: Command | undefined;
+  const cmdChips = h('div', { class: 'cmd-chips' });
+  const cmdGo = btn('', 'm-filled', () => void confirmCommand());
+  const cmdBar = h('div', { class: 'cmd-bar hidden', role: 'status' }, h('div', { class: 'cmd-title' }, '✨ Ho capito'), cmdChips,
+    h('div', { class: 'cmd-actions' }, cmdGo, btn('Annulla', 'm-text-btn', () => endCommand())));
+  function endCommand() { cmd = undefined; cmdBar.classList.add('hidden'); sSel?.toggle(false); }
+  function submit(text: string) {
+    examples.open = false; // the results come first; the examples stay one click away
+    const c = parseCommand(text);
+    if (isCommand(c)) { void runCommand(c); return; }
+    endCommand();
+    runSearch(text);
+  }
+  const findPlaylist = (name: string) => d.playlists.list().find((p) => norm(p.name) === norm(name));
+  function targetLabel(c: Command) {
+    if (c.target === 'current') { const p = d.playlists.get(d.playingId() ?? detailId); return p ? `«${p.name}»` : 'una playlist (la scegli tu)'; }
+    return c.target ? `«${c.target}»${findPlaylist(c.target) ? '' : ' (nuova)'}` : '';
+  }
+  async function runCommand(c: Command) {
+    cmd = c;
+    cmdChips.replaceChildren(...c.understood.map((u) => h('span', { class: 'cmd-chip' }, u)));
+    cmdBar.classList.remove('hidden');
+    cmdGo.classList.add('hidden');
+    if (c.library) { src = 'library'; paintTabs(); searchQ = c.query; lastErr = ''; paintSearch(); }
+    else {
+      src = 'youtube'; paintTabs();
+      if (!c.query) { lastErr = 'Scrivi anche cosa cercare (un titolo, un artista, un genere).'; paintSearch(); return; }
+      if (!d.online()) { lastErr = 'Sei offline: i comandi su YouTube tornano quando c’è rete.'; paintSearch(); return; }
+      searching = true; lastErr = ''; searchQ = c.query; paintSearch();
+      try {
+        const res = await d.search(c.query, undefined, 50);
+        const all = [...res.hits];
+        let picked = pickResults(all, c);
+        if (picked.length < c.count) {
+          // not enough after the filters: the next page, and for recent songs the same search with the year
+          // (without an API key YouTube gives ~20 results and no next page)
+          const year = new Date().getFullYear();
+          const extra: Promise<SearchResult>[] = [];
+          if (res.next) extra.push(d.search(c.query, res.next, 50));
+          for (let k = 0; k < Math.min(c.recentYears ?? 2, 3); k++) extra.push(d.search(`${c.query} ${year - k}`, undefined, 50));
+          for (const r of await Promise.allSettled(extra)) if (r.status === 'fulfilled') all.push(...r.value.hits.filter((x) => !all.some((y) => y.videoId === x.videoId)));
+          picked = pickResults(all, c);
+        }
+        searchRes = { ...res, hits: picked, next: undefined };
+        if (!picked.length) lastErr = 'Non ho trovato brani che corrispondono: prova con meno parole (per esempio togli «ballabili» o «recenti»).';
+        else if (picked.length < c.count) cmdChips.append(h('span', { class: 'cmd-chip' }, `ne ho trovati ${picked.length} adatti`));
+      } catch (e) {
+        lastErr = (e as Error).message; searchRes = undefined;
+      } finally { searching = false; paintSearch(); }
+    }
+    const rows = sList.rows().filter((r) => !r.skip);
+    if (!rows.length || cmd !== c) return;
+    if (c.action === 'play' || c.action === 'next') { // one song: done at once, nothing to confirm
+      const t = trackOf(rows[0].id);
+      if (t) { if (c.action === 'play') d.playTrack(t); else d.enqueue(t, true); }
+      cmdChips.append(h('span', { class: 'cmd-chip done' }, `✓ ${rows[0].title}`));
+      return;
+    }
+    if (c.action === 'search') return;
+    // the proposal: every song ticked, untick the ones you don't want, then ✓
+    sSel?.toggle(true);
+    sList.selectAll();
+    cmdGo.classList.remove('hidden');
+    paintCmdGo();
+  }
+  function paintCmdGo() {
+    if (!cmd) return;
+    const n = sList.selected().length;
+    const what = `${n} ${n === 1 ? 'brano' : 'brani'}`;
+    cmdGo.textContent = ({ add: `✓ Aggiungi ${what} a ${targetLabel(cmd)}`, create: `✓ Crea «${cmd.target}» con ${what}`, queue: `✓ Metti in coda ${what}`, search: '', play: '', next: '' } as Record<Command['action'], string>)[cmd.action];
+    cmdGo.disabled = n === 0;
+  }
+  async function confirmCommand() {
+    const c = cmd;
+    const ids = sList.selected();
+    if (!c || !ids.length) return;
+    if (c.action === 'queue') { for (const id of ids) { const t = trackOf(id); if (t) d.enqueue(t, false); } d.status(`⤵ ${ids.length} brani in coda.`); endCommand(); return; }
+    let pid: string | undefined;
+    if (c.action === 'create' || (c.target && c.target !== 'current')) {
+      const name = String(c.target);
+      pid = findPlaylist(name)?.id ?? d.playlists.create(name).id;
+    } else pid = d.playlists.get(d.playingId() ?? detailId)?.id;
+    if (!pid) { pickPlaylist(ids); endCommand(); return; }
+    addTo(pid, ids);
+    endCommand();
+  }
+
   let lastSearchSig = '';
   function paintSearch(force = true) {
     const sig = `${src}|${searchQ}|${searchRes?.hits.length}|${searching}|${lastErr}|${d.library.version}|${d.playlists.version}|${d.online()}`;
@@ -448,7 +551,8 @@ export function buildDesktopPages(d: PagesDeps) {
       sInfo.textContent = !words.length ? '' : `${plural(rows.length, 'risultato', 'risultati')} in libreria e playlist`;
     } else {
       for (const x of searchRes?.hits ?? []) known.set(x.videoId, hitTrack(x));
-      rows = (searchRes?.hits ?? []).map((x) => ({ ...songVM(hitTrack(x)), sub: `${x.channel}${x.available ? '' : ` · ⚠ ${x.reason ?? 'non disponibile'}`}`, skip: !x.available || undefined, bad: !x.available || undefined, reason: x.reason }));
+      const age = (d0?: number) => (d0 === undefined ? '' : d0 >= 365 ? `${Math.round(d0 / 365)} ${Math.round(d0 / 365) === 1 ? 'anno' : 'anni'} fa` : d0 >= 30 ? `${Math.round(d0 / 30)} mesi fa` : 'questo mese');
+      rows = (searchRes?.hits ?? []).map((x) => ({ ...songVM(hitTrack(x)), sub: [x.channel, x.views !== undefined ? `${fmtViews(x.views)} visualizzazioni` : '', age(x.ageDays), x.available ? '' : `⚠ ${x.reason ?? 'non disponibile'}`].filter(Boolean).join(' · '), skip: !x.available || undefined, bad: !x.available || undefined, reason: x.reason }));
       sInfo.textContent = searching ? 'Cerco su YouTube…' : lastErr ? '' : searchRes ? `${plural(rows.length, 'risultato', 'risultati')} per «${searchQ}» su YouTube${searchRes.via === 'web' ? ' (senza chiave API)' : ''}` : '';
     }
     sInfo.classList.toggle('error', !!lastErr);
@@ -463,9 +567,14 @@ export function buildDesktopPages(d: PagesDeps) {
   const searchHead = pageHeader('Cerca', sSel.toggleBtn);
   const sCols = cols('g2', '#', 'Titolo · Canale', 'Durata', 'Stato');
   paintTabs();
+  const examples = h('details', { class: 'cmd-help', open: true },
+    h('summary', {}, '✨ Puoi anche scrivere un comando'),
+    h('p', { class: 'pg-hint' }, 'Scrivi cosa vuoi con parole semplici: l’app capisce cosa cercare, quanti brani, quali (più visti, recenti, ballabili…) e cosa farne. Ti mostra la proposta e aggiunge solo quando confermi. Tocca un esempio:'),
+    h('div', { class: 'cmd-examples' }, ...EXAMPLES.map((e) => btn(e, 'chip cmd-ex', () => { sInput.value = e; submit(e); }))),
+    h('div', { class: 'cmd-words' }, ...WORDS.map((g) => h('div', { class: 'cmd-group' }, h('div', { class: 'np-label' }, g.title), h('ul', {}, ...g.words.map((w) => h('li', {}, w)))))));
   const searchPage = h('div', { class: 'pg pg-search' }, searchHead.el,
     h('div', { class: 'pg-card search-card' }, h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Dove cercare' }, ...tabs), h('div', { class: 'pg-row' }, sInput, sGo)),
-    sInfo, sSel.bar, sCols, sList.el, sMore);
+    examples, cmdBar, sInfo, sSel.bar, sCols, sList.el, sMore);
 
   // =====================================================================================
   // 🎧 LIBRERIA

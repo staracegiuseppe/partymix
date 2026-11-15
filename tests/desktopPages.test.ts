@@ -200,3 +200,67 @@ describe('⬇ Scarica tutta la playlist, ☑ Seleziona, MP3 o MP4', () => {
     expect(dl.download).toHaveBeenCalledWith({ url: 'https://www.youtube.com/watch?v=aaaaaaaaaaa', type: 'video', format: 'mp4', quality: '720' });
   });
 });
+
+describe('✨ commands in Italian (no AI): proposal first, nothing changes before ✓', () => {
+  const hit = (id: string, title: string, views: number, ageDays = 200, seconds = 200) => ({ videoId: id.padEnd(11, 'x'), title, channel: 'Ubisoft', seconds, thumb: '', available: true, views, ageDays });
+  const hits = [hit('a', 'Just Dance 2024 - Flowers', 5e6), hit('b', 'Just Dance - Calm Down', 9e6), hit('c', 'Just Dance tutorial', 2e7), hit('d', 'Just Dance 2016 - Old', 3e7, 3000), hit('e', 'Just Dance - Acoustic piano', 1e7), hit('f', 'Just Dance - Levitating', 1e6)];
+  const run = async (ui: ReturnType<typeof setup>['ui'], text: string) => {
+    const input = ui.pages.search.querySelector<HTMLInputElement>('.pg-input')!;
+    input.value = text;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    for (let k = 0; k < 5; k++) await flush();
+  };
+  it('the user’s sentence: understood, filtered, most viewed first, all ticked; ✓ adds to the playlist in use', async () => {
+    const search = vi.fn(async () => ({ hits, via: 'api' as const }));
+    const { ui, playlists, party } = setup({ search });
+    await run(ui, 'vai su youtube, cercami i video di justdance che piacciono di più ai giovani e sono ballabili ed aggiungili alla mia playlist');
+    expect(search).toHaveBeenCalledWith('just dance', undefined, 50);
+    const bar = ui.pages.search.querySelector('.cmd-bar')!;
+    expect(bar.classList.contains('hidden')).toBe(false);
+    expect(bar.textContent).toContain('i più visti');
+    const titles = shown(ui.pages.search).map((r) => r.querySelector('.t')!.textContent);
+    expect(titles).toHaveLength(3); // no tutorial, nothing 8 years old, nothing acoustic
+    expect(titles[0]).toContain('Calm Down');
+    expect(playlists.get(party.id)!.tracks).toHaveLength(2); // nothing added yet
+    const go = bar.querySelector<HTMLButtonElement>('.m-filled')!;
+    expect(go.textContent).toBe('✓ Aggiungi 3 brani a «Festa di Marco»');
+    go.click();
+    expect(playlists.get(party.id)!.tracks).toHaveLength(5);
+    expect(bar.classList.contains('hidden')).toBe(true);
+  });
+  it('«crea la playlist X con N…» creates it on ✓', async () => {
+    const { ui, playlists } = setup({ search: vi.fn(async () => ({ hits, via: 'api' as const })) });
+    await run(ui, 'crea la playlist Ballo con 2 canzoni just dance più famose');
+    const go = ui.pages.search.querySelector<HTMLButtonElement>('.cmd-bar .m-filled')!;
+    expect(go.textContent).toBe('✓ Crea «Ballo» con 2 brani');
+    go.click();
+    expect(playlists.list().find((p) => p.name === 'Ballo')!.tracks).toHaveLength(2);
+  });
+  it('«suona …» plays the first result at once', async () => {
+    const { ui, fns } = setup({ search: vi.fn(async () => ({ hits, via: 'api' as const })) });
+    await run(ui, 'suona just dance flowers');
+    expect(fns.playTrack).toHaveBeenCalledTimes(1);
+  });
+  it('a plain search stays a plain search (no command bar)', async () => {
+    const { ui, fns } = setup();
+    await run(ui, 'The Weeknd Blinding Lights');
+    expect(fns.search).toHaveBeenCalledWith('The Weeknd Blinding Lights', undefined);
+    expect(ui.pages.search.querySelector('.cmd-bar')!.classList.contains('hidden')).toBe(true);
+  });
+});
+
+
+describe('🔄 Aggiorna da YouTube on a playlist page', () => {
+  it('shown only for a YouTube playlist link; it syncs and says what changed', async () => {
+    const syncFromYouTube = vi.fn(async () => '🔄 «Festa di Marco» aggiornata: 2 brani nuovi, 0 tolti.');
+    const { ui, fns, playlists, party } = setup({ syncFromYouTube });
+    playlists.update(party.id, { link: 'https://www.youtube.com/playlist?list=PLabcdefghijklmnop', source: 'YouTube' });
+    ui.openPlaylist(party.id);
+    const b = [...ui.pages.playlists.querySelectorAll<HTMLButtonElement>('button')].find((x) => x.textContent?.includes('Aggiorna da YouTube'))!;
+    expect(b.classList.contains('hidden')).toBe(false);
+    b.click();
+    await flush(); await flush();
+    expect(syncFromYouTube).toHaveBeenCalledWith(party.id);
+    expect(fns.status).toHaveBeenCalledWith(expect.stringContaining('2 brani nuovi'));
+  });
+});

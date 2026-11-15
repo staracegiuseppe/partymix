@@ -9,7 +9,7 @@ import { buildTracks, oembedMeta, parsePlaylistPage, verifyReplacement } from '.
 import { diffPlaylist } from './playlistSync';
 import { parsePlaylistInput } from './playlistUrl';
 import { Queue, Track } from './queue';
-import { Align, alignFromAnchors, findLyrics, lyricsFrom, TransientError, IDENTITY, indexFor, Lyrics, shiftAlign, snapshotAt, toLyricTime, karaokeAlign, lineProgress } from './lyrics';
+import { Align, alignFromAnchors, findLyrics, lyricsFrom, TransientError, IDENTITY, indexFor, Lyrics, shiftAlign, snapshotAt, toLyricTime, karaokeAlign, lineProgress, introEnd } from './lyrics';
 import { loadSettings, saveSettings } from './settings';
 import { buildConsole, DeckVM, ViewModel } from './ui/console';
 import { bindShortcuts } from './ui/shortcuts';
@@ -26,7 +26,8 @@ import { openKV, KV } from './library/kv';
 import { migrateLegacy, PlaylistStore, Playlist } from './library/playlists';
 import { MusicLibrary, probeWithAudio } from './library/library';
 import { KvBlobStore, NativeBlobStore } from './library/blobStore';
-import { AudioDeck, HybridDeck } from './audioDeck';
+import { AudioDeck, HybridDeck, sourceText } from './audioDeck';
+import { Cues, cuePoints } from './cues';
 import { buildDesktopPages } from './ui/desktopPages';
 import type { DesktopParts } from './ui/console';
 import { materialUI } from './ui/material';
@@ -53,6 +54,7 @@ const PROBLEM_TEXT: Record<string, (d: Record<string, unknown>) => string> = {
   'deck.prepare_timeout': () => 'Il brano successivo non era pronto in tempo: è stato saltato.',
   'deck.error': (d) => `Errore del player YouTube (codice ${d.code}).`,
   'youtube.error': (d) => String(d.reason ?? 'Errore del player YouTube'),
+  'audio.levels_failed': () => 'Non riesco ad analizzare il file del brano: testo e mix restano senza correzioni per l’intro.',
 };
 setSinks([
   (l) => console.log(l),
@@ -96,7 +98,7 @@ const mkAudio = () => {
   document.body.append(a);
   return new AudioDeck(a);
 };
-const hybridDeps = { localUrl: (id: string) => library.urlFor(id), canStream: netOk };
+const hybridDeps = { localUrl: (id: string) => library.urlFor(id), canStream: netOk, preferYouTube: () => settings.projectorMode === 'video' };
 const decks: [HybridDeck, HybridDeck] = [new HybridDeck(mkAudio(), hybridDeps), new HybridDeck(mkAudio(), hybridDeps)];
 let queue = new Queue([]);
 let listId: string | undefined;
@@ -120,6 +122,7 @@ function makeAutomix(): Automix {
     clearTimer: (id) => window.clearTimeout(id),
     log,
     online: netOk,
+    cues: cuesFor,
   });
 }
 
@@ -219,6 +222,35 @@ function openSaved(id: string | undefined): boolean {
   return true;
 }
 
+/**
+ * «🔄 Aggiorna da YouTube» on a saved playlist: reads it again from YouTube, adds the new songs at the end, drops the ones
+ * removed there (never the one on air or the next one), keeps the user's order and replacements. Saved at once.
+ */
+async function syncFromYouTube(id: string): Promise<string> {
+  const p = plStore.get(id);
+  const parsed = p?.link ? parsePlaylistInput(p.link) : undefined;
+  if (!p || parsed?.kind !== 'playlist') return 'Questa playlist non ha un indirizzo di playlist YouTube da cui aggiornarsi.';
+  if (!netOk()) throw new Error('sei offline');
+  const ids = await readIds(parsed.listId);
+  if (!ids.length) throw new Error('YouTube non ha restituito brani (playlist privata o vuota?)');
+  const d = diffPlaylist(p.tracks, ids, new Set(p.removed ?? []));
+  const onAir = new Set(decks ? decks.map((x) => x.currentVideoId()) : []);
+  const removed = d.removed.filter((v) => !onAir.has(v));
+  const fresh = d.added.length ? await buildTracks(d.added, oembedMeta, 5) : [];
+  const cur = plStore.get(id);
+  if (!cur) return '';
+  if (fresh.length || removed.length) {
+    const gone = new Set(removed);
+    plStore.setTracks(id, [...cur.tracks.filter((t) => !gone.has(t.videoId)), ...fresh], cur.removed);
+    syncQueueWith(id);
+  }
+  const hhmm = new Date().toTimeString().slice(0, 5);
+  log('info', 'playlist.synced', { added: fresh.length, removed: removed.length });
+  return fresh.length || removed.length
+    ? `🔄 «${cur.name}» aggiornata alle ${hhmm}: ${fresh.length} ${fresh.length === 1 ? 'brano nuovo' : 'brani nuovi'}, ${removed.length} ${removed.length === 1 ? 'tolto' : 'tolti'}.`
+    : `🔄 «${cur.name}»: nessuna novità su YouTube (${hhmm}).`;
+}
+
 /** The playlist in the queue was changed from the side bar (songs added or removed): the queue follows, the music goes on. */
 function syncQueueWith(id: string) {
   if (id !== loadedId) { showSlots(); return; }
@@ -306,6 +338,7 @@ const desktopPages = desktopUI ? (parts: DesktopParts) => (libUI = buildDesktopP
     if (!ui.loadBtn.disabled) ui.loadBtn.click();
   },
   edited: (id) => syncQueueWith(id),
+  syncFromYouTube: (id) => syncFromYouTube(id),
   deleted: (id) => {
     if (loadedId === id) loadedId = undefined; // the music goes on, but is not saved into a playlist that no longer exists
     if (settings.currentPlaylistId === id) { settings.currentPlaylistId = plStore.list(settings.playlistSort)[0]?.id; save(); }
@@ -314,7 +347,7 @@ const desktopPages = desktopUI ? (parts: DesktopParts) => (libUI = buildDesktopP
   playTrack,
   enqueue,
   trackById,
-  search: (q, page) => searchYouTube(q, { apiKey: settings.ytApiKey, getText: hasNativeDisplays() ? nativeGet : undefined, pageToken: page }),
+  search: (q, page, max) => searchYouTube(q, { apiKey: settings.ytApiKey, getText: hasNativeDisplays() ? nativeGet : undefined, pageToken: page, max }),
   status: (t, e) => ui.setStatus(t, e),
   menu: parts.menu,
   go: parts.go,
@@ -358,7 +391,7 @@ function selectPlaylist(id: string) {
 
 const ui: ReturnType<typeof buildConsole> & { selectById(id: string): void } = Object.assign(buildConsole(document.getElementById('app')!, {
   selectPlaylist,
-  setProjectorMode(m) { settings.projectorMode = m; save(); ui.setProjectorMode(m); },
+  setProjectorMode(m) { const changed = settings.projectorMode !== m; settings.projectorMode = m; save(); ui.setProjectorMode(m); if (changed) void resetForMode(); },
   renamePlaylist(name) {
     const p = ensureCurrent();
     if (!name.trim()) { showSlots(); ui.setStatus('Il nome non può restare vuoto.', true); return; }
@@ -605,16 +638,90 @@ function saveAlign(id: string, al: Align | undefined) {
 }
 let lyricsDeck: string | undefined;
 /** The user's own alignment for this video, else the automatic karaoke intro compensation, else none. */
+/**
+ * The projector mode changed: start again clean. The song on air moves to the source the new mode wants (from the same
+ * point), so does the next one already prepared, and the lyrics are lined up again from scratch.
+ */
+async function resetForMode() {
+  if (!decks || !am) return;
+  const st = am.state();
+  if (st === 'idle' || st === 'crossfading') return; // during a mix: the new mode applies from the next song
+  const live = decks[am.activeDeck() as 0 | 1], spare = decks[(1 - am.activeDeck()) as 0 | 1];
+  for (const d of [live, spare]) { const id = d.currentVideoId(); if (id) { lyricsCache.delete(id); intros.delete(id); } }
+  lastPublished = '';
+  try {
+    const done = await live.reselect();
+    if (done) ui.setStatus(({
+      youtube: '🎬 Video YouTube: audio e video ora arrivano da YouTube (internet), dallo stesso punto.',
+      'file-from-start': '🎤 Karaoke: il brano riparte dall’inizio, dal tuo file sul computer.',
+      'from-start': '🎤 Karaoke: il brano riparte dall’inizio (da YouTube: non è sul computer).',
+    } as const)[done]);
+    if (am.nextStatus() === 'ready') await spare.reselect(); // the next song too: already on the right source
+  } catch (e) { log('warn', 'deck.reselect_failed', { error: String(e) }); }
+}
+
+/** Seconds of video before the song starts, measured on the file on the computer (null: no clear intro / no file). */
+const intros = new Map<string, number | null | 'pending'>();
+/** Loudness of a song's file on the computer, one value every 0.25 s (null: no file, or it cannot be read). Once per song. */
+const levelCache = new Map<string, Promise<number[] | null>>();
+function levelsOf(id: string): Promise<number[] | null> {
+  let p = levelCache.get(id);
+  if (!p) {
+    p = (async () => {
+      const url = await library.urlFor(id);
+      if (!url) return null;
+      const data = await (await fetch(url)).arrayBuffer();
+      const pcm = await new OfflineAudioContext(1, 1, 22050).decodeAudioData(data);
+      const ch = pcm.getChannelData(0), per = Math.floor(pcm.sampleRate * 0.25);
+      const levels: number[] = [];
+      for (let i = 0; i + per <= ch.length; i += per) {
+        let e = 0;
+        for (let k = i; k < i + per; k += 4) e += ch[k] * ch[k];
+        levels.push(20 * Math.log10(Math.sqrt(e / (per / 4)) * 32768 + 1));
+      }
+      return levels;
+    })().catch((e) => { log('warn', 'audio.levels_failed', { videoId: id, error: String(e) }); return null; });
+    levelCache.set(id, p);
+    if (levelCache.size > 40) levelCache.delete(levelCache.keys().next().value!);
+  }
+  return p;
+}
+/** Mix cue points (music start/end) of a song with a file on the computer; measured in the background the first time. */
+const cueCache = new Map<string, Cues | null>();
+function cuesFor(id: string): Cues | undefined {
+  if (!cueCache.has(id)) {
+    cueCache.set(id, null);
+    void levelsOf(id).then((l) => {
+      const c = l ? cuePoints(l, 0.25) ?? null : null;
+      cueCache.set(id, c);
+      if (c) log('info', 'mix.cues', { videoId: id, start: c.start, end: c.end });
+    });
+  }
+  return cueCache.get(id) ?? undefined;
+}
+async function measureIntro(id: string, extra: number) {
+  intros.set(id, 'pending');
+  const levels = await levelsOf(id);
+  const at = levels ? introEnd(levels, 0.25, extra + 6) : undefined;
+  intros.set(id, at && at >= 3 ? at : null);
+  log('info', 'lyrics.intro', { videoId: id, extra: Math.round(extra), introEnd: at ?? null });
+}
+
 function alignOf(id: string): Align {
   const user = aligns.get(id);
   if (user) return user;
   const l = lyricsCache.get(id), t = trackOf(id);
   if (!l || l === 'loading' || !t) return IDENTITY;
   const dur = decks?.find((d) => d.currentVideoId() === id)?.duration() ?? 0;
+  // a music video longer than the record the lyrics follow: find where the song starts after the video's intro
+  const intro = intros.get(id);
+  if (typeof intro === 'number') return { a: 1, b: -intro };
+  if (intro === undefined && l.trackDuration && dur - l.trackDuration >= 4) void measureIntro(id, dur - l.trackDuration);
   return karaokeAlign(`${t.title ?? ''} ${t.artist ?? ''}`, dur, l.trackDuration) ?? IDENTITY;
 }
 let lastPublished = '';
 
+const refetched = new Set<string>();
 function lyricsVM(): ViewModel['lyrics'] {
   const empty = { prev: '', cur: '', next: '', progress: 0, offset: 0, speed: 1, show: settings.showLyrics, highlight: settings.lyricsHighlight, canShift: false, lines: [] as string[], index: -1 };
   const st = am?.state() ?? 'idle';
@@ -627,7 +734,19 @@ function lyricsVM(): ViewModel['lyrics'] {
   if (!track || d.duration() <= 0) return { ...empty, status: 'Cerco il testo…' };
   if (!lyricsCache.has(id)) {
     const known = lyricsStore.get(id);
-    if (known) lyricsCache.set(id, lyricsFrom(known, d.duration()));
+    if (known) {
+      lyricsCache.set(id, lyricsFrom(known, d.duration()));
+      // saved by an older version without the record's length: without it a video's intro cannot be measured
+      if (!known.trackDuration && !refetched.has(id)) {
+        refetched.add(id);
+        void findFor(jobTrackOf(track, d.duration())).then((f) => {
+          if (!f?.trackDuration) return;
+          lyricsStore.setFound(id, f);
+          lyricsCache.delete(id); intros.delete(id);
+          log('info', 'lyrics.duration_refreshed', { videoId: id, trackDuration: f.trackDuration });
+        }, () => {});
+      }
+    }
     else if (lyricsStore.status(id) === 'none') lyricsCache.set(id, null);
     else {
       lyricsCache.set(id, 'loading');
@@ -648,7 +767,7 @@ function lyricsVM(): ViewModel['lyrics'] {
     : l.approx ? `Testo da ${l.source}: versione con durata diversa dal video.`
     : `Testo da ${l.source}, sincronizzato con il brano in onda.`;
   const li = indexFor(lines, lyricsPosition, al);
-  return { ...empty, ...snapshotAt(lines, lyricsPosition, al), progress: lineProgress(lines, lyricsPosition, al, li), offset: al.b, speed: al.a, canShift: true, lines: lines.map((x) => x.text), index: li, status: aligns.has(id) ? 'Testo allineato da te a questo video.' : al !== IDENTITY ? 'Video karaoke: ho ritardato il testo di ' + (-al.b).toFixed(1).replace('.', ',') + ' s per l’intro. Regola con i tasti se serve.' : status };
+  return { ...empty, ...snapshotAt(lines, lyricsPosition, al), progress: lineProgress(lines, lyricsPosition, al, li), offset: al.b, speed: al.a, canShift: true, lines: lines.map((x) => x.text), index: li, status: aligns.has(id) ? 'Testo allineato da te a questo video.' : typeof intros.get(id) === 'number' ? `Il video ha ${Math.round(intros.get(id) as number)} s di introduzione prima della canzone: ho spostato il testo. Regola con i tasti se serve.` : al !== IDENTITY ? 'Video karaoke: ho ritardato il testo di ' + (-al.b).toFixed(1).replace('.', ',') + ' s per l’intro. Regola con i tasti se serve.' : status };
 }
 
 function publishLyrics(ly: ViewModel['lyrics']) {
@@ -656,6 +775,14 @@ function publishLyrics(ly: ViewModel['lyrics']) {
   if (msg === lastPublished) return;
   lastPublished = msg;
   try { store?.setItem('partymix.lyrics', msg); } catch { /* the projector simply keeps the last line */ }
+}
+
+/** Said on the deck: the mix will skip this song's silent/quiet intro or fade out before its silent tail. */
+function mixNote(id: string): string {
+  const c = id ? cueCache.get(id) : undefined;
+  if (!c) return '';
+  const parts = [c.start >= 1 ? `entra a ${Math.round(c.start)} s (salta il silenzio iniziale)` : '', c.end > 0 && (decks?.find((x) => x.currentVideoId() === id)?.duration() ?? 0) - c.end >= 2 ? 'sfuma prima del silenzio finale' : ''].filter(Boolean);
+  return parts.length ? ` · ⏩ Mix: ${parts.join(', ')}` : '';
 }
 
 function deckVM(i: 0 | 1): DeckVM {
@@ -670,6 +797,7 @@ function deckVM(i: 0 | 1): DeckVM {
   }
   return {
     title: titleOf(t), artist: t?.artist ?? '', thumb: t?.thumb,
+    source: d ? sourceText(d.source(), settings.projectorMode === 'video') + mixNote(d.currentVideoId()) : '',
     elapsed: d && role !== 'idle' ? d.position() : 0, duration: d && role !== 'idle' ? d.duration() : 0,
     role, volume: sliders[i], duck: ducked[i], autoDuck: autoDucked[i],
   };

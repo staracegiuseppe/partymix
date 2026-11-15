@@ -77,7 +77,7 @@ export type DesktopPages = {
 };
 export type DesktopParts = { menu(title: string, subtitle: string, items: MenuItem[]): void; go(page: string): void };
 
-export type DeckVM = { title: string; artist: string; thumb?: string; elapsed: number; duration: number; role: 'live' | 'out' | 'ready' | 'loading' | 'idle'; volume: number; duck: boolean; autoDuck?: boolean };
+export type DeckVM = { title: string; artist: string; source?: string; thumb?: string; elapsed: number; duration: number; role: 'live' | 'out' | 'ready' | 'loading' | 'idle'; volume: number; duck: boolean; autoDuck?: boolean };
 export type { QueueRowVM };
 /** A playlist in the phone's menu. */
 export type PlaylistItemVM = { id: string; name: string; count: number; link: string };
@@ -139,6 +139,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     const cover = h('div', { class: 'cover' });
     const title = h('div', { class: 'title' });
     const artist = h('div', { class: 'artist' });
+    const source = h('div', { class: 'deck-src' });
     const el = h('span'), rem = h('span');
     let seeking = false;
     const seek = h('input', { type: 'range', class: 'seek', min: '0', max: '0', step: '1', value: '0', disabled: true, 'aria-label': `Posizione deck ${i ? 'B' : 'A'}`,
@@ -152,13 +153,13 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     const card = h('section', { class: `panel deck ${i ? 'b' : 'a'}` },
       h('h2', {}, h('span', {}, `DECK ${i ? 'B' : 'A'}`), role),
       mount,
-      h('div', { class: 'meta' }, cover, h('div', { style: 'min-width:0' }, title, artist)),
+      h('div', { class: 'meta' }, cover, h('div', { style: 'min-width:0' }, title, artist, source)),
       h('div', { class: 'times' }, el, rem),
       seek,
       h('div', { class: 'row' }, h('label', {}, 'Volume deck'), vol),
       h('div', { class: 'row' }, duck),
     );
-    return { mount, card, role, cover, title, artist, el, rem, seek, isSeeking, vol, duck };
+    return { mount, card, role, cover, title, artist, source, el, rem, seek, isSeeking, vol, duck };
   };
   const dA = mkDeck(0), dB = mkDeck(1);
 
@@ -219,8 +220,8 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     h('ul', {}, ...UNAVAILABLE_WITH_YOUTUBE.map((u) => h('li', {}, u.name, h('span', {}, u.why)))));
   const dispSel = h('select', { 'aria-label': 'Schermo del proiettore', onChange: () => a.setDisplay(dispSel.value, dispSel.selectedOptions[0]?.textContent ?? undefined) });
   const dispRow = h('div', { class: 'row hidden' }, h('label', {}, 'Schermo'), dispSel);
-  const micSel = h('select', { 'aria-label': 'Ingresso audio', onChange: () => a.setMic(micSel.value) }, h('option', { value: '' }, 'Predefinito'));
-  const micBtn = h('button', { onClick: async () => { setInputs(await a.refreshInputs(), micSel.value); } }, 'Cerca ingressi');
+  const micSel = h('select', { 'aria-label': 'Microfono per le forme del proiettore', onChange: () => a.setMic(micSel.value) }, h('option', { value: '' }, 'Microfono del computer (predefinito)'));
+  const micBtn = h('button', { onClick: async () => { setInputs(await a.refreshInputs(), micSel.value); } }, '🔄 Cerca microfoni');
   const sens = h('input', { type: 'range', min: '0.2', max: '4', step: '0.1', 'aria-label': 'Sensibilità del microfono', onInput: () => a.setMicSensitivity(+sens.value) });
   const projMsg = h('div', { class: 'status' });
   const projModeBtns = ([['karaoke', 'Karaoke'], ['video', 'Video YouTube']] as const).map(([m, label]) =>
@@ -229,8 +230,8 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
   function setProjectorMode(m: 'karaoke' | 'video') {
     projModeBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
     projModeHint.textContent = m === 'video'
-      ? 'Il proiettore mostra a tutto schermo il video del brano in onda (es. Just Dance), muto e allineato alla musica. Quando YouTube mostra una pubblicità o il video non è ancora allineato, al suo posto restano le forme.'
-      : 'Le forme seguono il suono della stanza tramite il microfono, con il testo del brano. Non viene registrato nulla.';
+      ? 'Il proiettore mostra a tutto schermo il video del brano in onda (es. Just Dance). Audio e video arrivano entrambi da YouTube (serve internet), anche per i brani che hai scaricato: passando a Video YouTube il brano continua dallo stesso punto. Quando YouTube mostra una pubblicità o il video non è ancora allineato, al suo posto restano le forme.'
+      : 'Le forme seguono il suono della stanza tramite il 🎤 microfono, con il testo del brano. I brani che hai sul computer suonano dal tuo file, gli altri da YouTube. Passando a Karaoke il brano in onda riparte dall’inizio, così parole e musica partono insieme. Non viene registrato nulla.';
   }
   const openProj = async () => { projMsg.textContent = ''; try { await a.openProjector(); } catch (e) { projMsg.textContent = `Non riesco ad aprire il proiettore: ${(e as Error)?.message ?? String(e)}`; } };
   const projOpen = h('button', { class: md ? 'm-filled' : '', onClick: openProj }, isIOSApp() ? 'Mostra il proiettore' : md ? 'Trasmetti alla TV' : 'Apri proiettore');
@@ -239,8 +240,10 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     h('div', { class: 'seg', role: 'group', 'aria-label': 'Cosa mostrare sul proiettore' }, ...projModeBtns), projModeHint,
     h('div', { class: 'btns' }, projOpen, projClose),
     dispRow,
-    h('div', { class: 'row' }, h('label', {}, 'Ingresso'), micSel), h('div', { class: 'row' }, micBtn),
-    h('div', { class: 'row' }, h('label', {}, 'Sensibilità'), sens), projMsg);
+    h('div', { class: 'np-label' }, '🎤 Microfono'),
+    h('div', { class: 'artist wrap' }, 'Serve solo con «Karaoke»: le forme colorate si muovono con il suono della stanza. Scegli il microfono del computer o uno collegato (USB, cuffie, scheda audio). Ascolta soltanto: non registra nulla.'),
+    h('div', { class: 'row' }, h('label', {}, 'Microfono'), micSel), h('div', { class: 'row' }, micBtn),
+    h('div', { class: 'row' }, h('label', {}, 'Sensibilità del microfono'), sens), projMsg);
   const lyStatus = h('div', { class: 'artist' });
   const lyPrev = h('div', { class: 'ly prev' }), lyCur = h('div', { class: 'ly cur' }), lyNext = h('div', { class: 'ly next' });
   const lyPlain = h('pre', { class: 'plain hidden' });
@@ -644,6 +647,8 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     d.card.classList.toggle('is-live', big);
     d.title.textContent = v.title || (md ? (v.role === 'idle' ? 'Nessun brano in onda' : '…') : '—');
     d.artist.textContent = v.artist || '';
+    d.source.textContent = v.role === 'idle' || !document.body.classList.contains('desk') ? '' : v.source ?? ''; // computer only: the phone stays as it is
+    d.source.title = d.source.textContent;
     d.cover.style.backgroundImage = v.thumb ? `url("${v.thumb.replace(/"/g, '')}")` : '';
     d.cover.classList.toggle('none', !v.thumb);
     const canSeek = (v.role === 'live' || v.role === 'out') && v.duration > 0;

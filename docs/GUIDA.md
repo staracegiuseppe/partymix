@@ -104,6 +104,7 @@ Puoi tenere **tutte le playlist che vuoi**: non c'è più il limite di quattro. 
 - **⋮** su una scheda: Suona, Apri, Rinomina, Duplica, Elimina (chiede conferma; i brani della libreria restano).
 - Dentro una playlist: in cima «▲ Inizio · PLAYLIST: nome», poi i brani numerati (#, titolo, artista, durata, stato), in fondo «■ Fine playlist». Trascina la maniglia **⋮⋮** per cambiare ordine; **⋮** su un brano per toglierlo o aggiungerlo a un'altra playlist.
 - **Sorgente YouTube / Spotify**: incolla il link e premi **Carica** per riempire la playlist da lì.
+- **🔄 Aggiorna da YouTube** (solo per le playlist YouTube): se hai cambiato la playlist su YouTube, aggiunge in fondo i brani nuovi e toglie quelli che hai cancellato là. Il tuo ordine e le tue sostituzioni restano; il brano in onda non viene mai tolto. «Carica», invece, la rilegge da capo.
 - **⬇ Scarica tutta la playlist**: scarica in un colpo tutti i brani (quelli già nella libreria vengono saltati), per crearti subito la tua discografia sul computer.
 - **☑ Seleziona**: tocca i brani che vuoi (Maiuscolo+clic per un intervallo), oppure **Seleziona tutti**, poi **⬇ Scarica selezionati** o **＋ Aggiungi a playlist**. **✕ Fine** chiude la selezione. C'è anche nella pagina Cerca.
 - Prima di ogni download l'app chiede il formato: **🎵 Audio MP3** (solo musica, file piccoli) oppure **🎬 Video MP4** (con le immagini: è quello giusto per le versioni *lyrics* e karaoke, dove il testo è nel video), anche in 720p più leggero. L'ultima scelta viene proposta per prima.
@@ -205,14 +206,27 @@ Sul computer funzionano anche i tasti rapidi:
 - Messo in coda così, il brano entra nella lista di riproduzione ma non cambia la playlist salvata (per salvarlo usa «Aggiungi a playlist»).
 - Per risultati migliori inserisci una chiave gratuita di «YouTube Data API v3» in **⚙ Impostazioni → Ricerca YouTube**.
 
+**✨ Comandi in italiano.** Nello stesso campo puoi scrivere cosa vuoi con parole semplici, per esempio:
+- «i video di Just Dance più visti degli ultimi anni, ballabili, aggiungili alla mia playlist»
+- «metti in coda 10 canzoni anni 80 da cantare»
+- «crea la playlist Matrimonio con 20 canzoni d’amore italiane più famose»
+- «aggiungi 15 successi di Max Pezzali con testo a Karaoke»
+- «suona Vasco Rossi Albachiara» · «subito dopo Gloria Gaynor I Will Survive» · «cerca nella mia musica Jovanotti»
+
+L'app riconosce **cosa fare** (aggiungi a…, metti in coda, subito dopo, suona, crea la playlist…), **quanti** brani (10, venti…), **quali** (più visti / più famosi, più votati, recenti, degli ultimi anni, di quest’anno, ballabili, karaoke / da cantare, con testo, ufficiali, anni 80…) e **cosa cercare** (il resto). Ti mostra **✨ Ho capito** con quello che ha capito e la proposta di brani già spuntati: togli quelli che non vuoi e premi **✓**. Niente viene aggiunto prima della conferma; «suona» e «subito dopo» partono subito con il primo risultato. Funziona tutto sul computer, senza intelligenza artificiale a pagamento: l'elenco delle parole che capisce è sotto **✨ Puoi anche scrivere un comando**.
+
 ## 6. Il proiettore
 
 <p align="center"><img src="img/projector-karaoke.png" alt="Il proiettore in modalità Karaoke: forme a tempo e testo" width="760"></p>
 
 Il proiettore è una seconda schermata, da mandare su TV o videoproiettore, che mostra una di due cose:
 
-- **Karaoke:** forme colorate che seguono il suono della stanza attraverso il microfono, con il testo da cantare. Il suono non viene registrato.
-- **Video YouTube:** il video del brano in onda a tutto schermo, muto e allineato alla musica. È perfetto per i balli tipo Just Dance. Il video successivo è già caricato, quindi al cambio brano lo schermo non diventa mai nero. Quando YouTube mostra una pubblicità, al suo posto restano le forme.
+- **Karaoke:** forme colorate che seguono il suono della stanza attraverso il **🎤 microfono** (quello del computer o uno collegato, da scegliere in Proiettore → 🎤 Microfono), con il testo da cantare. Il suono non viene registrato. I brani che hai sul computer suonano dal tuo file.
+- **Video YouTube:** il video del brano in onda a tutto schermo, muto e allineato alla musica. È perfetto per i balli tipo Just Dance. Il video successivo è già caricato, quindi al cambio brano lo schermo non diventa mai nero. Quando YouTube mostra una pubblicità, al suo posto restano le forme. In questa modalità audio e video arrivano entrambi da YouTube (serve internet), così sono sempre sincronizzati.
+
+Cambiando modalità mentre un brano suona: passando a **Video YouTube** il brano continua dallo stesso punto, con audio e video da YouTube; passando a **Karaoke** il brano riparte dall’inizio (dal file sul computer, se c’è), così parole e musica partono insieme.
+
+Sul computer, sotto ogni brano del Player, una riga dice sempre da dove arriva: «💾 dal tuo file sul computer» oppure «☁ da YouTube (internet)».
 
 <p align="center"><img src="img/desktop-projector.png" alt="Il pannello Proiettore e testo aperto sopra il Player" width="620"></p>
 

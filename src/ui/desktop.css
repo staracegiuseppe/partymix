@@ -394,3 +394,29 @@ body.md.desk .m-nav .m-nav-item.on { color: var(--md-on-secondary-container); }
 .desk .deck .artist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .desk .deck input.seek { width: 100%; box-sizing: border-box; }
 .desk .ss-body .seg button { padding: 0 14px; }
+
+/* Commands («✨ Ho capito») */
+.desk .cmd-help summary { cursor: pointer; font: 500 14px/20px Roboto, system-ui, sans-serif; color: var(--md-primary); }
+.desk .cmd-help[open] { display: grid; gap: 12px; }
+.desk .cmd-examples { display: flex; flex-wrap: wrap; gap: 8px; }
+.desk .cmd-ex { height: auto; min-height: 32px; padding: 6px 12px; text-align: left; white-space: normal; font-size: 13px; }
+.desk .cmd-ex::before { content: '“'; } .desk .cmd-ex::after { content: '”'; }
+.desk .cmd-words { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.desk .cmd-words ul { margin: 6px 0 0; padding-left: 18px; color: var(--md-on-surface-variant); font-size: 13px; }
+.desk .cmd-bar { display: grid; gap: 10px; padding: 16px 20px; border-radius: 16px; background: var(--md-primary-container); color: var(--md-on-primary-container); }
+.desk .cmd-bar.hidden { display: none; }
+.desk .cmd-title { font: 500 14px/20px Roboto, system-ui, sans-serif; }
+.desk .cmd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.desk .cmd-chip { padding: 4px 10px; border-radius: 8px; background: color-mix(in srgb, var(--md-on-primary-container) 12%, transparent); font-size: 13px; }
+.desk .cmd-chip.done { background: var(--md-primary); color: var(--md-on-primary); }
+.desk .cmd-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Where the song on a deck comes from (file on the computer / YouTube) */
+.desk .deck-src { font-size: 12px; line-height: 16px; margin-top: 2px; color: var(--md-on-surface-variant); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Player: title and «In riproduzione da» on one short line, the room goes to the decks and the play queue */
+.desk [data-screen=now] { gap: 12px; }
+.desk [data-screen=now] > .pg-head { margin-top: -16px; }
+.desk [data-screen=now] .pg-tt { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.desk [data-screen=now] .pg-title { font: 500 22px/28px Roboto, 'Google Sans', system-ui, sans-serif; flex: none; }
+.desk [data-screen=now] .now-from { margin: 0; font-size: 14px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }

@@ -12,6 +12,7 @@ export interface Deck {
   duration(): number;
   onEnded(cb: () => void): void;
   onError(cb: (code: number) => void): void;
+  seekTo?(s: number): void;
 }
 
 export type AutomixState = 'idle' | 'playing' | 'preparing' | 'crossfading' | 'paused';
@@ -30,6 +31,8 @@ export type AutomixDeps = {
   log: typeof Log;
   /** Network state; when offline, load failures are retried instead of marking tracks unplayable. */
   online?: () => boolean;
+  /** Where a song's music really starts and ends (silence and near-silent intro skipped), when known. */
+  cues?: (videoId: string) => { start: number; end: number } | undefined;
 };
 
 const TICK_MS = 250;
@@ -266,7 +269,7 @@ export class Automix {
 
   private beginMix(ms: number): void {
     if (this.st === 'crossfading') return;
-    const sec = this.d.decks[this.active].duration() - this.d.decks[this.active].position();
+    const sec = this.endOf(this.active) - this.d.decks[this.active].position();
     const dur = ms > 0 ? Math.min(ms, Math.max(sec * 1000, 1000)) : 0;
     this.mixIn = (1 - this.active) as DeckIdx;
     this.st = 'crossfading';
@@ -274,9 +277,11 @@ export class Automix {
     this.mixDur = dur;
     this.lastNow = this.d.now();
     this.dueSince = undefined;
+    const cue = this.preparedId ? this.d.cues?.(this.preparedId) : undefined;
+    if (cue && cue.start >= 1) this.d.decks[this.mixIn].seekTo?.(cue.start); // straight to where the music starts
     this.d.decks[this.mixIn].play();
     this.applyVolumes();
-    this.d.log('info', 'automix.crossfade_start', { ms: dur });
+    this.d.log('info', 'automix.crossfade_start', { ms: dur, skipIntro: cue?.start ?? 0 });
     if (dur <= 0) this.finishMix();
   }
 
@@ -293,6 +298,14 @@ export class Automix {
     this.applyVolumes();
     this.d.log('info', 'automix.crossfade_done', { videoId: this.d.queue.current()?.videoId });
     this.prepare();
+  }
+
+  /** Where the song on deck `i` really ends: its duration, or earlier when its tail is silence or a long fade. */
+  private endOf(i: DeckIdx): number {
+    const dur = this.d.decks[i].duration();
+    const id = i === this.active ? this.d.queue.current()?.videoId : this.preparedId;
+    const end = id ? this.d.cues?.(id)?.end : undefined;
+    return end && end > 0 && end < dur ? end : dur;
   }
 
   private base(i: DeckIdx): number {
@@ -356,7 +369,7 @@ export class Automix {
     const dur = deck.duration();
     const mixSec = profileSeconds(this.d.profile());
     if (mixSec === null || dur <= 0 || this.nextState === 'none') return;
-    const remaining = dur - deck.position();
+    const remaining = this.endOf(this.active) - deck.position(); // before the silence at the tail
     if (remaining > mixSec) return;
     if (this.nextState === 'ready') { this.beginMix(mixSec * 1000); return; }
     this.st = 'preparing';
