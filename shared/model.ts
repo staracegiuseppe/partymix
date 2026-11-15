@@ -63,6 +63,36 @@ export type TrackDoc = {
   deleted?: boolean;
 };
 
+/** Words about a file a device sends (from its tags). */
+export type UploadMeta = {
+  title: string;
+  artist?: string;
+  album?: string;
+  genre?: string;
+  year?: number;
+  trackNo?: number;
+  durationSec?: number;
+};
+
+/** What a device sends to open an upload (POST /api/tracks/upload). */
+export type UploadStart = {
+  sha256: string;
+  size: number;
+  mime: string;
+  /** File extension («mp3»); from the mime when missing. */
+  ext?: string;
+  meta: UploadMeta;
+  youtubeId?: string;
+};
+
+/** The answer: the song is already here (`track`), or where to send the bytes and how many arrived already. */
+export type UploadStarted = { track: TrackDoc; uploadId?: undefined } | { uploadId: string; received: number; track?: undefined };
+
+/** After one piece: how many bytes are here, or the song when it was the last piece. */
+export type ChunkResult = { received: number; track?: undefined } | { track: TrackDoc; received?: undefined };
+
+export type LibraryPage = { tracks: TrackDoc[]; next?: string };
+
 export type Changes = {
   /** Pass this back as `since` next time. */
   seq: number;

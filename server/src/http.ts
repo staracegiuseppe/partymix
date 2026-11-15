@@ -44,6 +44,27 @@ export async function readJson(req: IncomingMessage, limit = 1 << 20): Promise<R
   }
 }
 
+/** Reads a raw body of at most `limit` bytes. */
+export async function readRaw(req: IncomingMessage, limit: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const c of req) {
+    size += (c as Buffer).length;
+    if (size > limit) throw new HttpError(413, 'TOO_LARGE', 'Richiesta troppo grande');
+    chunks.push(c as Buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
+/** `Content-Range: bytes 0-4194303/10485760` → from, to, total. */
+export function parseContentRange(h: string | undefined): { from: number; to: number; total: number } {
+  const m = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(h?.trim() ?? '');
+  if (!m) throw bad('Content-Range mancante o non valido (bytes a-b/totale)');
+  const [from, to, total] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || !Number.isSafeInteger(total) || to < from || to >= total) throw bad('Content-Range non valido');
+  return { from, to, total };
+}
+
 export function str(v: unknown, field: string, max = 200, required = true): string | undefined {
   if (v == null || v === '') {
     if (required) throw bad(`${field} mancante`);
