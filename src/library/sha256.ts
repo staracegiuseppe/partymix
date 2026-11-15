@@ -70,14 +70,16 @@ export class Sha256 {
   }
 }
 
+import { blobBytes } from './library';
+
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
 
 /** SHA-256 of a Blob: WebCrypto in one go up to 64 MB, in 4 MB pieces beyond that. */
 export async function sha256Blob(b: Blob): Promise<string> {
   const subtle = globalThis.crypto?.subtle;
-  if (subtle && b.size <= 64 << 20) return hex(await subtle.digest('SHA-256', await b.arrayBuffer()));
+  if (subtle && b.size <= 64 << 20) return hex(await subtle.digest('SHA-256', await blobBytes(b)));
   const h = new Sha256();
-  for (let at = 0; at < b.size; at += 4 << 20) h.update(new Uint8Array(await b.slice(at, Math.min(b.size, at + (4 << 20))).arrayBuffer()));
+  for (let at = 0; at < b.size; at += 4 << 20) h.update(new Uint8Array(await blobBytes(b.slice(at, Math.min(b.size, at + (4 << 20))))));
   return h.hex();
 }
 
