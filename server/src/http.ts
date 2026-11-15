@@ -25,35 +25,38 @@ export function sendJson(res: ServerResponse, status: number, body: unknown): vo
   res.end(data);
 }
 
+const DRAIN_MAX = 64 << 20;
+
+/**
+ * The whole body, at most `limit` bytes. A bigger one is read and dropped (up to a point) before the 413 goes out:
+ * leaving the stream half-read would close the connection and the client would never see the answer.
+ */
+export function readRaw(req: IncomingMessage, limit: number): Promise<Buffer> {
+  return new Promise((ok, ko) => {
+    const chunks: Buffer[] = [];
+    let size = 0, over = false;
+    req.on('data', (c: Buffer) => {
+      size += c.length;
+      if (over) { if (size > DRAIN_MAX) req.destroy(); return; }
+      if (size > limit) { over = true; chunks.length = 0; return; }
+      chunks.push(c);
+    });
+    req.on('end', () => (over ? ko(new HttpError(413, 'TOO_LARGE', 'Richiesta troppo grande')) : ok(Buffer.concat(chunks))));
+    req.on('error', ko);
+  });
+}
+
 /** Reads a JSON body of at most `limit` bytes. */
 export async function readJson(req: IncomingMessage, limit = 1 << 20): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const c of req) {
-    size += (c as Buffer).length;
-    if (size > limit) throw new HttpError(413, 'TOO_LARGE', 'Richiesta troppo grande');
-    chunks.push(c as Buffer);
-  }
-  if (!size) return {};
+  const buf = await readRaw(req, limit);
+  if (!buf.length) return {};
   try {
-    const v = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    const v = JSON.parse(buf.toString('utf8'));
     if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error();
     return v as Record<string, unknown>;
   } catch {
     throw bad('JSON non valido');
   }
-}
-
-/** Reads a raw body of at most `limit` bytes. */
-export async function readRaw(req: IncomingMessage, limit: number): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const c of req) {
-    size += (c as Buffer).length;
-    if (size > limit) throw new HttpError(413, 'TOO_LARGE', 'Richiesta troppo grande');
-    chunks.push(c as Buffer);
-  }
-  return Buffer.concat(chunks);
 }
 
 /** `Content-Range: bytes 0-4194303/10485760` → from, to, total. */
