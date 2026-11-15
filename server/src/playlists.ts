@@ -12,7 +12,7 @@ type Row = {
   deleted_at: number | null; seq: number; by_name?: string | null; count?: number;
 };
 type EntryRow = {
-  entry_id: string; track_id: string | null; youtube_id: string | null; title: string | null; artist: string | null;
+  entry_id: string; track_id: string | null; youtube_id: string | null; local_id: string | null; title: string | null; artist: string | null;
   album: string | null; thumb: string | null; duration_sec: number | null;
 };
 
@@ -38,6 +38,7 @@ function entryOf(r: EntryRow): Entry {
   const e: Entry = { entryId: r.entry_id };
   if (r.track_id) e.trackId = r.track_id;
   if (r.youtube_id) e.youtubeId = r.youtube_id;
+  if (r.local_id) e.localId = r.local_id;
   if (r.title) e.title = r.title;
   if (r.artist) e.artist = r.artist;
   if (r.album) e.album = r.album;
@@ -56,13 +57,18 @@ export function cleanEntry(v: unknown): Entry {
     if (typeof x !== 'string' || x.length > max) throw bad(`riga: ${k} non valido`);
     return x;
   };
-  const out: Entry = { entryId: s('entryId', 64) ?? randomUUID() };
   const trackId = s('trackId', 64);
   const youtubeId = s('youtubeId', 32);
+  const localId = s('localId', 80);
+  // the line's own id: what the device gave it, else the song's id (devices use the song id, so a song added on two
+  // devices at once is one line), else something new
+  const out: Entry = { entryId: s('entryId', 80) ?? youtubeId ?? localId ?? trackId ?? randomUUID() };
   if (trackId && !/^[0-9a-f]{64}$/.test(trackId)) throw bad('riga: trackId deve essere uno SHA-256');
-  if (!trackId && !youtubeId) throw bad('riga senza brano');
+  if (localId && !/^local:[0-9a-f]{8,64}$/.test(localId)) throw bad('riga: localId non valido');
+  if (!trackId && !youtubeId && !localId) throw bad('riga senza brano');
   if (trackId) out.trackId = trackId;
   if (youtubeId) out.youtubeId = youtubeId;
+  if (localId) out.localId = localId;
   for (const k of ['title', 'artist', 'album'] as const) { const x = s(k, 300); if (x) out[k] = x; }
   const thumb = s('thumb', 1000);
   if (thumb) out.thumb = thumb;
@@ -153,9 +159,9 @@ export class Playlists {
       .run(meta.name, meta.description ?? null, meta.color ?? null, meta.cover ?? null, meta.link ?? null, meta.source ?? null,
         meta.sortOrder, t, deviceId, seq, id);
     this.db.prepare('DELETE FROM playlist_entry WHERE playlist_id = ?').run(id);
-    const ins = this.db.prepare(`INSERT INTO playlist_entry (playlist_id, entry_id, pos, track_id, youtube_id, title, artist, album, thumb, duration_sec)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    entries.forEach((e, i) => ins.run(id, e.entryId, i, e.trackId ?? null, e.youtubeId ?? null, e.title ?? null, e.artist ?? null,
+    const ins = this.db.prepare(`INSERT INTO playlist_entry (playlist_id, entry_id, pos, track_id, youtube_id, local_id, title, artist, album, thumb, duration_sec)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    entries.forEach((e, i) => ins.run(id, e.entryId, i, e.trackId ?? null, e.youtubeId ?? null, e.localId ?? null, e.title ?? null, e.artist ?? null,
       e.album ?? null, e.thumb ?? null, e.durationSec ?? null));
     const doc = this.get(id)!;
     this.snapshot(doc, deviceId, t);

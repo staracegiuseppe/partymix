@@ -2,8 +2,10 @@
  * A tiny key-value store over IndexedDB: playlists, the music library and (in the browser) the audio files themselves.
  * localStorage holds about 5 MB, not enough for thousands of songs; IndexedDB grows with the disk.
  */
-export type StoreName = 'playlists' | 'library' | 'blobs';
-const STORES: StoreName[] = ['playlists', 'library', 'blobs'];
+export type StoreName = 'playlists' | 'library' | 'blobs' | 'sync';
+const STORES: StoreName[] = ['playlists', 'library', 'blobs', 'sync'];
+/** Grows when a store is added: the browser then calls onupgradeneeded and the missing stores are created. */
+const DB_VERSION = 2;
 
 export interface KV {
   get<T>(store: StoreName, key: string): Promise<T | undefined>;
@@ -67,7 +69,7 @@ export async function openKV(name = 'partymix'): Promise<KV> {
   if (typeof indexedDB === 'undefined') return new MemoryKV();
   try {
     const db = await new Promise<IDBDatabase>((ok, ko) => {
-      const r = indexedDB.open(name, 1);
+      const r = indexedDB.open(name, DB_VERSION);
       r.onupgradeneeded = () => { for (const s of STORES) if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s); };
       r.onsuccess = () => ok(r.result);
       r.onerror = () => ko(r.error);

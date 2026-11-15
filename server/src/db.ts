@@ -133,6 +133,8 @@ const MIGRATIONS: string[] = [
     created_at INTEGER NOT NULL
   );
   `,
+  // A playlist line can point to a file that is only on one device (not uploaded yet): other devices show it as missing.
+  `ALTER TABLE playlist_entry ADD COLUMN local_id TEXT;`,
 ];
 
 export type Db = DatabaseSync;

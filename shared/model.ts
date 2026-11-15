@@ -11,6 +11,8 @@ export type Entry = {
   trackId?: string;
   /** A YouTube video (no file on the NAS). */
   youtubeId?: string;
+  /** A file in one device's own library (`local:<hash>`), not on the NAS yet: elsewhere it shows as ⚠ missing. */
+  localId?: string;
   title?: string;
   artist?: string;
   album?: string;

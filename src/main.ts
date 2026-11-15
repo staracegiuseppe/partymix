@@ -39,6 +39,9 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { followSystemTheme } from './ui/systemTheme';
 import { listInputs } from './projector/mic';
 import { createYouTubeDeck } from './youtubeDeck';
+import { HttpSyncClient, isPrivateHost, type SyncApi } from './sync/client';
+import { loadNasConfig, saveNasConfig, type NasConfig } from './sync/config';
+import { SyncEngine } from './sync/engine';
 
 const store: Storage | undefined = (() => { try { return window.localStorage; } catch { return undefined; } })();
 const settings = store ? loadSettings(store) : loadSettings({ getItem: () => null, setItem: () => {} } as unknown as Storage);
@@ -319,6 +322,50 @@ const downloads = desktopUI && tauriInvoke ? new DownloadCoordinator(
   { status: (t, e) => ui.setStatus(t, e), playlistChanged: (id) => syncQueueWith(id) },
 ) : undefined;
 
+// --- The NAS: playlists kept the same on every device (src/sync). Linked from ☁ Sync; the token stays on this computer. ---
+let nasConfig = loadNasConfig(store);
+let syncApi: SyncApi | undefined;
+let syncEngine: SyncEngine | undefined;
+const thisDeviceName = () => { const ua = navigator.userAgent; return /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'PC Windows' : /Linux/.test(ua) ? 'PC Linux' : 'Computer'; };
+function startSync(cfg: NasConfig) {
+  nasConfig = cfg;
+  syncApi = new HttpSyncClient(cfg.url, cfg.token);
+  syncEngine = new SyncEngine(plStore, kv, syncApi, { onLine: () => navigator.onLine, log: (m) => log('info', 'sync', { m }) });
+  let lastNews = '';
+  syncEngine.onChange(() => {
+    const s = syncEngine?.status();
+    if (s?.lastNews && s.lastNews !== lastNews) { lastNews = s.lastNews; ui.setStatus(`☁ ${s.lastNews}`); }
+    if (s?.conflicts.length && !document.body.classList.contains('sync-asked')) { document.body.classList.add('sync-asked'); ui.setStatus('☁ Due dispositivi hanno cambiato la stessa playlist in modi diversi: decidi in ☁ Sync.', true); }
+  });
+  void syncEngine.start();
+}
+window.addEventListener('online', () => void syncEngine?.syncNow());
+const syncDeps = desktopUI ? {
+  config: () => nasConfig,
+  engine: () => syncEngine,
+  api: () => syncApi,
+  probe: (url: string) => new HttpSyncClient(url).health(),
+  async connect(url: string, how: { kind: 'setup' | 'login'; name: string; password: string } | { kind: 'pair'; code: string }) {
+    const u = new URL(url);
+    if (u.protocol === 'http:' && !isPrivateHost(u.hostname)) throw new Error('Senza HTTPS PartyMix parla solo con indirizzi della rete di casa o della VPN.');
+    const c = new HttpSyncClient(url);
+    const dev = { deviceName: thisDeviceName(), deviceKind: 'pc' as const };
+    const s = how.kind === 'pair' ? await c.pair(how.code, dev) : how.kind === 'setup' ? await c.setup(how.name, how.password, dev) : await c.login(how.name, how.password, dev);
+    const cfg: NasConfig = { url, token: s.token, deviceId: s.device.id, deviceName: s.device.name, userName: s.user.name };
+    saveNasConfig(store, cfg);
+    log('info', 'sync.linked', { url });
+    startSync(cfg);
+  },
+  async disconnect() {
+    try { await syncApi?.logout(); } catch { /* the NAS may be away: the token is forgotten here anyway */ }
+    await syncEngine?.reset();
+    syncEngine = undefined; syncApi = undefined; nasConfig = undefined;
+    saveNasConfig(store, undefined);
+    log('info', 'sync.unlinked', {});
+  },
+  status: (t: string, e?: boolean) => ui.setStatus(t, e),
+} : undefined;
+
 /** The computer's pages (Playlist, Cerca, Download, Libreria), built with the shell's menu and navigation. */
 let libUI: ReturnType<typeof buildDesktopPages> | undefined;
 const desktopPages = desktopUI ? (parts: DesktopParts) => (libUI = buildDesktopPages({
@@ -352,6 +399,7 @@ const desktopPages = desktopUI ? (parts: DesktopParts) => (libUI = buildDesktopP
   menu: parts.menu,
   go: parts.go,
   store,
+  sync: syncDeps,
 })) : undefined;
 
 /**
@@ -958,6 +1006,7 @@ window.setInterval(() => { if (navigator.onLine && !ytReady) void bootYouTube();
     const migrated = migrateLegacy(plStore, settings, store);
     if (migrated) { settings.currentPlaylistId = migrated; save(); log('info', 'playlists.migrated', { count: plStore.count() }); }
     if (!plStore.get(settings.currentPlaylistId) && plStore.count()) { settings.currentPlaylistId = plStore.list(settings.playlistSort)[0].id; save(); }
+    if (nasConfig && desktopUI) startSync(nasConfig);
   } catch (e) {
     log('error', 'library.load_failed', { error: String(e) });
     ui.setStatus('Non riesco a leggere le playlist salvate: riavvia l’app. Se succede ancora, scrivimi da «💬 Commenti».', true);

@@ -1,7 +1,8 @@
 import { mkdirSync, renameSync, statfsSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
-import type { DeviceDoc, PlaylistDoc, ServerEvent, SessionDoc } from '../../shared/model.ts';
+import { apply, cleanOps, diff, type Conflict, type Op } from '../../shared/merge.ts';
+import type { DeviceDoc, PlaylistDoc, PlaylistMeta, ServerEvent, SessionDoc } from '../../shared/model.ts';
 import {
   ALL_PERMS, createDevice, defaultPerms, DEVICE_KINDS, deviceForToken, getDevice, hashPassword, LoginLimiter, PairingCodes,
   PERM, permMask, permNames, verifyPassword, type Device, type DeviceKind, type PermName,
@@ -27,6 +28,9 @@ export type App = {
   db: Db;
   close: () => void;
 };
+
+/** Where the PartyMix app's page comes from: Tauri serves it on localhost, and Vite in development. */
+const APP_ORIGIN = /^(?:https?:\/\/(?:localhost|127\.0\.0\.1|tauri\.localhost)(?::\d+)?|tauri:\/\/localhost)$/;
 
 const FOLDERS = ['music', 'playlists', 'covers', 'metadata', 'database', 'cache', 'cache/uploads'];
 
@@ -54,6 +58,13 @@ export function createApp(opts: AppOptions): App {
       console.error('copia playlist non scritta:', (e as Error).message);
     }
     publish({ seq, kind: 'playlist', id: doc.id, by: doc.updatedBy ?? undefined, summary: doc.deleted ? 'eliminata' : doc.name });
+  };
+
+  /** The part of a playlist the merge works on. */
+  const mergeView = (p: PlaylistDoc) => {
+    const meta: PlaylistMeta = { name: p.name, sortOrder: p.sortOrder };
+    for (const k of ['description', 'color', 'cover', 'link', 'source'] as const) if (p[k]) meta[k] = p[k];
+    return { meta, entries: p.entries };
   };
 
   const userCount = () => (db.prepare('SELECT COUNT(*) AS n FROM user').get() as { n: number }).n;
@@ -238,6 +249,36 @@ export function createApp(opts: AppOptions): App {
     sendJson(res, 200, doc);
   });
 
+  /**
+   * What a device did since `baseVersion`, as operations. Applied as they are if nothing changed meanwhile; otherwise
+   * merged with the other device's changes (see shared/merge.ts). Answers with the playlist as it is now, and the
+   * fields that could not be merged (the current value stays; the device asks the user).
+   */
+  r.on('POST', '/api/playlists/:id/ops', async ({ req, res, url, params }) => {
+    const d = auth(req, url, 'EDIT_PLAYLIST');
+    const b = await readJson(req, 16 << 20);
+    const base = num(b.baseVersion, 'baseVersion', true)!;
+    let ops: Op[];
+    try { ops = cleanOps(b.ops, cleanEntry); } catch (e) { throw e instanceof HttpError ? e : bad((e as Error).message); }
+    const out = tx(db, () => {
+      const cur = playlists.get(params[0], true);
+      if (!cur) throw new HttpError(404, 'NOT_FOUND', 'Playlist non trovata');
+      if (cur.deleted) throw new HttpError(409, 'DELETED', 'La playlist è stata eliminata da un altro dispositivo', { current: cur });
+      if (base > cur.version) throw bad('baseVersion non esiste');
+      if (!ops.length) return { playlist: cur, merged: false, conflicts: [] as Conflict[] };
+      let theirs: Op[] = [];
+      if (cur.version !== base) {
+        const old = playlists.revision(cur.id, base);
+        if (!old) throw new HttpError(409, 'TOO_OLD', 'Versione troppo vecchia per unire le modifiche', { current: cur });
+        theirs = diff(mergeView(old), mergeView(cur));
+      }
+      const m = apply(mergeView(cur), ops, theirs);
+      const doc = playlists.write(cur.id, cleanMeta(m.meta as unknown as Record<string, unknown>, cur), m.entries, d.id);
+      return { playlist: doc, merged: theirs.length > 0, conflicts: m.conflicts };
+    });
+    sendJson(res, 200, out);
+  });
+
   r.on('DELETE', '/api/playlists/:id', ({ req, res, url, params }) => {
     const d = auth(req, url, 'EDIT_PLAYLIST');
     const version = tx(db, () => {
@@ -301,6 +342,16 @@ export function createApp(opts: AppOptions): App {
     const url = new URL(req.url ?? '/', 'http://partymix');
     void (async () => {
       try {
+        // The app's page lives on localhost (Tauri) and calls the NAS from there: the browser asks the server first.
+        const origin = req.headers.origin;
+        if (origin && APP_ORIGIN.test(origin)) {
+          res.setHeader('access-control-allow-origin', origin);
+          res.setHeader('access-control-allow-headers', 'authorization, content-type, content-range');
+          res.setHeader('access-control-allow-methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+          res.setHeader('access-control-max-age', '600');
+          res.setHeader('vary', 'origin');
+          if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+        }
         if (!opts.allowPublic && !isPrivateAddress(req.socket.remoteAddress)) {
           throw new HttpError(403, 'PUBLIC_DENIED', 'PartyMix sul NAS risponde solo alla rete di casa o alla VPN');
         }

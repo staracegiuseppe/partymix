@@ -12,6 +12,7 @@ import { buildDownloadsUI, DlPrefs, loadPrefs, storePrefs } from './downloadsUI'
 import { Command, EXAMPLES, isCommand, parseCommand, WORDS } from '../commands/parse';
 import { fmtViews, pickResults } from '../commands/pick';
 import type { SheetItem } from './material';
+import { buildSyncUI, type SyncUIDeps } from './syncPage';
 
 /** What the computer's pages need from the app. */
 export type PagesDeps = {
@@ -43,6 +44,8 @@ export type PagesDeps = {
   go(page: string): void;
   downloads?: DownloadCoordinator;
   store?: Storage;
+  /** The NAS (☁ Sync and 📱 Dispositivi pages); none in the browser without a NAS. */
+  sync?: SyncUIDeps;
 };
 
 /** Where a song is, for information only: the playlists that have it and the file on the computer. */
@@ -665,8 +668,15 @@ export function buildDesktopPages(d: PagesDeps) {
     h('p', { class: 'artist wrap' }, 'Con una chiave gratuita di «YouTube Data API v3» (console.cloud.google.com → API e servizi → Credenziali) la ricerca usa le API ufficiali, mostra la durata e se il video si può riprodurre, e le playlist si leggono intere anche oltre 200 brani. La chiave resta su questo computer.'),
     apiKey);
 
+  // =====================================================================================
+  // ☁ SYNC and 📱 DISPOSITIVI (the NAS)
+  // =====================================================================================
+  const syncUI = d.sync ? buildSyncUI(d.sync) : undefined;
+  syncUI?.setCounter(() => d.playlists.count());
+
   /** Called by the app's tick (4 times a second): repaints only what changed. */
   function update(page: string) {
+    syncUI?.update(page);
     if (apiKey.value !== d.apiKey() && document.activeElement !== apiKey) apiKey.value = d.apiKey();
     if (page === 'playlists') { if (detailId) paintDetail(); else paintPlaylists(); }
     else if (page === 'search') paintSearch(false);
@@ -678,7 +688,7 @@ export function buildDesktopPages(d: PagesDeps) {
   paintLibrary(true);
 
   return {
-    pages: { playlists: playlistsPage, search: searchPage, library: libraryPage, downloads: d.downloads ? downloadsPage : undefined },
+    pages: { playlists: playlistsPage, search: searchPage, library: libraryPage, downloads: d.downloads ? downloadsPage : undefined, sync: syncUI?.syncPage, devices: syncUI?.devicesPage },
     settingsCard,
     update,
     known: (id: string) => known.get(id),

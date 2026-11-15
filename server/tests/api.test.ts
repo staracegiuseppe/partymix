@@ -37,6 +37,7 @@ async function call(method: string, path: string, body?: unknown, token?: string
 
 let pc = '', phone = '';
 let phoneId = '';
+const pc_ = () => pc;
 
 describe('autenticazione e dispositivi', () => {
   test('health prima della configurazione', async () => {
@@ -159,6 +160,47 @@ describe('playlist', () => {
     assert.equal((await call('GET', `/api/playlists/${id}`, undefined, pc)).body.entries.length, 4);
   });
 
+  test('operazioni da due dispositivi partiti dalla stessa versione: unite', async () => {
+    // version 2: A B C D. Phone (offline) removes B and adds X after A; PC meanwhile adds E at the end.
+    const pc = await call('POST', `/api/playlists/${id}/ops`, { baseVersion: 2, ops: [{ op: 'add', entry: { youtubeId: 'eeeeeeeeeee', title: 'Song E' }, after: ['ddddddddddd'] }] }, pc_());
+    assert.equal(pc.status, 200);
+    assert.equal(pc.body.merged, false);
+    assert.equal(pc.body.playlist.version, 3);
+    const ph = await call('POST', `/api/playlists/${id}/ops`, { baseVersion: 2, ops: [
+      { op: 'remove', entryId: 'bbbbbbbbbbb' },
+      { op: 'add', entry: { entryId: 'xxxxxxxxxxx', youtubeId: 'xxxxxxxxxxx', title: 'Song X' }, after: ['aaaaaaaaaaa'] },
+    ] }, phone);
+    assert.equal(ph.status, 200);
+    assert.equal(ph.body.merged, true);
+    assert.deepEqual(ph.body.conflicts, []);
+    assert.equal(ph.body.playlist.version, 4);
+    assert.deepEqual(ph.body.playlist.entries.map((e: { title: string }) => e.title), ['Song A', 'Song X', 'Song C', 'Song D', 'Song E']);
+  });
+
+  test('stesso nome cambiato in due modi: conflitto riportato, nulla perso', async () => {
+    const a = await call('POST', `/api/playlists/${id}/ops`, { baseVersion: 4, ops: [{ op: 'set', field: 'name', value: 'Festa', was: 'Palestra' }] }, pc_());
+    assert.equal(a.body.playlist.name, 'Festa');
+    const b = await call('POST', `/api/playlists/${id}/ops`, { baseVersion: 4, ops: [{ op: 'set', field: 'name', value: 'Gym', was: 'Palestra' }, { op: 'set', field: 'color', value: '#f00', was: undefined }] }, phone);
+    assert.equal(b.status, 200);
+    assert.deepEqual(b.body.conflicts, [{ field: 'name', mine: 'Gym', theirs: 'Festa' }]);
+    assert.equal(b.body.playlist.name, 'Festa');
+    assert.equal(b.body.playlist.color, '#f00');
+    assert.equal(b.body.playlist.version, 6);
+  });
+
+  test('operazioni non valide o versione inesistente', async () => {
+    assert.equal((await call('POST', `/api/playlists/${id}/ops`, { baseVersion: 6, ops: [{ op: 'boom' }] }, phone)).status, 400);
+    assert.equal((await call('POST', `/api/playlists/${id}/ops`, { baseVersion: 99, ops: [] }, phone)).status, 400);
+    assert.equal((await call('POST', `/api/playlists/${id}/ops`, { ops: [] }, phone)).status, 400);
+  });
+
+  test('riga con un file solo locale (non ancora sul NAS)', async () => {
+    const r = await call('POST', `/api/playlists/${id}/ops`, { baseVersion: 6, ops: [{ op: 'add', entry: { entryId: 'local:0123abcd', localId: 'local:0123abcd', title: 'Mio MP3' }, after: [] }] }, pc_());
+    assert.equal(r.status, 200);
+    assert.equal(r.body.playlist.entries[0].localId, 'local:0123abcd');
+    assert.equal(r.body.playlist.entries[0].youtubeId, undefined);
+  });
+
   test('riga non valida rifiutata', async () => {
     assert.equal((await call('POST', '/api/playlists', { name: 'X', entries: [{ title: 'senza brano' }] }, pc)).status, 400);
     assert.equal((await call('POST', '/api/playlists', { name: 'X', entries: [{ trackId: 'non-sha' }] }, pc)).status, 400);
@@ -167,7 +209,10 @@ describe('playlist', () => {
 
   test('versioni precedenti conservate', async () => {
     const r = await call('GET', `/api/playlists/${id}/revisions`, undefined, pc);
-    assert.deepEqual(r.body.map((x: { version: number }) => x.version), [2, 1]);
+    const vs = r.body.map((x: { version: number }) => x.version);
+    assert.equal(vs[0], (await call('GET', `/api/playlists/${id}`, undefined, pc)).body.version);
+    assert.ok(vs.includes(1));
+    assert.deepEqual(vs, [...vs].sort((a: number, b: number) => b - a));
   });
 
   test('modifiche incrementali da un seq', async () => {
@@ -195,12 +240,21 @@ describe('playlist', () => {
     assert.equal(pages, 4);
   });
 
-  test('eliminazione: tombstone nei delta', async () => {
+  test('eliminazione: tombstone nei delta; modifiche su una playlist eliminata = conflitto', async () => {
     const before = (await call('GET', '/api/sync/status', undefined, pc)).body.seq;
+    const v = (await call('GET', `/api/playlists/${id}`, undefined, pc)).body.version;
     assert.equal((await call('DELETE', `/api/playlists/${id}`, undefined, phone)).status, 200);
     assert.equal((await call('GET', `/api/playlists/${id}`, undefined, pc)).status, 404);
     const d = await call('GET', `/api/sync/changes?since=${before}`, undefined, pc);
     assert.equal(d.body.playlists[0].deleted, true);
+    const o = await call('POST', `/api/playlists/${id}/ops`, { baseVersion: v, ops: [{ op: 'set', field: 'name', value: 'Z', was: 'Festa' }] }, pc);
+    assert.equal(o.status, 409);
+    assert.equal(o.body.error, 'DELETED');
+    // the user chooses to keep it: a PUT on the deleted version brings it back
+    const back = await call('PUT', `/api/playlists/${id}`, { baseVersion: o.body.current.version, name: 'Z' }, pc);
+    assert.equal(back.status, 200);
+    assert.equal(back.body.deleted, undefined);
+    assert.equal((await call('GET', `/api/playlists/${id}`, undefined, phone)).body.name, 'Z');
   });
 
   test('evento SSE quando una playlist cambia', async () => {
@@ -240,6 +294,19 @@ describe('revoca e stato', () => {
     const t = r.body.token;
     assert.equal((await call('POST', '/api/auth/logout', {}, t)).status, 200);
     assert.equal((await call('GET', '/api/auth/me', undefined, t)).status, 401);
+  });
+});
+
+describe('CORS per l’app su localhost', () => {
+  test('preflight e intestazioni solo per origini dell’app', async () => {
+    const pre = await fetch(`${base}/api/playlists`, { method: 'OPTIONS', headers: { origin: 'http://localhost:9527', 'access-control-request-method': 'GET', 'access-control-request-headers': 'authorization' } });
+    assert.equal(pre.status, 204);
+    assert.equal(pre.headers.get('access-control-allow-origin'), 'http://localhost:9527');
+    assert.match(pre.headers.get('access-control-allow-headers') ?? '', /authorization/);
+    const ok = await fetch(`${base}/api/health`, { headers: { origin: 'tauri://localhost' } });
+    assert.equal(ok.headers.get('access-control-allow-origin'), 'tauri://localhost');
+    const no = await fetch(`${base}/api/health`, { headers: { origin: 'https://evil.example' } });
+    assert.equal(no.headers.get('access-control-allow-origin'), null);
   });
 });
 

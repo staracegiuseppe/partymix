@@ -420,3 +420,30 @@ body.md.desk .m-nav .m-nav-item.on { color: var(--md-on-secondary-container); }
 .desk [data-screen=now] .pg-tt { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
 .desk [data-screen=now] .pg-title { font: 500 22px/28px Roboto, 'Google Sans', system-ui, sans-serif; flex: none; }
 .desk [data-screen=now] .now-from { margin: 0; font-size: 14px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* ☁ Sync and 📱 Dispositivi */
+.desk .pg-sync, .desk .pg-devices { display: grid; gap: 16px; }
+.desk .pg-sync .panel, .desk .pg-devices .panel { margin: 0; }
+.desk .sync-line { display: flex; align-items: center; gap: 10px; font-size: 16px; margin: 4px 0 6px; }
+.desk .sync-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--md-outline); flex: none; }
+.desk .sync-dot.on { background: #2e7d32; box-shadow: 0 0 0 4px color-mix(in srgb, #2e7d32 20%, transparent); }
+.desk .sync-dot.off { background: var(--err, #b3261e); }
+.desk .sync-dot.busy { background: var(--md-primary); animation: syncpulse 1s ease-in-out infinite alternate; }
+@keyframes syncpulse { from { opacity: .4; } to { opacity: 1; } }
+.desk .sync-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 16px; margin: 12px 0; }
+.desk .pg-hint.err { color: var(--err, #b3261e); }
+.desk .sync-account { margin-top: 8px; }
+.desk .sync-connect .row input { flex: 1 1 260px; }
+.desk .conflict { padding: 12px 0; border-top: 1px solid var(--md-outline-variant, var(--line)); }
+.desk .conflict:first-child { border-top: 0; padding-top: 0; }
+.desk .conflict-t { font-weight: 600; }
+.desk .conflict-v { display: flex; gap: 24px; flex-wrap: wrap; margin: 6px 0; color: var(--md-on-surface-variant); }
+.desk .dev-list { display: grid; }
+.desk .dev-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--md-outline-variant, var(--line)); }
+.desk .dev-row:first-child { border-top: 0; }
+.desk .dev-row.revoked { opacity: .55; }
+.desk .dev-ic { font-size: 24px; }
+.desk .dev-me { color: var(--md-primary); }
+.desk .dev-a { display: flex; gap: 4px; }
+.desk .dev-a .danger { color: var(--err, #b3261e); }
+.desk .pair-code { font-size: 44px; font-weight: 700; letter-spacing: .25em; font-variant-numeric: tabular-nums; margin: 8px 0; color: var(--md-primary); }

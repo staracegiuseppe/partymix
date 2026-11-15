@@ -70,7 +70,7 @@ export type Actions = {
 
 /** The computer's pages (built by the app with the shell's menu and navigation). */
 export type DesktopPages = {
-  pages: { playlists: HTMLElement; search: HTMLElement; library: HTMLElement; downloads?: HTMLElement };
+  pages: { playlists: HTMLElement; search: HTMLElement; library: HTMLElement; downloads?: HTMLElement; sync?: HTMLElement; devices?: HTMLElement };
   settingsCard: HTMLElement;
   update(page: string): void;
   activeDownloads(): number;
@@ -511,7 +511,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
       h('p', { class: 'pg-hint' }, 'Ogni quanto PartyMix controlla se una playlist YouTube è cambiata (brani aggiunti o tolti).'),
       h('div', { class: 'row' }, refreshSel, refreshBtn), refreshInfo);
     deskTour = () => [
-      { target: () => root.querySelector('.m-nav') as HTMLElement, title: 'Il menu', text: 'Da qui vai alle pagine: ▶ Player (quello che suona), 📋 Playlist, 🔎 Cerca, ⬇ Download, 🎧 Libreria. In fondo 📺 Proiettore, ⚙ Impostazioni e 💜 Info e dona.' },
+      { target: () => root.querySelector('.m-nav') as HTMLElement, title: 'Il menu', text: 'Da qui vai alle pagine: ▶ Player (quello che suona), 📋 Playlist, 🔎 Cerca, ⬇ Download, 🎧 Libreria, ☁ Sync (il NAS), 📱 Dispositivi. In fondo 📺 Proiettore, ⚙ Impostazioni e 💜 Info e dona.' },
       { target: () => playMain, title: 'Avvia, pausa, riprendi', text: 'Il tasto grande avvia l’automix: parte il primo brano e la musica va avanti da sola, con le sfumature. Poi mette in pausa e riprende. ⏮ e ⏭ passano al brano prima o dopo.' },
       { target: () => mixBtn.parentElement as HTMLElement, title: 'Mix ora e Ferma', text: '«Mix ora» sfuma subito nel brano già pronto; «Ferma» ferma tutto e riporta la lista all’inizio.' },
       { target: () => seg.parentElement as HTMLElement, title: 'Stile delle transizioni', text: 'Morbida (circa 12 secondi), Standard (8), Energica (4) o Manuale (il cambio solo quando lo chiedi tu).' },
@@ -538,6 +538,8 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
         { id: 'search', label: 'Cerca', icon: 'search', body: [desk?.pages.search ?? null] },
         ...(desk?.pages.downloads ? [{ id: 'downloads', label: 'Download', icon: 'download' as const, body: [desk.pages.downloads] }] : []),
         { id: 'library', label: 'Libreria', icon: 'library', body: [desk?.pages.library ?? null] },
+        ...(desk?.pages.sync ? [{ id: 'sync', label: 'Sync', icon: 'cloud' as const, body: [desk.pages.sync] }] : []),
+        ...(desk?.pages.devices ? [{ id: 'devices', label: 'Dispositivi', icon: 'devices' as const, body: [desk.pages.devices] }] : []),
         { id: 'settings', label: 'Impostazioni', icon: 'settings', secondary: true, body: [ph('Impostazioni'), settingsGrid] },
         { id: 'about', label: 'Info e dona', icon: 'heart', secondary: true, body: [ph('Info e dona'), aboutPage] },
       ],
