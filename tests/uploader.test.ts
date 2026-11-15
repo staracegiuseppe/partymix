@@ -29,6 +29,7 @@ class FakeNas implements Pick<SyncApi, 'checkTracks' | 'startUpload' | 'uploadCh
   uploads = new Map<string, { sha: string; size: number; received: number; parts: Uint8Array[]; meta: UploadStart }>();
   covers = new Map<string, Blob>();
   calls: string[] = [];
+  private nextId = 1;
   /** Drop the connection after this many pieces (then let everything through). */
   cutAfter = Infinity;
   /** Pretend the file arrived damaged. */
@@ -44,7 +45,7 @@ class FakeNas implements Pick<SyncApi, 'checkTracks' | 'startUpload' | 'uploadCh
     const have = this.tracks.get(req.sha256);
     if (have) return { track: have };
     for (const [id, u] of this.uploads) if (u.sha === req.sha256) return { uploadId: id, received: u.received };
-    const id = `u${this.uploads.size + 1}`;
+    const id = `u${this.nextId++}`;
     this.uploads.set(id, { sha: req.sha256, size: req.size, received: 0, parts: [], meta: req });
     return { uploadId: id, received: 0 };
   }
@@ -73,6 +74,8 @@ class FakeNas implements Pick<SyncApi, 'checkTracks' | 'startUpload' | 'uploadCh
 }
 
 const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 5)); };
+/** Waits until `ok` holds (at most ~8 s): the queue runs at its own pace, slower when the machine is busy. */
+const until = async (ok: () => boolean) => { for (let i = 0; i < 800 && !ok(); i++) await new Promise((r) => setTimeout(r, 10)); };
 
 async function setup(opts: { auto?: boolean; chunk?: number; concurrency?: number } = {}) {
   const kv = new MemoryKV();
@@ -166,11 +169,11 @@ describe('Uploader', () => {
     const { lib, nas, up } = await setup({ chunk: 2000 });
     up.start();
     await lib.importFiles([1, 2, 3, 4, 5].map((i) => file(mp3(`Song ${i}`, 20, 10 + i), `Song ${i}.mp3`)));
-    await settle(60);
+    await until(() => up.summary().onNas + up.summary().failed === 5);
     expect(nas.maxInFlight).toBeLessThanOrEqual(2);
     expect(nas.maxInFlight).toBeGreaterThanOrEqual(1);
-    expect(nas.tracks.size).toBe(5);
     expect(up.summary()).toEqual({ total: 5, onNas: 5, uploading: 0, failed: 0 });
+    expect(nas.tracks.size).toBe(5);
   });
 
   it('with the automatic upload off, new songs wait for «Carica ora»', async () => {
