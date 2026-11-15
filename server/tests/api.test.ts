@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { createApp, type App } from '../src/app.ts';
+import { openDb } from '../src/db.ts';
 import { isPrivateAddress } from '../src/http.ts';
 
 let root: string, app: App, server: Server, base: string;
@@ -13,7 +14,7 @@ let clock = 1_700_000_000_000;
 
 before(async () => {
   root = mkdtempSync(join(tmpdir(), 'partymix-test-'));
-  app = createApp({ root, dbFile: ':memory:', now: () => clock });
+  app = createApp({ root, db: await openDb(':memory:'), now: () => clock });
   server = createServer(app.handle);
   await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

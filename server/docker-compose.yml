@@ -1,5 +1,5 @@
 # PartyMix sul NAS Synology (Container Manager → Progetto → Crea → questo file).
-# Prima crea la cartella condivisa /volume1/PartyMix e dalle i permessi all'utente indicato in PUID/PGID.
+# Prima crea la cartella condivisa PartyMix (qui su /volume2/PartyMix) e dalle i permessi all'utente indicato in PUID/PGID.
 services:
   partymix-server:
     build:
@@ -14,8 +14,9 @@ services:
     user: "1026:100"
     environment:
       PARTYMIX_ROOT: /PartyMix
-      PORT: "8787"
+      # 8787 è la porta standard di PartyMix; su questo NAS è già usata da un altro servizio (iptv-recorder), quindi 8788.
+      PORT: "8788"
       # Mai "1" senza VPN: aprirebbe la libreria a internet.
       PARTYMIX_ALLOW_PUBLIC: "0"
     volumes:
-      - /volume1/PartyMix:/PartyMix
+      - /volume2/PartyMix:/PartyMix

@@ -14,7 +14,7 @@ eventi in tempo reale, spazio disco). Upload/streaming dei brani e merge delle m
 3. In `server/docker-compose.yml` imposta `user:` con l'utente del NAS che possiede `/volume1/PartyMix`
    (via SSH: `id nomeutente` → `uid:gid`).
 4. **Container Manager → Progetto → Crea**, percorso `/volume1/docker/partymix/server`, usa il `docker-compose.yml` esistente.
-5. Controlla: `http://IP-DEL-NAS:8787/api/health` deve rispondere `{"app":"partymix",…}`.
+5. Controlla: `http://IP-DEL-NAS:8788/api/health` (porta scelta in `docker-compose.yml`, `PORT`) deve rispondere `{"app":"partymix",…}`.
 6. Dall'app PartyMix sul PC: **☁ Sync → Collega il NAS** (arriva nella fase 4) crea l'account e autorizza il PC.
    Gli altri dispositivi si aggiungono con il codice a 6 cifre mostrato in **📱 Dispositivi**.
 

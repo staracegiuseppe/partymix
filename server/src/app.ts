@@ -7,7 +7,7 @@ import {
   ALL_PERMS, createDevice, defaultPerms, DEVICE_KINDS, deviceForToken, getDevice, hashPassword, LoginLimiter, PairingCodes,
   PERM, permMask, permNames, verifyPassword, type Device, type DeviceKind, type PermName,
 } from './auth.ts';
-import { currentSeq, openDb, tx, type Db } from './db.ts';
+import { currentSeq, openDbSync, tx, type Db } from './db.ts';
 import { bad, HttpError, isPrivateAddress, num, readJson, Router, sendJson, str } from './http.ts';
 import { cleanEntry, cleanMeta, Playlists } from './playlists.ts';
 
@@ -16,7 +16,9 @@ export const SERVER_VERSION = '0.1.0';
 export type AppOptions = {
   /** The PartyMix folder on the NAS (music/, playlists/, database/…). */
   root: string;
-  /** ':memory:' in tests. Default: <root>/database/partymix.sqlite */
+  /** An open database (see openDb); without it the server opens <root>/database/partymix.sqlite with node:sqlite. */
+  db?: Db;
+  /** ':memory:' in tests (node:sqlite only). */
   dbFile?: string;
   now?: () => number;
   /** Accept requests from public internet addresses (default no: LAN and VPN only). */
@@ -37,7 +39,7 @@ const FOLDERS = ['music', 'playlists', 'covers', 'metadata', 'database', 'cache'
 export function createApp(opts: AppOptions): App {
   const now = opts.now ?? Date.now;
   for (const f of FOLDERS) mkdirSync(join(opts.root, f), { recursive: true });
-  const db = openDb(opts.dbFile ?? join(opts.root, 'database', 'partymix.sqlite'));
+  const db = opts.db ?? openDbSync(opts.dbFile ?? join(opts.root, 'database', 'partymix.sqlite'));
   const playlists = new Playlists(db, now);
   const pairing = new PairingCodes(now);
   const limiter = new LoginLimiter(now);
@@ -102,7 +104,7 @@ export function createApp(opts: AppOptions): App {
   const r = new Router();
 
   r.on('GET', '/api/health', ({ res }) => {
-    sendJson(res, 200, { app: 'partymix', version: SERVER_VERSION, setup: userCount() > 0 });
+    sendJson(res, 200, { app: 'partymix', version: SERVER_VERSION, setup: userCount() > 0, engine: db.engine, node: process.version });
   });
 
   // ---- authentication ----
