@@ -5,5 +5,5 @@ const version = JSON.parse(readFileSync('./package.json', 'utf8')).version as st
 export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(version) },
   build: { outDir: 'dist', rollupOptions: { input: { main: 'index.html', projector: 'projector.html' } } },
-  test: { environment: 'jsdom', globals: true },
+  test: { environment: 'jsdom', globals: true, exclude: ['**/node_modules/**', 'server/**', 'spike/**'] },
 });
