@@ -29,16 +29,21 @@ const tauri = () => (window as unknown as { __TAURI_INTERNALS__?: TauriInternals
 
 export const hasNativeDisplays = () => !!tauri();
 
-export async function listDisplays(): Promise<string[]> {
+/** A screen: `key` is the system's id, `label` its readable name («Mi TV · 1360×768»). */
+export type DisplayInfo = { key: string; label: string };
+
+export async function listDisplays(): Promise<DisplayInfo[]> {
   const t = tauri();
-  return t ? ((await t.invoke('list_displays')) as string[]) : [];
+  if (!t) return [];
+  const r = (await t.invoke('list_displays')) as (DisplayInfo | string)[];
+  return r.map((d) => (typeof d === 'string' ? { key: d, label: d } : d)); // older app versions answered plain names
 }
 
-export async function openProjector(display?: string): Promise<void> {
+export async function openProjector(display?: string, label?: string): Promise<void> {
   if (canCast()) { castStart(); return; } // Android: on the TV or projector the phone casts to
   if (isIOSApp()) { iosProjector(true); return; }
   const t = tauri();
-  if (t) await t.invoke('open_projector', { display });
+  if (t) await t.invoke('open_projector', { display, label });
   else window.open('/projector.html', 'partymix-projector', 'popup,width=1280,height=720');
 }
 

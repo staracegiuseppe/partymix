@@ -39,7 +39,7 @@ export type Actions = {
   replace(oldVideoId: string, text: string): Promise<{ ok: boolean; message: string }>;
   openProjector(): Promise<void>;
   closeProjector(): void;
-  setDisplay(name: string): void;
+  setDisplay(key: string, label?: string): void;
   setMic(id: string): void;
   setMicSensitivity(v: number): void;
   refreshInputs(): Promise<{ id: string; label: string }[]>;
@@ -217,7 +217,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
   const problems = h('ul', { class: 'problems' });
   const unav = h('details', {}, h('summary', {}, 'Non disponibile con YouTube'),
     h('ul', {}, ...UNAVAILABLE_WITH_YOUTUBE.map((u) => h('li', {}, u.name, h('span', {}, u.why)))));
-  const dispSel = h('select', { 'aria-label': 'Schermo del proiettore', onChange: () => a.setDisplay(dispSel.value) });
+  const dispSel = h('select', { 'aria-label': 'Schermo del proiettore', onChange: () => a.setDisplay(dispSel.value, dispSel.selectedOptions[0]?.textContent ?? undefined) });
   const dispRow = h('div', { class: 'row hidden' }, h('label', {}, 'Schermo'), dispSel);
   const micSel = h('select', { 'aria-label': 'Ingresso audio', onChange: () => a.setMic(micSel.value) }, h('option', { value: '' }, 'Predefinito'));
   const micBtn = h('button', { onClick: async () => { setInputs(await a.refreshInputs(), micSel.value); } }, 'Cerca ingressi');
@@ -794,10 +794,13 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     });
   }
 
-  function setDisplays(names: string[], selected?: string) {
-    dispRow.classList.toggle('hidden', names.length === 0);
-    dispSel.replaceChildren(...names.map((n) => h('option', { value: n, selected: n === selected }, n)));
-    if (names.length && !selected) a.setDisplay(dispSel.value);
+  /** The screens with their readable names; the one chosen is found by its id, or by its name if the id changed. */
+  function setDisplays(list: { key: string; label: string }[], selected?: string, selectedLabel?: string) {
+    dispRow.classList.toggle('hidden', list.length === 0);
+    const nameOf = (l?: string) => (l ?? '').split(' · ')[0].replace(' (principale)', '');
+    const pick = list.find((d) => d.key === selected) ?? list.find((d) => selectedLabel && nameOf(d.label) === nameOf(selectedLabel));
+    dispSel.replaceChildren(...list.map((d) => h('option', { value: d.key, selected: d === pick }, d.label)));
+    if (list.length && (!pick || pick.key !== selected)) a.setDisplay(dispSel.value, dispSel.selectedOptions[0]?.textContent ?? undefined);
   }
   function setInputs(list: { id: string; label: string }[], selected?: string) {
     micSel.replaceChildren(h('option', { value: '' }, 'Predefinito'), ...list.map((d) => h('option', { value: d.id, selected: d.id === selected }, d.label)));

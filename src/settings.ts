@@ -9,6 +9,8 @@ export type Settings = {
   micDeviceId?: string;
   micSensitivity: number;
   projectorDisplay?: string;
+  /** The readable name of that screen, to find it again if its id changes (cable unplugged and back). */
+  projectorDisplayLabel?: string;
   playlistText?: string;
   /** The saved playlist links, one per slot (empty string = slot not set yet). */
   playlists: string[];
@@ -125,6 +127,8 @@ export function loadSettings(store: Storage): Settings {
     if (key) out.ytApiKey = key.trim().slice(0, 100);
     if (mic) out.micDeviceId = mic;
     if (disp) out.projectorDisplay = disp;
+    const dl = str(j.projectorDisplayLabel);
+    if (dl) out.projectorDisplayLabel = dl;
     if (pl) out.playlistText = pl;
     if (pl && !Array.isArray(j.playlists)) out.playlists[0] = pl; // before two playlists existed: the old one becomes Playlist 1
     return out;

@@ -3,57 +3,141 @@ pub mod download;
 
 use tauri::{Url, WebviewUrl, WebviewWindowBuilder};
 #[cfg(desktop)]
-use tauri::{Manager, PhysicalPosition};
+use tauri::Manager;
 
 const PORT: u16 = 9527;
 
+/// A screen as the user sees it: `key` is the system's id (kept in the settings), `label` a readable name
+/// («Mi TV · 1360×768», «Schermo del computer (principale) · 1440×900»).
+#[derive(serde::Serialize, Clone)]
+struct DisplayInfo {
+    key: String,
+    label: String,
+}
+
+/// The names macOS gives the screens (NSScreen.localizedName) with their position and size in points, to put a
+/// real name on the monitors (the window library only knows «Monitor #257»). Other systems: none, names come from there.
 #[cfg(desktop)]
-#[tauri::command]
-fn list_displays(app: tauri::AppHandle) -> Vec<String> {
-    app.available_monitors()
-        .unwrap_or_default()
-        .iter()
+fn system_screen_names() -> Vec<(f64, f64, f64, String)> {
+    #[cfg(target_os = "macos")]
+    {
+        let js = "ObjC.import('AppKit'); var a = $.NSScreen.screens, o = []; for (var i = 0; i < a.count; i++) { var s = a.objectAtIndex(i), f = s.frame; o.push([f.origin.x, f.size.width, f.size.height, ObjC.unwrap(s.localizedName) || ''].join('\\t')); } o.join('\\n')";
+        if let Ok(out) = std::process::Command::new("osascript").args(["-l", "JavaScript", "-e", js]).output() {
+            return String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .filter_map(|l| {
+                    let f: Vec<&str> = l.split('\t').collect();
+                    if f.len() < 4 { return None; }
+                    Some((f[0].parse().ok()?, f[1].parse().ok()?, f[2].parse().ok()?, f[3].trim().to_string()))
+                })
+                .collect();
+        }
+    }
+    Vec::new()
+}
+
+#[cfg(desktop)]
+fn display_list(app: &tauri::AppHandle) -> Vec<(DisplayInfo, tauri::Monitor)> {
+    let monitors = app.available_monitors().unwrap_or_default();
+    let primary = app.primary_monitor().ok().flatten().map(|p| *p.position());
+    let names = system_screen_names();
+    monitors
+        .into_iter()
         .enumerate()
-        .map(|(i, m)| m.name().cloned().unwrap_or_else(|| format!("Schermo {}", i + 1)))
+        .map(|(i, m)| {
+            let sf = m.scale_factor();
+            let lp = m.position().to_logical::<f64>(sf);
+            let ls = m.size().to_logical::<f64>(sf);
+            let raw = m.name().cloned().unwrap_or_default();
+            let sys = names
+                .iter()
+                .find(|n| (n.0 - lp.x).abs() < 2.0 && (n.1 - ls.width).abs() < 2.0 && (n.2 - ls.height).abs() < 2.0)
+                .map(|n| n.3.clone())
+                .filter(|n| !n.is_empty());
+            let generic = raw.is_empty() || raw.starts_with("Monitor #") || raw.starts_with("\\\\.\\");
+            let mut base = sys.unwrap_or_else(|| if generic { format!("Schermo {}", i + 1) } else { raw.clone() });
+            if base.starts_with("Built-in") || base.to_lowercase().contains("integrat") || base.contains("Color LCD") {
+                base = "Schermo del computer".into();
+            }
+            let is_primary = primary.map(|p| p == *m.position()).unwrap_or(i == 0);
+            let label = format!("{}{} · {}×{}", base, if is_primary { " (principale)" } else { "" }, ls.width.round() as i64, ls.height.round() as i64);
+            let key = if raw.is_empty() { format!("#{}", i + 1) } else { raw };
+            (DisplayInfo { key, label }, m)
+        })
         .collect()
 }
 
 #[cfg(desktop)]
 #[tauri::command]
-async fn open_projector(app: tauri::AppHandle, display: Option<String>) -> Result<(), String> {
-    if let Some(w) = app.get_webview_window("projector") {
-        return w.set_focus().map_err(|e| e.to_string());
-    }
-    let monitors = app.available_monitors().map_err(|e| e.to_string())?;
+fn list_displays(app: tauri::AppHandle) -> Vec<DisplayInfo> {
+    display_list(&app).into_iter().map(|(d, _)| d).collect()
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+async fn open_projector(app: tauri::AppHandle, display: Option<String>, label: Option<String>) -> Result<(), String> {
+    let list = display_list(&app);
     let primary = app.primary_monitor().ok().flatten();
-    // Chosen display, else the first one that is not the primary, else whatever exists.
+    // The screen chosen (by its id; if the id changed — cable unplugged and back — by its name), else the first
+    // one that is not the primary, else whatever exists.
+    let name_of = |l: &str| l.split(" · ").next().unwrap_or("").replace(" (principale)", "");
     let target = display
         .as_ref()
-        .and_then(|n| monitors.iter().find(|m| m.name() == Some(n)))
-        .or_else(|| {
-            monitors
-                .iter()
-                .find(|m| primary.as_ref().map(|p| p.position() != m.position()).unwrap_or(false))
-        })
-        .or(monitors.first());
+        .and_then(|k| list.iter().find(|(d, _)| &d.key == k))
+        .or_else(|| label.as_ref().and_then(|l| list.iter().find(|(d, _)| d.label == *l || name_of(&d.label) == name_of(l))))
+        .or_else(|| list.iter().find(|(_, m)| primary.as_ref().map(|p| p.position() != m.position()).unwrap_or(false)))
+        .or(list.first())
+        .map(|(_, m)| m.clone());
+    // Where to put the window, in LOGICAL points of the target screen. Screens can have different densities
+    // (a Retina laptop at 2x and a TV at 1x): a physical position read on one screen and applied with another
+    // screen's scale lands in the wrong place — the projector stayed on the main screen.
+    let spot = target.as_ref().map(|m| {
+        let p = m.position().to_logical::<f64>(m.scale_factor());
+        (p.x + 40.0, p.y + 40.0)
+    });
+    if let Some(w) = app.get_webview_window("projector") {
+        // already open: move it to the screen chosen now (out of full screen first, or macOS keeps it where it is)
+        if let Some((x, y)) = spot {
+            let _ = w.set_fullscreen(false);
+            std::thread::sleep(std::time::Duration::from_millis(350));
+            let _ = w.set_position(tauri::LogicalPosition::new(x, y));
+            fullscreen_soon(w.clone(), target.clone());
+        }
+        return w.set_focus().map_err(|e| e.to_string());
+    }
     let url: Url = format!("http://localhost:{}/projector.html", PORT)
         .parse()
         .map_err(|e: url::ParseError| e.to_string())?;
-    let w = WebviewWindowBuilder::new(&app, "projector", WebviewUrl::External(url))
+    let mut b = WebviewWindowBuilder::new(&app, "projector", WebviewUrl::External(url))
         .title("PartyMix Proiettore")
-        .inner_size(1280.0, 720.0)
-        .build()
-        .map_err(|e| e.to_string())?;
-    if let Some(m) = target {
-        let p = m.position();
-        let _ = w.set_position(PhysicalPosition::new(p.x + 40, p.y + 40));
+        .inner_size(1280.0, 720.0);
+    if let Some((x, y)) = spot {
+        b = b.position(x, y); // born on the chosen screen
+    }
+    let w = b.build().map_err(|e| e.to_string())?;
+    if let Some((x, y)) = spot {
+        let _ = w.set_position(tauri::LogicalPosition::new(x, y));
+    }
+    fullscreen_soon(w, target);
+    Ok(())
+}
+
+/// Full screen once the window really is on its screen (macOS goes full screen on the screen the window is on
+/// at that moment, and a move is applied asynchronously).
+fn fullscreen_soon(w: tauri::WebviewWindow, target: Option<tauri::Monitor>) {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(300));
         // Linux: on Wayland the compositor ignores where a window asks to go; GTK can still put it full screen on a chosen monitor.
         #[cfg(target_os = "linux")]
-        if linux_fullscreen_on(&w, p.x, p.y, m.name().cloned()) {
-            return Ok(());
+        if let Some(m) = &target {
+            let p = m.position();
+            if linux_fullscreen_on(&w, p.x, p.y, m.name().cloned()) {
+                return;
+            }
         }
-    }
-    w.set_fullscreen(true).map_err(|e| e.to_string())
+        let _ = &target;
+        let _ = w.set_fullscreen(true);
+    });
 }
 
 /// Full screen on the GDK monitor at that physical position (or with that name). False if none matches: the caller
@@ -218,13 +302,13 @@ fn close_projector(app: tauri::AppHandle) {
 // Phones and TVs have one screen and no second window: the projector stays inside the main view.
 #[cfg(mobile)]
 #[tauri::command]
-fn list_displays() -> Vec<String> {
+fn list_displays() -> Vec<DisplayInfo> {
     Vec::new()
 }
 
 #[cfg(mobile)]
 #[tauri::command]
-async fn open_projector(_display: Option<String>) -> Result<(), String> {
+async fn open_projector(_display: Option<String>, _label: Option<String>) -> Result<(), String> {
     Err("il proiettore su un secondo schermo non c'è su Android".into())
 }
 

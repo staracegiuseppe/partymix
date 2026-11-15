@@ -470,9 +470,9 @@ const ui: ReturnType<typeof buildConsole> & { selectById(id: string): void } = O
     if (r.ok && r.track) { r.track.manual = true; replaced.add(oldId); queue.replace(oldId, r.track); startKaraoke(); persistQueue(); }
     return { ok: r.ok, message: r.message };
   },
-  openProjector: () => openProjector(settings.projectorDisplay),
+  openProjector: () => openProjector(settings.projectorDisplay, settings.projectorDisplayLabel),
   closeProjector: () => void closeProjector(),
-  setDisplay: (n) => { settings.projectorDisplay = n; save(); },
+  setDisplay: (key, label) => { settings.projectorDisplay = key; settings.projectorDisplayLabel = label; save(); },
   setMic: (id) => { settings.micDeviceId = id || undefined; save(); },
   setMicSensitivity: (v) => { settings.micSensitivity = v; save(); },
   refreshInputs: () => listInputs(),
@@ -524,7 +524,9 @@ ui.setProjectorMode(settings.projectorMode);
 if (canCast()) window.setInterval(() => ui.setProjectorInfo(castMessage(castState())), 1000);
 else if (isIOSApp()) ui.setProjectorInfo('📺 Per la TV: Centro di Controllo → «Duplica schermo» → Apple TV o TV AirPlay, poi «Mostra il proiettore».');
 ui.setAutoRefreshValue(settings.playlistRefreshMin);
-if (hasNativeDisplays()) void listDisplays().then((n) => ui.setDisplays(n, settings.projectorDisplay)).catch(() => {});
+// the screens, again whenever the app comes back to the front (a TV may have been plugged in meanwhile)
+const refreshDisplays = () => void listDisplays().then((n) => ui.setDisplays(n, settings.projectorDisplay, settings.projectorDisplayLabel)).catch(() => {});
+if (hasNativeDisplays()) { refreshDisplays(); addEventListener('focus', refreshDisplays); }
 
 // --- Playlist refresh: picks up videos added to or removed from the YouTube playlist. ---
 async function refreshPlaylist(manual: boolean): Promise<void> {
