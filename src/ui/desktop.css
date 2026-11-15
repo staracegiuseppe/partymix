@@ -369,3 +369,28 @@ body.md.desk .m-nav .m-nav-item.on { color: var(--md-on-secondary-container); }
   body.md.desk .m-nav .m-nav-item.on .m-nav-label { font-weight: 700; color: var(--md-on-surface); }
   body.md.desk .m-nav .m-nav-item:focus-visible .m-ind { box-shadow: 0 0 0 2px var(--md-primary); }
 }
+
+/* ===================== «Proiettore e testo»: side sheet over the Player ===================== */
+.desk .side-sheet { position: fixed; z-index: 25; top: 64px; right: 0; bottom: 0; width: min(440px, calc(100vw - var(--nav-w) - 24px));
+  display: flex; flex-direction: column; background: var(--md-surface-low); border-radius: 16px 0 0 16px;
+  box-shadow: -6px 0 24px rgb(0 0 0 / .35); transform: translateX(calc(100% + 24px)); transition: transform .25s cubic-bezier(.2, 0, 0, 1); }
+.desk .side-sheet.open { transform: none; }
+.desk .ss-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 16px 12px 8px 24px; }
+.desk .ss-head h2 { margin: 0; font: 400 22px/28px Roboto, 'Google Sans', system-ui, sans-serif; }
+.desk .ss-body { flex: 1; overflow: auto; overscroll-behavior: contain; padding: 0 16px 24px; display: grid; gap: 16px; align-content: start; }
+.desk .ss-body .panel { background: var(--md-surface-c); margin: 0; }
+.desk .ss-body .syncbar { position: static; inset: auto; width: auto; max-height: none; margin: 0; border-radius: 16px; }
+.desk .ss-body .synctools .row { flex-wrap: wrap; }
+@media (min-width: 1500px) { body.desk.ss-open .m-main { margin-right: 440px; transition: margin-right .25s; } }
+@media (prefers-reduced-motion: reduce) { .desk .side-sheet { transition: none; } }
+
+.desk .ss-body .seg button { white-space: nowrap; }
+.desk .ss-body .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.desk .ss-body .btns button { width: 100%; }
+/* deck cards: long titles end with «…» inside the card, the seek bar stays in it */
+.desk .deck { overflow: hidden; min-width: 0; }
+.desk .deck > * { min-width: 0; max-width: 100%; }
+.desk .deck .meta > div { min-width: 0; flex: 1; }
+.desk .deck .artist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desk .deck input.seek { width: 100%; box-sizing: border-box; }
+.desk .ss-body .seg button { padding: 0 14px; }

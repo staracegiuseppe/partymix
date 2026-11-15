@@ -10,7 +10,7 @@
   <a href="#-sostieni-partymix">💜 Sostieni il progetto</a>
 </p>
 
-<p align="center"><img src="img/console.png" alt="PartyMix sul computer: due deck, crossfade e testo da cantare" width="860"></p>
+<p align="center"><img src="img/console.png" alt="PartyMix sul computer: la pagina Player con ⏯, i due deck e la lista di riproduzione" width="860"></p>
 
 <p align="center">
   <img src="img/android-now.png" alt="PartyMix su Android, tema scuro" width="200">
@@ -54,7 +54,7 @@ L'app è divisa in pagine, come una vera app musicale. Il **menu a sinistra** (s
 - **🔎 Cerca** — cerca una canzone su YouTube o nella tua musica: i risultati compaiono subito sotto il campo.
 - **⬇ Download** — i download in corso, in coda, completati e con errori.
 - **🎧 Libreria** — la tua musica sul computer: importati, scaricati, preferiti, artisti, album.
-- In fondo: **📺 Proiettore** (proiettore e testo da cantare), **⚙ Impostazioni** (karaoke, pubblicità, aggiornamento playlist, chiave YouTube, aiuto) e **💜 Info e dona** (crediti e donazione facoltativa con PayPal, anche dal ♥ in alto).
+- In fondo: **📺 Proiettore** (si apre come pannello a destra sopra il Player: proiettore e testo da cantare, senza lasciare la musica), **⚙ Impostazioni** (karaoke, pubblicità, aggiornamento playlist, chiave YouTube, aiuto) e **💜 Info e dona** (crediti e donazione facoltativa con PayPal, anche dal ♥ in alto).
 - I colori seguono il computer: il colore di evidenziazione scelto nelle impostazioni di sistema (Mac, Windows, Linux GNOME) e il tema chiaro o scuro.
 
 Ogni brano ha il menu **⋮** (o clic destro) con le azioni che ha senso fare in quel momento: suona adesso, suona dopo, metti in coda, aggiungi a playlist, scarica, preferiti, togli.
@@ -95,6 +95,9 @@ L'app segue lo stile Material Design e ha quattro sezioni nella barra in basso:
 Puoi tenere **tutte le playlist che vuoi**: non c'è più il limite di quattro. Le playlist che avevi già passano da sole nel nuovo elenco, con i loro nomi e brani.
 
 **Computer:** apri la pagina **📋 Playlist**.
+
+<p align="center"><img src="img/desktop-playlists.png" alt="La pagina Playlist con le schede" width="420"> <img src="img/desktop-playlist.png" alt="Una playlist aperta: inizio, brani numerati e fine" width="420"></p>
+
 - Ogni playlist è una scheda con nome, numero di brani e durata; quella che sta suonando ha il bordo colorato e «▶ In riproduzione».
 - **▶** sulla scheda la suona subito; un clic sulla scheda la apre.
 - **+ Nuova playlist**, **Cerca playlist** e il menu per ordinarle: «Ordine mio» (trascinando le schede), per nome, modificate di recente, più brani.
@@ -193,6 +196,8 @@ Sul computer funzionano anche i tasti rapidi:
 
 **Usare un tuo file.** Senza yt-dlp, «Rendi offline con un tuo file…» nel menu ⋮ ti fa scegliere un tuo file audio di quel brano. «Elimina download» toglie solo il file: il brano resta nelle playlist.
 
+<p align="center"><img src="img/desktop-search.png" alt="La ricerca: i risultati compaiono sotto il campo" width="420"> <img src="img/desktop-library.png" alt="La libreria con i filtri e dove si trova ogni brano" width="420"></p>
+
 **🔎 Cerca.** Nella pagina **🔎 Cerca** scegli dove cercare, **▶ YouTube** o **🎧 La mia musica**, scrivi titolo, artista o tutti e due (per esempio «The Weeknd Blinding Lights») e premi Invio: i risultati compaiono subito sotto il campo, senza cambiare pagina.
 - Con **La mia musica** l'app cerca tra tutti i brani della libreria e di tutte le playlist (anche per nome della playlist), anche senza rete. Ogni risultato mostra, solo come informazione, **in quali playlist** si trova (📂) e **dove è il file sul PC** (💾).
 - Su YouTube vedi copertina, titolo, canale e durata; i video che non si possono riprodurre sono segnalati con il motivo.
@@ -209,7 +214,9 @@ Il proiettore è una seconda schermata, da mandare su TV o videoproiettore, che 
 - **Karaoke:** forme colorate che seguono il suono della stanza attraverso il microfono, con il testo da cantare. Il suono non viene registrato.
 - **Video YouTube:** il video del brano in onda a tutto schermo, muto e allineato alla musica. È perfetto per i balli tipo Just Dance. Il video successivo è già caricato, quindi al cambio brano lo schermo non diventa mai nero. Quando YouTube mostra una pubblicità, al suo posto restano le forme.
 
-**Computer.** Premi **Apri proiettore** e scegli lo schermo: secondo monitor, TV collegata o proiettore. Nel pannello scegli anche il microfono e la sensibilità. Su Linux il proiettore va a tutto schermo sul monitor scelto, anche con Wayland (non ancora provato su un computer vero).
+<p align="center"><img src="img/desktop-projector.png" alt="Il pannello Proiettore e testo aperto sopra il Player" width="620"></p>
+
+**Computer.** Premi **📺 Proiettore** nel menu (o l'icona 📺 in alto): si apre il pannello «Proiettore e testo» a destra, sopra il Player, così la musica resta sotto mano; si chiude con ✕ o Esc. Lì premi **Apri proiettore** e scegli lo schermo: secondo monitor, TV collegata o proiettore. Nel pannello scegli anche il microfono e la sensibilità. Su Linux il proiettore va a tutto schermo sul monitor scelto, anche con Wayland (non ancora provato su un computer vero).
 
 **Android.** Premi **Trasmetti alla TV** (oppure l'icona in alto).
 1. Si aprono le impostazioni di Android «Trasmetti» o «Schermo wireless».

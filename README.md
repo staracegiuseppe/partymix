@@ -13,7 +13,9 @@ Incolli una playlist YouTube o Spotify, premi un tasto e la musica va avanti da 
   <a href="#commenti-e-suggerimenti">Commenti e suggerimenti</a>
 </p>
 
-<p align="center"><img src="docs/img/console.png" alt="La console di PartyMix: due deck, crossfade e testo sincronizzato" width="900"></p>
+<p align="center"><img src="docs/img/console.png" alt="PartyMix sul computer: la pagina Player con i comandi, i due deck e la lista di riproduzione" width="900"></p>
+
+<p align="center"><img src="docs/img/desktop-playlists.png" alt="Le playlist" width="290"> <img src="docs/img/desktop-search.png" alt="La ricerca, con i risultati sotto il campo" width="290"> <img src="docs/img/desktop-projector.png" alt="Il pannello Proiettore e testo sopra il Player" width="290"></p>
 
 ## Perché PartyMix
 
@@ -22,7 +24,7 @@ Incolli una playlist YouTube o Spotify, premi un tasto e la musica va avanti da 
 - **Tutte le playlist che vuoi, salvate sul dispositivo.** Nessun limite (prima erano quattro): crea, rinomina, duplica, elimina, cerca e ordina le playlist dalla barra laterale; si aprono all'istante anche senza rileggere YouTube. Togli i brani che non vuoi, cambia l'ordine: la lista resta così.
 - **Libreria musicale locale (computer).** **+ Aggiungi musica locale**: importa MP3 (anche tanti insieme o un'intera cartella) che finiscono in *Musica › PartyMix Library/Artista/Brano.mp3*. Si suonano **anche senza rete**. Sezioni Tutte, Scaricate, Preferiti, Artisti, Album, Playlist; **🔎 Cerca nella libreria** trova un brano tra migliaia e ti dice in quali playlist e in quale cartella del PC si trova.
 - **🔎 Cerca su YouTube (computer).** Scrivi titolo e/o artista: risultati con copertina, canale e durata; **▶ Riproduci**, **⤵ In coda**, **⏭ subito dopo**, **＋ Playlist**, **＋ Libreria**.
-- **Nuova interfaccia per computer (Material Design 3).** Menu a sinistra con pagine separate: ▶ Player (deck, mixer e lista di riproduzione con «In riproduzione da: Festa · 3 / 124»), 📋 Playlist, 🔎 Cerca (risultati subito sotto il campo), ⬇ Download, 🎧 Libreria, 📺 Proiettore, ⚙ Impostazioni. Le liste hanno un inizio e una fine ben visibili e restano fluide anche con 10.000 brani; il ritorno al primo brano è la funzione «Ripeti» del player. L'app per smartphone resta quella di sempre.
+- **Nuova interfaccia per computer (Material Design 3).** Menu a sinistra con pagine separate: ▶ Player (deck, mixer e lista di riproduzione con «In riproduzione da: Festa · 3 / 124»), 📋 Playlist, 🔎 Cerca (risultati subito sotto il campo), ⬇ Download, 🎧 Libreria, ⚙ Impostazioni, 💜 Info e dona; 📺 Proiettore e testo si apre come pannello laterale sopra il Player. I colori seguono il colore di evidenziazione e il tema chiaro/scuro del computer. Le liste hanno un inizio e una fine ben visibili e restano fluide anche con 10.000 brani; il ritorno al primo brano è la funzione «Ripeti» del player. L'app per smartphone resta quella di sempre.
 - **Karaoke automatico.** In sottofondo cerca i testi di tutta la playlist e li mostra a tempo, con le parole che si illuminano (o senza, se preferisci).
 - **Proiettore.** Sul secondo schermo, a tutto schermo: forme che seguono la musica dal microfono con il testo da cantare, oppure il **video YouTube in grande** (perfetto per i balli tipo Just Dance), muto, allineato alla musica e senza pubblicità sullo schermo. Il video successivo viene precaricato: niente buchi neri tra un brano e l'altro.
 - **Android in stile Material Design.** Sul telefono l'app è pensata per il tocco: quattro sezioni nella barra in basso (In onda, Playlist, Proiettore, Altro), i colori del tuo telefono (tema chiaro o scuro e Material You), le azioni su ogni brano in un pannello dal basso.

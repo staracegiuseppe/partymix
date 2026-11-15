@@ -8,7 +8,7 @@ import { UNAVAILABLE_WITH_YOUTUBE } from './unavailable';
 import { APP_VERSION, AUTHOR, PAYPAL_QR } from '../info';
 import { buildQueueList, QueueRowVM } from './queueList';
 import type { SheetItem as MenuItem } from './material';
-import { applyPhoneTheme, applySystemInsets, buildShell, materialUI, setLabel, SheetItem, withIcon } from './material';
+import { applyPhoneTheme, applySystemInsets, buildShell, icon, materialUI, setLabel, SheetItem, withIcon } from './material';
 
 export type Actions = {
   loadPlaylist(text: string): void;
@@ -341,7 +341,9 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
   }
   /** Computer: the tour of the pages (each step opens its page). Set when the computer layout is built. */
   let deskTour: (() => TourStep[]) | undefined;
-  const openTutorial = () => void (md ? startTour(mdTourSteps(), (el) => shell?.reveal(el)) : deskTour ? startTour(deskTour(), (el) => shell?.reveal(el)) : startTour(tourSteps()));
+  /** Computer: «Proiettore e testo» in a side sheet over the Player (set when the computer layout is built). */
+  let projSheet: { open(): void; close(): void; toggle(): void } | undefined;
+  const openTutorial = () => void (md ? startTour(mdTourSteps(), (el) => shell?.reveal(el)) : deskTour ? startTour(deskTour(), (el) => { if (el.closest('.side-sheet')) projSheet?.open(); else { projSheet?.close(); shell?.reveal(el); } }) : startTour(tourSteps()));
   const openWizard = () => startWizard({
     loadPlaylist: (t) => a.loadPlaylist(t),
     onStatus: (fn) => { statusListeners.add(fn); fn(status.textContent ?? '', status.classList.contains('error')); return () => statusListeners.delete(fn); },
@@ -384,7 +386,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     h('button', { onClick: openTutorial }, 'Tutorial'),
     h('button', { onClick: openInfo }, 'Info'),
     h('button', { title: 'Scrivimi cosa ne pensi e cosa vorresti trovare in PartyMix', onClick: () => showFeedback() }, '💬 Commenti'));
-  const castTop = h('button', { class: 'm-icon-btn', 'aria-label': isIOSApp() ? 'Mostra il proiettore' : 'Trasmetti il proiettore alla TV', title: isIOSApp() ? 'Mostra il proiettore' : 'Trasmetti il proiettore alla TV', onClick: () => { shell?.go('proj'); void openProj(); } });
+  const castTop = h('button', { class: 'm-icon-btn', 'aria-label': isIOSApp() ? 'Mostra il proiettore' : 'Trasmetti il proiettore alla TV', title: isIOSApp() ? 'Mostra il proiettore' : 'Trasmetti il proiettore alla TV', onClick: () => { if (projSheet) projSheet.open(); else { shell?.go('proj'); void openProj(); } } });
   const helpItem = (ic: Parameters<typeof withIcon>[1], text: string, sub: string, run: () => void) =>
     h('button', { class: 'm-list-item', type: 'button', onClick: run }, withIcon(h('span', { class: 'm-lead' }), ic, true), h('span', { class: 'm-text' }, h('span', { class: 't' }, text), h('span', { class: 'm-sub' }, sub)));
   const helpPanel = h('section', { class: 'panel' }, h('h3', {}, 'Aiuto'),
@@ -533,12 +535,38 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
         { id: 'search', label: 'Cerca', icon: 'search', body: [desk?.pages.search ?? null] },
         ...(desk?.pages.downloads ? [{ id: 'downloads', label: 'Download', icon: 'download' as const, body: [desk.pages.downloads] }] : []),
         { id: 'library', label: 'Libreria', icon: 'library', body: [desk?.pages.library ?? null] },
-        { id: 'proj', label: 'Proiettore', icon: 'cast', secondary: true, body: [ph('Proiettore e testo'), projPanel, syncBar, lyricsPanel] },
         { id: 'settings', label: 'Impostazioni', icon: 'settings', secondary: true, body: [ph('Impostazioni'), settingsGrid] },
         { id: 'about', label: 'Info e dona', icon: 'heart', secondary: true, body: [ph('Info e dona'), aboutPage] },
       ],
     });
     emptyNowRef = emptyNowDesk;
+
+    // «Proiettore e testo»: a Material side sheet from the right, over the Player (the music stays in sight and in hand).
+    // Wide screens: the page makes room for it; narrower ones: it lies over the right part. ✕ or Esc closes it.
+    const ssClose = withIcon(h('button', { class: 'm-icon-btn', 'aria-label': 'Chiudi', title: 'Chiudi (Esc)' }), 'close', true);
+    const sheetEl = h('aside', { class: 'side-sheet', role: 'complementary', 'aria-label': 'Proiettore e testo', inert: true },
+      h('div', { class: 'ss-head' }, h('h2', {}, 'Proiettore e testo'), ssClose),
+      h('div', { class: 'ss-body' }, projPanel, syncBar, lyricsPanel));
+    document.body.append(sheetEl);
+    projOpen.className = 'm-filled'; withIcon(projOpen, 'cast'); projClose.className = 'm-outlined'; withIcon(projClose, 'stop');
+    const projNav = h('button', { class: 'm-nav-item sec', type: 'button', title: 'Proiettore e testo', 'aria-expanded': 'false' },
+      h('span', { class: 'm-ind' }, icon('cast')), h('span', { class: 'm-nav-label' }, 'Proiettore'));
+    const navEl = root.querySelector('.m-nav')!;
+    navEl.insertBefore(projNav, navEl.querySelector('.m-nav-item.sec'));
+    const setOpen = (on: boolean) => {
+      sheetEl.classList.toggle('open', on);
+      sheetEl.toggleAttribute('inert', !on);
+      document.body.classList.toggle('ss-open', on);
+      projNav.classList.toggle('on', on);
+      projNav.setAttribute('aria-expanded', String(on));
+      if (on && shell?.current() !== 'now') shell?.go('now');
+    };
+    projSheet = { open: () => setOpen(true), close: () => setOpen(false), toggle: () => setOpen(!sheetEl.classList.contains('open')) };
+    projNav.addEventListener('click', () => projSheet!.toggle());
+    ssClose.addEventListener('click', () => projSheet!.close());
+    addEventListener('keydown', (e) => { if (e.key === 'Escape' && sheetEl.classList.contains('open') && !document.querySelector('.m-sheet.on, .modal, .tour-card')) projSheet!.close(); });
+    // the Player's own nav item does not look «current» while the sheet is the thing in front
+    shell.onScreen((id) => { if (id !== 'now') setOpen(false); });
   }
 
   /** ⋮ on a song of the play queue (computer): the actions that make sense for it, in its state. */
