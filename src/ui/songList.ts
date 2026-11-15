@@ -13,6 +13,9 @@ export type SongVM = {
   off?: OfflineState | 'queued';
   /** 0…1 while being saved. */
   pct?: number;
+  /** The file on the NAS: ☁ there, ⬆ going up, ⚠ not there (or failed, with `nasTip` saying why). */
+  nas?: 'nas' | 'uploading' | 'missing' | 'error';
+  nasTip?: string;
   fav?: boolean;
   dur?: number;
   /** The song on air is paused. */
@@ -55,6 +58,13 @@ export const STATE: Record<NonNullable<SongVM['off']>, [string, string, string]>
   downloading: ['⬇', 'Download', 'Download in corso'],
   queued: ['⏳', 'In coda', 'In attesa di essere scaricato'],
   error: ['⚠', 'Errore', 'Problema con il file'],
+};
+/** The NAS state as a small tag after the title: icon, and the words of the tooltip. */
+export const NAS_TAG: Record<NonNullable<SongVM['nas']>, [string, string]> = {
+  nas: ['☁', 'Sul NAS'],
+  uploading: ['⬆', 'In caricamento sul NAS'],
+  missing: ['⚠', 'Non ancora sul NAS'],
+  error: ['⚠', 'Caricamento sul NAS non riuscito'],
 };
 const touch = () => typeof matchMedia === 'function' && matchMedia('(hover: none)').matches;
 const plural = (n: number, a: string, b: string) => `${n.toLocaleString('it-IT')} ${n === 1 ? a : b}`;
@@ -115,8 +125,9 @@ export function buildSongList(o: SongListOpts) {
       if (img) { const src = r.thumb ?? ''; if (img.getAttribute('src') !== src) { if (src) img.src = src; else img.removeAttribute('src'); } }
       const tags = [r.current ? ['tag on', r.paused ? 'in pausa' : 'in onda'] : null, r.locked ? ['tag', 'bloccato'] : null,
         r.lyr === 'none' ? ['tag', 'senza testo'] : r.lyr === 'plain' ? ['tag soft', 'testo stimato'] : r.lyr === 'synced' ? ['tag ok', 'testo a tempo'] : null,
-        r.bad ? ['tag', 'non riproducibile'] : null, r.fav ? ['tag fav', '♥'] : null].filter((x): x is string[] => !!x);
-      q('.t').replaceChildren(r.title, ...tags.map(([c, s]) => h('span', { class: c }, s)));
+        r.bad ? ['tag', 'non riproducibile'] : null, r.fav ? ['tag fav', '♥'] : null,
+        r.nas ? [`tag nas ${r.nas}`, NAS_TAG[r.nas][0], r.nasTip ?? NAS_TAG[r.nas][1]] : null].filter((x): x is string[] => !!x);
+      q('.t').replaceChildren(r.title, ...tags.map(([c, s, tip]) => h('span', { class: c, ...(tip ? { title: tip } : {}) }, s)));
       q('.s').textContent = r.sub ?? r.artist;
       q('.dur').textContent = r.dur ? fmtTime(r.dur) : '';
       const st = q('.st');

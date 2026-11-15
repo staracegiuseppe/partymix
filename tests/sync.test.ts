@@ -88,6 +88,13 @@ class FakeNas implements SyncApi {
   async renameDevice() { this.guard('rename'); return {} as DeviceDoc; }
   async revokeDevice() { this.guard('revoke'); return {} as DeviceDoc; }
   async pairCode() { this.guard('pairCode'); return { code: '123456', expiresAt: clock + 1 }; }
+  // the files (phase 5) are not part of these tests: see uploader.test.ts
+  async checkTracks(sha256: string[]) { return { missing: sha256, present: [] as string[] }; }
+  async startUpload(): Promise<never> { throw new Error('non in questo test'); }
+  async uploadChunk(): Promise<never> { throw new Error('non in questo test'); }
+  async uploadCover(): Promise<never> { throw new Error('non in questo test'); }
+  async track(): Promise<never> { throw new SyncError(404, 'NOT_FOUND', 'Brano non trovato'); }
+  async library() { return { tracks: [] }; }
   events(on: (ev: ServerEvent) => void) { this.listeners.add(on); return () => this.listeners.delete(on); }
   /** Changes made straight on the NAS by "another device" that has no engine in the test. */
   direct(id: string, fn: (v: { meta: PlaylistMeta; entries: Entry[] }) => void, by = 'altro') { const cur = this.docs.get(id)!; const v = this.view(structuredClone(cur)); fn(v); const b = this.by; this.by = by; this.write(id, v.meta, v.entries, by); this.by = b; }

@@ -27,6 +27,8 @@ export type LibEntry = {
   file?: string;
   /** Where the file came from on the computer when it was imported («Cartella/brano.mp3»), shown for information only. */
   origin?: string;
+  /** The song is on the NAS: the SHA-256 of its file (its id there). Set after the upload, or when the NAS had it already. */
+  nasId?: string;
   /** Picture from the file's tags, or the YouTube thumbnail link. */
   cover?: Blob;
   thumb?: string;
@@ -96,6 +98,7 @@ export function friendly(e: unknown): string {
 /** The local music library: songs imported from the computer or downloaded, plus YouTube songs the user kept. */
 export class MusicLibrary {
   private byId = new Map<string, LibEntry>();
+  private byNas = new Map<string, string>();
   private aborts = new Map<string, AbortController>();
   private listeners = new Set<() => void>();
   private recentUrls: string[] = [];
@@ -113,6 +116,7 @@ export class MusicLibrary {
       if (v.state === 'downloading') { v.state = 'error'; v.error = 'Download interrotto (l’app è stata chiusa): riprova.'; }
       delete v.progress;
       this.byId.set(v.id, v);
+      if (v.nasId) this.byNas.set(v.nasId, v.id);
     }
     this.changed();
   }
@@ -128,6 +132,32 @@ export class MusicLibrary {
   get(id: string): LibEntry | undefined { return this.byId.get(id); }
   size(): number { return this.byId.size; }
   bytes(): number { let n = 0; for (const e of this.byId.values()) if (e.file) n += e.size ?? 0; return n; }
+
+  // ---- the NAS: which songs are there, and reading the files to send them ----
+  /** The NAS id (SHA-256) of a song, when it is on the NAS. */
+  nasIdOf(id: string): string | undefined { return this.byId.get(id)?.nasId; }
+  /** The song of this library that is on the NAS with that id. */
+  idForNas(sha: string): string | undefined { return this.byNas.get(sha); }
+  async setNasId(id: string, sha: string | undefined): Promise<void> {
+    const e = this.byId.get(id);
+    if (!e || e.nasId === sha) return;
+    if (e.nasId) this.byNas.delete(e.nasId);
+    if (sha) { e.nasId = sha; this.byNas.set(sha, id); } else delete e.nasId;
+    await this.save(e);
+    this.changed();
+  }
+  /** SHA-256 of the local file, read in pieces (Rust in the app, WebCrypto in the browser). */
+  async fileSha256(id: string): Promise<string> {
+    const e = this.byId.get(id);
+    if (!e?.file) throw new Error('Il file non è su questo computer.');
+    return this.d.blobs.sha256(e.file);
+  }
+  /** One piece of the local file, for the upload. */
+  async fileBytes(id: string, from: number, len: number): Promise<Uint8Array> {
+    const e = this.byId.get(id);
+    if (!e?.file) throw new Error('Il file non è su questo computer.');
+    return this.d.blobs.readRange(e.file, from, len);
+  }
 
   /** A local copy exists: the song plays without any network. */
   isOffline(id: string): boolean { return !!this.byId.get(id)?.file; }
@@ -249,6 +279,7 @@ export class MusicLibrary {
     e.file = await this.d.blobs.put(id, f, { artist: e.artist || 'Artista sconosciuto', title: e.title, ext: extOf(f.name) || kind });
     e.size = f.size;
     delete e.state; delete e.error;
+    if (e.nasId) { this.byNas.delete(e.nasId); delete e.nasId; } // another file: it goes to the NAS again
     await this.save(e);
     this.changed();
     return e;
@@ -368,6 +399,7 @@ export class MusicLibrary {
     if (!e) return;
     this.cancel(id);
     if (e.file) await this.d.blobs.delete(e.file).catch(() => {});
+    if (e.nasId) this.byNas.delete(e.nasId);
     this.byId.delete(id);
     await this.d.kv.delete('library', id);
     this.changed();

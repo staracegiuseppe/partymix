@@ -1,5 +1,5 @@
 import type { Conflict, Op } from '../../shared/merge';
-import type { Changes, DeviceDoc, Entry, PlaylistDoc, PlaylistMeta, ServerEvent, SessionDoc } from '../../shared/model';
+import type { Changes, ChunkResult, DeviceDoc, Entry, LibraryPage, PlaylistDoc, PlaylistMeta, ServerEvent, SessionDoc, TrackDoc, UploadStart, UploadStarted } from '../../shared/model';
 
 /** The NAS answered with an error (`status` 0 = could not be reached at all). */
 export class SyncError extends Error {
@@ -7,6 +7,8 @@ export class SyncError extends Error {
   code: string;
   /** On a version conflict: the playlist as the NAS has it now. */
   current?: PlaylistDoc;
+  /** On a piece sent out of order: how many bytes the NAS has, to resume from there. */
+  received?: number;
   constructor(status: number, code: string, message: string, current?: PlaylistDoc) {
     super(message);
     this.status = status;
@@ -42,6 +44,16 @@ export interface SyncApi {
   renameDevice(id: string, name: string): Promise<DeviceDoc>;
   revokeDevice(id: string): Promise<DeviceDoc>;
   pairCode(): Promise<{ code: string; expiresAt: number }>;
+  // ---- the files (phase 5: upload from the computer) ----
+  /** Which of these files (SHA-256) the NAS already has. */
+  checkTracks(sha256: string[]): Promise<{ missing: string[]; present: string[] }>;
+  /** Opens an upload: the song if it is there already, else where to send the bytes and from which byte. */
+  startUpload(req: UploadStart): Promise<UploadStarted>;
+  /** Bytes `from`…`to` (inclusive) of `total`: how many are there now, or the song when it was the last piece. */
+  uploadChunk(uploadId: string, from: number, to: number, total: number, bytes: Uint8Array): Promise<ChunkResult>;
+  uploadCover(trackId: string, data: Blob): Promise<TrackDoc>;
+  track(id: string): Promise<TrackDoc>;
+  library(cursor?: string, limit?: number, q?: string): Promise<LibraryPage>;
   /** Live changes (Server-Sent Events). Returns the function that stops listening. */
   events(onEvent: (ev: ServerEvent) => void, onState?: (open: boolean) => void): () => void;
 }
@@ -91,21 +103,30 @@ export class HttpSyncClient implements SyncApi {
     this.ES = deps.EventSource ?? (typeof EventSource !== 'undefined' ? EventSource : undefined);
   }
 
-  private async call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private call<T>(method: string, path: string, body?: unknown): Promise<T> {
+    return this.send(method, path, body !== undefined ? JSON.stringify(body) : undefined, body !== undefined ? { 'content-type': 'application/json' } : {});
+  }
+
+  /** Bytes as they are (a piece of a file, a picture), with their own headers. */
+  private raw<T>(method: string, path: string, data: Uint8Array | Blob, headers: Record<string, string>): Promise<T> {
+    return this.send(method, path, data as unknown as BodyInit, headers);
+  }
+
+  private async send<T>(method: string, path: string, body: BodyInit | undefined, headers: Record<string, string>): Promise<T> {
     let res: Response;
     try {
-      res = await this.fetchFn(this.base + path, {
-        method,
-        headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(this.token ? { authorization: `Bearer ${this.token}` } : {}) },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-      });
+      res = await this.fetchFn(this.base + path, { method, headers: { ...headers, ...(this.token ? { authorization: `Bearer ${this.token}` } : {}) }, body });
     } catch (e) {
       throw new SyncError(0, 'OFFLINE', `NAS non raggiungibile (${(e as Error).message})`);
     }
     const text = await res.text();
     let json: Record<string, unknown> = {};
     try { json = text ? JSON.parse(text) : {}; } catch { throw new SyncError(res.status, 'BAD_ANSWER', 'Risposta non valida dal NAS: è l’indirizzo giusto?'); }
-    if (!res.ok) throw new SyncError(res.status, String(json.error ?? 'HTTP'), String(json.message ?? `Errore ${res.status}`), json.current as PlaylistDoc | undefined);
+    if (!res.ok) {
+      const err = new SyncError(res.status, String(json.error ?? 'HTTP'), String(json.message ?? `Errore ${res.status}`), json.current as PlaylistDoc | undefined);
+      if (typeof json.received === 'number') err.received = json.received;
+      throw err;
+    }
     return json as T;
   }
 
@@ -126,6 +147,14 @@ export class HttpSyncClient implements SyncApi {
   renameDevice(id: string, name: string) { return this.call<DeviceDoc>('PATCH', `/api/devices/${encodeURIComponent(id)}`, { name }); }
   revokeDevice(id: string) { return this.call<DeviceDoc>('DELETE', `/api/devices/${encodeURIComponent(id)}`); }
   pairCode() { return this.call<{ code: string; expiresAt: number }>('POST', '/api/auth/pair-code', {}); }
+  checkTracks(sha256: string[]) { return this.call<{ missing: string[]; present: string[] }>('POST', '/api/tracks/check', { sha256 }); }
+  startUpload(req: UploadStart) { return this.call<UploadStarted>('POST', '/api/tracks/upload', req); }
+  uploadChunk(uploadId: string, from: number, to: number, total: number, bytes: Uint8Array) {
+    return this.raw<ChunkResult>('PUT', `/api/uploads/${encodeURIComponent(uploadId)}`, bytes, { 'content-type': 'application/octet-stream', 'content-range': `bytes ${from}-${to}/${total}` });
+  }
+  uploadCover(trackId: string, data: Blob) { return this.raw<TrackDoc>('POST', `/api/tracks/${encodeURIComponent(trackId)}/cover`, data, { 'content-type': data.type || 'image/jpeg' }); }
+  track(id: string) { return this.call<TrackDoc>('GET', `/api/tracks/${encodeURIComponent(id)}`); }
+  library(cursor?: string, limit = 200, q = '') { return this.call<LibraryPage>('GET', `/api/library?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`); }
 
   events(onEvent: (ev: ServerEvent) => void, onState?: (open: boolean) => void): () => void {
     if (!this.ES || !this.token) return () => {};

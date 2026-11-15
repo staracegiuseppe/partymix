@@ -46,14 +46,23 @@ export type EngineDeps = {
   /** Online/offline of the computer, to retry at once when the network is back. */
   onLine?: () => boolean;
   log?: (msg: string) => void;
+  /** The NAS id (SHA-256) of a local song, once its file is on the NAS: its playlist lines become NAS lines. */
+  nasIdOf?: (videoId: string) => string | undefined;
+  /** The local song that is on the NAS with that id: its lines keep playing from the local file. */
+  localIdOf?: (sha256: string) => string | undefined;
 };
 
 const YT_ID = /^[\w-]{6,20}$/;
 
-/** A line on the NAS from a song of the queue. */
-export function entryOf(t: Track): Entry {
-  const e: Entry = { entryId: t.videoId };
-  if (t.videoId.startsWith('local:')) e.localId = t.videoId;
+/**
+ * A line on the NAS from a song of the queue. A local file that is on the NAS already becomes a NAS line (its id
+ * there is the line's id too, so every device sees the same line); one not sent yet stays a `local:` line.
+ */
+export function entryOf(t: Track, nasIdOf?: (videoId: string) => string | undefined): Entry {
+  const nas = t.videoId.startsWith('local:') ? nasIdOf?.(t.videoId) : undefined;
+  const e: Entry = { entryId: nas ?? t.videoId };
+  if (nas) e.trackId = nas;
+  else if (t.videoId.startsWith('local:')) e.localId = t.videoId;
   else if (t.videoId.startsWith('nas:')) e.trackId = t.videoId.slice(4);
   else if (YT_ID.test(t.videoId)) e.youtubeId = t.videoId;
   if (t.title) e.title = t.title;
@@ -64,9 +73,12 @@ export function entryOf(t: Track): Entry {
   return e;
 }
 
-/** A song of the queue from a line on the NAS (`nas:<sha256>` plays from the NAS, see audioDeck). */
-export function trackOf(e: Entry): Track | undefined {
-  const videoId = e.youtubeId ?? e.localId ?? (e.trackId ? `nas:${e.trackId}` : undefined);
+/**
+ * A song of the queue from a line on the NAS (`nas:<sha256>` plays from the NAS, see audioDeck). A NAS line whose
+ * file is in this computer's library keeps its `local:` id: nothing changes for the player here.
+ */
+export function trackOf(e: Entry, localIdOf?: (sha256: string) => string | undefined): Track | undefined {
+  const videoId = e.youtubeId ?? e.localId ?? (e.trackId ? localIdOf?.(e.trackId) ?? `nas:${e.trackId}` : undefined);
   if (!videoId) return undefined;
   const t: Track = { videoId, status: 'ok' };
   if (e.title) t.title = e.title;
@@ -82,7 +94,6 @@ export function metaOf(p: Playlist | PlaylistDoc): PlaylistMeta {
   for (const k of ['description', 'color', 'cover', 'link', 'source'] as const) if (p[k]) m[k] = p[k];
   return m;
 }
-const viewOfLocal = (p: Playlist) => ({ meta: metaOf(p), entries: p.tracks.map(entryOf) });
 const viewOfDoc = (d: PlaylistDoc) => ({ meta: metaOf(d), entries: d.entries });
 const baseOf = (d: PlaylistDoc): Base => ({ version: d.version, ...viewOfDoc(d) });
 
@@ -107,6 +118,9 @@ export class SyncEngine {
   private again = false;
   private stopFns: (() => void)[] = [];
   private loaded = false;
+  private nasIdOf: (videoId: string) => string | undefined;
+  private localIdOf: (sha256: string) => string | undefined;
+  private viewOfLocal = (p: Playlist) => ({ meta: metaOf(p), entries: p.tracks.map((t) => entryOf(t, this.nasIdOf)) });
 
   constructor(store: PlaylistStore, kv: KV, api: SyncApi, deps: EngineDeps = {}) {
     this.store = store;
@@ -117,6 +131,8 @@ export class SyncEngine {
     this.pollMs = deps.pollMs ?? 60_000;
     this.onLine = deps.onLine ?? (() => true);
     this.log = deps.log ?? (() => {});
+    this.nasIdOf = deps.nasIdOf ?? (() => undefined);
+    this.localIdOf = deps.localIdOf ?? (() => undefined);
   }
 
   status(): SyncStatus { return { ...this.st, conflicts: [...this.conflicts], pending: this.pendingCount() }; }
@@ -160,7 +176,7 @@ export class SyncEngine {
     let n = 0;
     for (const p of this.store.list()) {
       const b = this.bases.get(p.id);
-      if (!b || diff(b, viewOfLocal(p)).length) n++;
+      if (!b || diff(b, this.viewOfLocal(p)).length) n++;
     }
     for (const id of this.bases.keys()) if (!this.store.get(id)) n++;
     return n;
@@ -221,7 +237,7 @@ export class SyncEngine {
   }
 
   private async create(p: Playlist) {
-    const v = viewOfLocal(p);
+    const v = this.viewOfLocal(p);
     try {
       const doc = await this.api.createPlaylist(p.id, v.meta, v.entries);
       await this.saveBase(p.id, baseOf(doc));
@@ -238,7 +254,7 @@ export class SyncEngine {
   }
 
   private async pushOps(p: Playlist, base: Base) {
-    const sent = viewOfLocal(p);
+    const sent = this.viewOfLocal(p);
     const ops = diff(base, sent);
     if (!ops.length) return;
     try {
@@ -306,7 +322,7 @@ export class SyncEngine {
     const local = this.store.get(s.id);
     if (s.deleted) {
       if (!base) return; // never had it here
-      const changedHere = local && diff(base, viewOfLocal(local)).length > 0;
+      const changedHere = local && diff(base, this.viewOfLocal(local)).length > 0;
       if (local && changedHere) {
         if (!this.conflicts.some((c) => c.kind === 'deleted' && c.playlistId === s.id)) { this.conflicts.push({ kind: 'deleted', playlistId: s.id, name: local.name, version: s.version }); await this.saveConflicts(); }
         return;
@@ -317,7 +333,7 @@ export class SyncEngine {
     }
     if (base && base.version === s.version) return;
     const doc = await this.api.playlist(s.id);
-    if (local && base && diff(base, viewOfLocal(local)).length) {
+    if (local && base && diff(base, this.viewOfLocal(local)).length) {
       // changed on both sides: the ops route merges them
       await this.pushOps(local, base);
       return;
@@ -337,10 +353,10 @@ export class SyncEngine {
     const local = this.store.get(doc.id);
     let view = viewOfDoc(doc);
     if (local && sent) {
-      const meanwhile = diff(sent, viewOfLocal(local));
+      const meanwhile = diff(sent, this.viewOfLocal(local));
       if (meanwhile.length) view = apply(view, meanwhile);
     }
-    const tracks = view.entries.map(trackOf).filter((t): t is Track => !!t);
+    const tracks = view.entries.map((e) => trackOf(e, this.localIdOf)).filter((t): t is Track => !!t);
     // keep what only this device knows about its songs (lock, «non riproducibile», manual)
     const known = new Map((local?.tracks ?? []).map((t) => [t.videoId, t]));
     for (const t of tracks) { const k = known.get(t.videoId); if (k) { if (k.status === 'unplayable') t.status = 'unplayable'; if (k.manual) t.manual = true; if (k.structured) t.structured = true; } }
@@ -378,7 +394,7 @@ export class SyncEngine {
     // deleted elsewhere, changed here
     const local = this.store.get(c.playlistId);
     if (choice === 'mine' && local) {
-      const v = viewOfLocal(local);
+      const v = this.viewOfLocal(local);
       const doc = await this.api.putPlaylist(local.id, c.version, v.meta, v.entries);
       await this.saveBase(local.id, baseOf(doc));
       await this.applyDoc(doc, v);
