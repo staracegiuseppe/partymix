@@ -70,7 +70,7 @@ export type Actions = {
 
 /** The computer's pages (built by the app with the shell's menu and navigation). */
 export type DesktopPages = {
-  pages: { playlists: HTMLElement; search: HTMLElement; library: HTMLElement; downloads?: HTMLElement };
+  pages: { playlists: HTMLElement; search: HTMLElement; library: HTMLElement; downloads?: HTMLElement; sync?: HTMLElement; devices?: HTMLElement };
   settingsCard: HTMLElement;
   update(page: string): void;
   activeDownloads(): number;
@@ -120,9 +120,10 @@ const fmtSpeed = (v: number) => '×' + v.toFixed(2).replace('.', ',');
 const ROLE_LABEL: Record<DeckVM['role'], string> = { live: 'IN ONDA', out: 'IN USCITA', ready: 'PRONTO', loading: 'PREPARAZIONE…', idle: 'FERMO' };
 
 /** `hasMusic`: a playlist is saved for the slot in use, so the phone opens on «In onda» instead of «Playlist». */
-export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: boolean; desktop?: (parts: DesktopParts) => DesktopPages } = {}) {
+export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: boolean; desktop?: (parts: DesktopParts) => DesktopPages; phone?: boolean } = {}) {
   /** Phone layout (Material Design 3) on Android; the classic console on a computer. */
-  const md = materialUI();
+  /** The old phone layout: only where the computer pages are not given (iPhone/iPad). Android has the computer pages, laid out for a phone. */
+  const md = materialUI() && !opts.desktop;
   const label = (el: HTMLElement, t: string) => (md ? setLabel(el, t) : el.textContent !== t && (el.textContent = t));
   let shell: ReturnType<typeof buildShell> | undefined;
   const pill = h('span', { class: 'pill empty', title: 'Incolla qui sotto il link di una playlist Spotify o YouTube' }, md ? 'Nessuna playlist' : EMPTY_SOURCE);
@@ -454,7 +455,9 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     });
   } else {
     // ---------- computer: Material 3 with a navigation drawer, one page per job ----------
+    // (Android too: the same pages; on a narrow screen the drawer becomes the bar at the bottom, see desktop.css)
     document.body.classList.add('desk');
+    if (opts.phone) { document.body.classList.add('phone'); applySystemInsets(); applyPhoneTheme(); }
     // colours: the computer's accent colour and light/dark (followSystemTheme, started by the app)
     const parts: DesktopParts = { menu: (t, sub, items) => shell?.sheet(t, sub, items), go: (id) => shell?.go(id) };
     desk = opts.desktop?.(parts);
@@ -511,7 +514,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
       h('p', { class: 'pg-hint' }, 'Ogni quanto PartyMix controlla se una playlist YouTube è cambiata (brani aggiunti o tolti).'),
       h('div', { class: 'row' }, refreshSel, refreshBtn), refreshInfo);
     deskTour = () => [
-      { target: () => root.querySelector('.m-nav') as HTMLElement, title: 'Il menu', text: 'Da qui vai alle pagine: ▶ Player (quello che suona), 📋 Playlist, 🔎 Cerca, ⬇ Download, 🎧 Libreria. In fondo 📺 Proiettore, ⚙ Impostazioni e 💜 Info e dona.' },
+      { target: () => root.querySelector('.m-nav') as HTMLElement, title: 'Il menu', text: 'Da qui vai alle pagine: ▶ Player (quello che suona), 📋 Playlist, 🔎 Cerca, ⬇ Download, 🎧 Libreria (con i file del NAS in fondo). In fondo 📺 Proiettore, ⚙ Impostazioni (anche il collegamento al NAS e i dispositivi) e 💜 Info e dona.' },
       { target: () => playMain, title: 'Avvia, pausa, riprendi', text: 'Il tasto grande avvia l’automix: parte il primo brano e la musica va avanti da sola, con le sfumature. Poi mette in pausa e riprende. ⏮ e ⏭ passano al brano prima o dopo.' },
       { target: () => mixBtn.parentElement as HTMLElement, title: 'Mix ora e Ferma', text: '«Mix ora» sfuma subito nel brano già pronto; «Ferma» ferma tutto e riporta la lista all’inizio.' },
       { target: () => seg.parentElement as HTMLElement, title: 'Stile delle transizioni', text: 'Morbida (circa 12 secondi), Standard (8), Energica (4) o Manuale (il cambio solo quando lo chiedi tu).' },
@@ -538,7 +541,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
         { id: 'search', label: 'Cerca', icon: 'search', body: [desk?.pages.search ?? null] },
         ...(desk?.pages.downloads ? [{ id: 'downloads', label: 'Download', icon: 'download' as const, body: [desk.pages.downloads] }] : []),
         { id: 'library', label: 'Libreria', icon: 'library', body: [desk?.pages.library ?? null] },
-        { id: 'settings', label: 'Impostazioni', icon: 'settings', secondary: true, body: [ph('Impostazioni'), settingsGrid] },
+        { id: 'settings', label: 'Impostazioni', icon: 'settings', secondary: true, body: [ph('Impostazioni'), settingsGrid, ...(desk?.pages.sync ? [h('div', { class: 'settings-nas', id: 'nas' }, desk.pages.sync, desk.pages.devices ?? null)] : [])] },
         { id: 'about', label: 'Info e dona', icon: 'heart', secondary: true, body: [ph('Info e dona'), aboutPage] },
       ],
     });
@@ -570,6 +573,18 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     addEventListener('keydown', (e) => { if (e.key === 'Escape' && sheetEl.classList.contains('open') && !document.querySelector('.m-sheet.on, .modal, .tour-card')) projSheet!.close(); });
     // the Player's own nav item does not look «current» while the sheet is the thing in front
     shell.onScreen((id) => { if (id !== 'now') setOpen(false); });
+    // phone (narrow screen): the bar at the bottom has Player, Playlist, Cerca, Libreria and «Altro» with the rest
+    const moreNav = h('button', { class: 'm-nav-item more-nav', type: 'button', title: 'Altro' },
+      h('span', { class: 'm-ind' }, icon('more')), h('span', { class: 'm-nav-label' }, 'Altro'));
+    navEl.insertBefore(moreNav, projNav);
+    const SEC = new Set(['settings', 'about']);
+    moreNav.addEventListener('click', () => shell?.sheet('Altro', '', [
+      { label: 'Proiettore e testo', icon: 'cast', run: () => projSheet?.open() },
+      { label: 'Impostazioni (anche NAS e dispositivi)', icon: 'settings', run: () => shell?.go('settings') },
+      { label: 'Info e dona', icon: 'heart', run: () => shell?.go('about') },
+      ...(appsBtn ? [{ label: 'Scegli dalle app (YouTube, Spotify)', icon: 'apps' as const, run: () => appsBtn.click() }] : []),
+    ]));
+    shell.onScreen((id) => moreNav.classList.toggle('on', SEC.has(id)));
   }
 
   /** ⋮ on a song of the play queue (computer): the actions that make sense for it, in its state. */

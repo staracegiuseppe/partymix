@@ -15,24 +15,26 @@ Incolli una playlist YouTube o Spotify, premi un tasto e la musica va avanti da 
 
 <p align="center"><img src="docs/img/console.png" alt="PartyMix sul computer: la pagina Player con i comandi, i due deck e la lista di riproduzione" width="900"></p>
 
-<p align="center"><img src="docs/img/desktop-playlists.png" alt="Le playlist" width="290"> <img src="docs/img/desktop-search.png" alt="La ricerca, con i risultati sotto il campo" width="290"> <img src="docs/img/desktop-projector.png" alt="Il pannello Proiettore e testo sopra il Player" width="290"></p>
+<p align="center"><img src="docs/img/desktop-playlists.png" alt="Le playlist" width="290"> <img src="docs/img/desktop-search-nas.png" alt="Cerca sul NAS di casa" width="290"> <img src="docs/img/desktop-nas-files.png" alt="La musica sul NAS: caricamenti con una barra per file" width="290"></p>
 
 ## Perché PartyMix
 
+- **Novità 1.8: il NAS di casa.** Con un NAS (per esempio Synology, anche senza Docker) la stessa musica e le stesse playlist su computer e telefono, aggiornate in tempo reale. Carichi i tuoi brani sul NAS (con una barra per ogni file), li cerchi e li ascolti in streaming da **Cerca → ☁ NAS**, e li salvi sul telefono per quando sei fuori casa. Guida: [docs/GUIDA.md › Il NAS di casa](docs/GUIDA.md#11-il-nas-di-casa).
+- **Novità 1.8: Android come il computer.** Sul telefono ci sono le stesse pagine del computer (Player, Playlist, Cerca, Libreria, Impostazioni), con la barra in basso.
 - **Mix automatico a due deck.** Mentre un brano suona, il successivo è già pronto sull'altro deck: il passaggio parte da solo con una sfumatura morbida, standard o energica. Mai un attimo di silenzio.
 - **YouTube e Spotify.** Playlist YouTube, oppure playlist e album Spotify pubblici: PartyMix prende l'elenco e suona i brani da YouTube.
 - **Tutte le playlist che vuoi, salvate sul dispositivo.** Nessun limite (prima erano quattro): crea, rinomina, duplica, elimina, cerca e ordina le playlist dalla barra laterale; si aprono all'istante anche senza rileggere YouTube. Togli i brani che non vuoi, cambia l'ordine: la lista resta così.
 - **Libreria musicale locale (computer).** **+ Aggiungi musica locale**: importa MP3 (anche tanti insieme o un'intera cartella) che finiscono in *Musica › PartyMix Library/Artista/Brano.mp3*. Si suonano **anche senza rete**. Sezioni Tutte, Scaricate, Preferiti, Artisti, Album, Playlist; **🔎 Cerca nella libreria** trova un brano tra migliaia e ti dice in quali playlist e in quale cartella del PC si trova.
 - **🔎 Cerca su YouTube (computer).** Scrivi titolo e/o artista: risultati con copertina, canale e durata; **▶ Riproduci**, **⤵ In coda**, **⏭ subito dopo**, **＋ Playlist**, **＋ Libreria**.
-- **Nuova interfaccia per computer (Material Design 3).** Menu a sinistra con pagine separate: ▶ Player (deck, mixer e lista di riproduzione con «In riproduzione da: Festa · 3 / 124»), 📋 Playlist, 🔎 Cerca (risultati subito sotto il campo), ⬇ Download, 🎧 Libreria, ⚙ Impostazioni, 💜 Info e dona; 📺 Proiettore e testo si apre come pannello laterale sopra il Player. I colori seguono il colore di evidenziazione e il tema chiaro/scuro del computer. Le liste hanno un inizio e una fine ben visibili e restano fluide anche con 10.000 brani; il ritorno al primo brano è la funzione «Ripeti» del player. L'app per smartphone resta quella di sempre.
+- **Nuova interfaccia per computer (Material Design 3).** Menu a sinistra con pagine separate: ▶ Player (deck, mixer e lista di riproduzione con «In riproduzione da: Festa · 3 / 124»), 📋 Playlist, 🔎 Cerca (risultati subito sotto il campo), ⬇ Download, 🎧 Libreria, ⚙ Impostazioni, 💜 Info e dona; 📺 Proiettore e testo si apre come pannello laterale sopra il Player. I colori seguono il colore di evidenziazione e il tema chiaro/scuro del computer. Le liste hanno un inizio e una fine ben visibili e restano fluide anche con 10.000 brani; il ritorno al primo brano è la funzione «Ripeti» del player. Su Android le stesse pagine, con la barra in basso.
 - **Karaoke automatico.** In sottofondo cerca i testi di tutta la playlist e li mostra a tempo, con le parole che si illuminano (o senza, se preferisci).
 - **Proiettore.** Sul secondo schermo, a tutto schermo: forme che seguono la musica dal microfono con il testo da cantare, oppure il **video YouTube in grande** (perfetto per i balli tipo Just Dance), muto, allineato alla musica e senza pubblicità sullo schermo. Il video successivo viene precaricato: niente buchi neri tra un brano e l'altro.
-- **Android in stile Material Design.** Sul telefono l'app è pensata per il tocco: quattro sezioni nella barra in basso (In onda, Playlist, Proiettore, Altro), i colori del tuo telefono (tema chiaro o scuro e Material You), le azioni su ogni brano in un pannello dal basso.
+- **Android in stile Material Design.** Sul telefono le stesse pagine del computer, pensate per il tocco: Player, Playlist, Cerca e Libreria nella barra in basso, il resto in «⋮ Altro»; i colori del tuo telefono (tema chiaro o scuro e Material You), le azioni su ogni brano in un pannello dal basso.
 - **Android: proiettore in cast.** Dal telefono trasmetti a una TV o a un proiettore compatibile (schermo wireless) e lì compare il proiettore, mentre il telefono resta la console.
 - **Pubblicità più sopportabili.** Può abbassare da solo il volume quando sente parlare come in uno spot e saltare le clip brevi.
 - **Leggera e gratuita.** Circa 15 MB su Mac, nessun account: la musica arriva in streaming dai player ufficiali di YouTube, oppure dalla tua libreria sul computer.
 
-<p align="center"><img src="docs/img/android-now.png" alt="PartyMix su Android: in onda, tema scuro" width="250"> <img src="docs/img/android-playlist.png" alt="PartyMix su Android: le playlist, tema chiaro" width="250"> <img src="docs/img/android-sheet.png" alt="PartyMix su Android: azioni su un brano" width="250"></p>
+<p align="center"><img src="docs/img/android-player.png" alt="PartyMix su Android: il Player, tema scuro" width="220"> <img src="docs/img/android-playlists-light.png" alt="PartyMix su Android: le playlist, tema chiaro" width="220"> <img src="docs/img/android-search.png" alt="PartyMix su Android: Cerca sul NAS" width="220"> <img src="docs/img/android-library-light.png" alt="PartyMix su Android: la Libreria" width="220"></p>
 
 <p align="center"><img src="docs/img/projector-karaoke.png" alt="Il proiettore di PartyMix: forme a ritmo di musica" width="700"></p>
 
@@ -43,7 +45,8 @@ Incolli una playlist YouTube o Spotify, premi un tasto e la musica va avanti da 
 | **macOS** (Apple Silicon) | `PartyMix_x.y.z_aarch64.dmg` | Apri il DMG e trascina PartyMix in Applicazioni. Primo avvio: clic destro → Apri. |
 | **Windows 10/11** (64 bit) | `PartyMix_x.y.z_windows-x64.zip` | Estrai lo zip e apri `PartyMix.exe`, senza installare nulla. Se compare SmartScreen: *Ulteriori informazioni → Esegui comunque*. |
 | **Linux** x86_64 (Fedora, Ubuntu 22.04 o successivo, Debian 12…) | `PartyMix_x.y.z_linux-x86_64.rpm` · `PartyMix_x.y.z_linux-amd64.deb` · `PartyMix_x.y.z_linux-x86_64.AppImage` | Fedora: `sudo dnf install ./PartyMix_*.rpm`. Ubuntu/Debian: `sudo apt install ./PartyMix_*.deb`. Oppure l'AppImage, senza installare: `chmod +x PartyMix_*.AppImage` e aprilo. |
-| **Android** 7 o successivo | `PartyMix_x.y.z_android.apk` | Apri l'APK sul telefono e consenti l'installazione da questa fonte. |
+| **Android** 7 o successivo | `PartyMix_x.y.z_android.apk` | Apri l'APK sul telefono e consenti l'installazione da questa fonte. Su Android 17, per il NAS, consenti «rete locale». |
+| **NAS** (facoltativo) | `partymix-server-nas.zip` | Il server per il NAS di casa: vedi [docs/INSTALLAZIONE.md › Il server per il NAS](docs/INSTALLAZIONE.md#il-server-per-il-nas). |
 
 Tutti i file sono nella pagina [**Release**](https://github.com/staracegiuseppe/partymix/releases/latest). Le app non sono firmate con un certificato a pagamento, quindi al primo avvio il sistema mostra un avviso: è normale, i dettagli sono in [docs/INSTALLAZIONE.md](docs/INSTALLAZIONE.md). Per aggiornare installa la nuova versione sopra la vecchia: impostazioni e playlist restano.
 

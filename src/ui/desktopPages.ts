@@ -1,3 +1,4 @@
+import type { TrackDoc } from '../../shared/model';
 import type { LibEntry, MusicLibrary } from '../library/library';
 import type { Playlist, PlaylistSort, PlaylistStore } from '../library/playlists';
 import { SORT_LABEL } from '../library/playlists';
@@ -12,6 +13,8 @@ import { buildDownloadsUI, DlPrefs, loadPrefs, storePrefs } from './downloadsUI'
 import { Command, EXAMPLES, isCommand, parseCommand, WORDS } from '../commands/parse';
 import { fmtViews, pickResults } from '../commands/pick';
 import type { SheetItem } from './material';
+import { buildSyncUI, type SyncUIDeps } from './syncPage';
+import type { NasState } from '../sync/uploader';
 
 /** What the computer's pages need from the app. */
 export type PagesDeps = {
@@ -43,6 +46,10 @@ export type PagesDeps = {
   go(page: string): void;
   downloads?: DownloadCoordinator;
   store?: Storage;
+  /** The NAS (☁ Sync and 📱 Dispositivi pages); none in the browser without a NAS. */
+  sync?: SyncUIDeps;
+  /** Where a song's file stands with the NAS (only when a NAS is linked). */
+  nasState?(id: string): { state: NasState; error?: string } | undefined;
 };
 
 /** Where a song is, for information only: the playlists that have it and the file on the computer. */
@@ -125,12 +132,19 @@ export function buildDesktopPages(d: PagesDeps) {
   const songVM = (t: Track, e = d.library.get(t.videoId), lists?: string[]): SongVM => {
     const off = d.library.stateOf(t.videoId);
     const w = lists ? whereText(e, lists, d.library.where) : undefined;
-    return {
+    const vm: SongVM = {
       id: t.videoId, title: t.title || `Video ${t.videoId}`, artist: t.artist ?? '',
       sub: [t.artist, t.album, w?.short].filter(Boolean).join(' · '),
       dur: t.durationSec || e?.durationSec, thumb: covers.get(e, t), off, pct: d.library.progressOf(t.videoId),
-      fav: !!e?.favorite, skip: !d.online() && off !== 'offline', reason: w?.full,
+      fav: !!e?.favorite, skip: !d.online() && off !== 'offline' && !t.videoId.startsWith('nas:'), reason: w?.full,
     };
+    const ns = e?.file && e.source !== 'nas' ? d.nasState?.(t.videoId) : undefined;
+    if (t.videoId.startsWith('nas:')) { vm.nas = 'nas'; vm.nasTip = e?.file ? 'Dal NAS, salvato su questo computer' : 'Sul NAS: suona in streaming a casa (⋮ → Salva per averlo anche fuori)'; }
+    else if (ns) {
+      vm.nas = ns.state === 'nas' ? 'nas' : ns.state === 'error' ? 'error' : ns.state === 'missing' ? 'missing' : 'uploading';
+      if (ns.error) vm.nasTip = ns.error;
+    }
+    return vm;
   };
 
   // ---------- the playlist dialog («Aggiungi a playlist») and the song menu ----------
@@ -148,7 +162,7 @@ export function buildDesktopPages(d: PagesDeps) {
     items.unshift({ label: 'Nuova playlist…', icon: 'add', run: () => { const p = d.playlists.create(); addTo(p.id, ids); openDetail(p.id); renameDialog(p.id); } });
     d.menu(ids.length > 1 ? `Aggiungi ${ids.length} brani a una playlist` : 'Aggiungi a playlist', 'Scegli la playlist', items);
   }
-  const canDownload = (id: string) => !id.startsWith('local:') && !!d.downloads?.available();
+  const canDownload = (id: string) => !id.includes(':') && !!d.downloads?.available();
   /** ⬇ on a song: the Download Manager for a YouTube song, else the user's own audio file. */
   function offline(id: string) {
     if (canDownload(id)) {
@@ -177,7 +191,7 @@ export function buildDesktopPages(d: PagesDeps) {
   /** Downloads many songs (a playlist, a selection) with one choice of format and one request to the app. */
   function downloadTracks(ids: string[], what: string) {
     if (!d.downloads?.available()) { d.status('Il download funziona nell’app installata sul computer, con yt-dlp.', true); return; }
-    const todo = ids.filter((id) => !id.startsWith('local:'));
+    const todo = ids.filter((id) => !id.includes(':'));
     const local = ids.length - todo.length;
     if (!todo.length) { d.status(local ? 'Questi brani sono già file sul computer.' : 'Niente da scaricare.'); return; }
     chooseFormat(what, todo.length, (c) => void d.downloads!.downloadMany(todo.map((id) => ({ url: youtubeUrl(id), type: c.type, format: c.format, quality: c.quality })), what));
@@ -199,7 +213,9 @@ export function buildDesktopPages(d: PagesDeps) {
   /** ⋮ on a song: the actions that make sense for it, in its state (Material menu). */
   function songMenu(t: Track, extra: { inPlaylist?: string } = {}) {
     const id = t.videoId, e = d.library.get(id), st = d.library.stateOf(id);
-    const playable = d.online() || st === 'offline';
+    const fromNas = id.startsWith('nas:');
+    const playable = d.online() || st === 'offline' || fromNas; // a NAS song needs the home network, not the internet
+    const saveNas = () => { const m = d.sync?.nasMusic?.(); if (!m) { d.status('Collega il NAS in Impostazioni → NAS per salvare i suoi brani.', true); return; } m.save([id]).then(() => d.status(`⬇ Salvo «${t.title}» su questo computer.`), (err) => d.status((err as Error).message, true)); };
     const items: SheetItem[] = [
       { label: 'Riproduci adesso', icon: 'play', disabled: !playable, run: () => d.playTrack(t) },
       { label: 'Suona dopo quello in onda', icon: 'playNext', disabled: !playable, run: () => d.enqueue(t, true) },
@@ -207,12 +223,13 @@ export function buildDesktopPages(d: PagesDeps) {
       { label: 'Aggiungi a playlist…', icon: 'add', run: () => pickPlaylist([id]) },
       st === 'offline'
         ? { label: 'Elimina download (resta nelle playlist)', icon: 'del', run: () => void d.library.deleteDownload(id).then(() => d.status(`Download eliminato: «${t.title}» resta nelle playlist.`)) }
-        : st === 'downloading' ? { label: 'Interrompi il download', icon: 'stop', run: () => d.library.cancel(id) }
+        : st === 'downloading' ? { label: 'Interrompi il download', icon: 'stop', run: () => fromNas ? d.sync?.nasMusic?.()?.stop() : d.library.cancel(id) }
+          : fromNas ? { label: '⬇ Salva su questo computer (suona anche senza NAS)', icon: 'down', run: saveNas }
           : { label: canDownload(id) ? 'Scarica' : 'Rendi offline con un tuo file…', icon: 'down', run: () => offline(id) },
       { label: e?.favorite ? 'Togli dai preferiti' : 'Aggiungi ai preferiti', icon: 'lock', run: () => d.library.toggleFavorite(id, t) },
     ];
     if (extra.inPlaylist) items.push({ label: 'Togli da questa playlist', icon: 'del', danger: true, run: () => { const p = d.playlists.get(extra.inPlaylist!); if (d.playlists.removeTrack(extra.inPlaylist!, id)) { d.edited(extra.inPlaylist!); d.status(`Tolto da «${p?.name}».`); } } });
-    if (e) items.push({ label: 'Elimina dalla libreria', icon: 'del', danger: true, run: () => void d.library.remove(id).then(() => d.status(`«${t.title}» tolto dalla libreria (le playlist lo tengono).`)) });
+    if (e && !fromNas) items.push({ label: 'Elimina dalla libreria', icon: 'del', danger: true, run: () => void d.library.remove(id).then(() => d.status(`«${t.title}» tolto dalla libreria (le playlist lo tengono).`)) });
     const lists = allTracks().byId.get(id)?.lists ?? [];
     const info = whereText(e, lists, d.library.where).full.split('\n')[0];
     d.menu(t.title || id, [t.artist, t.durationSec ? fmtTime(t.durationSec) : '', info].filter(Boolean).join(' · '), items);
@@ -404,7 +421,26 @@ export function buildDesktopPages(d: PagesDeps) {
   // =====================================================================================
   // 🔎 CERCA — the results right under the field
   // =====================================================================================
-  let src: 'library' | 'youtube' = 'youtube';
+  let src: 'library' | 'youtube' | 'nas' = 'youtube';
+  // ☁ NAS: the whole music library of the NAS, searched there (title, artist, album), page by page
+  let nasHits: TrackDoc[] = [];
+  let nasNext: string | undefined;
+  let nasTimer: ReturnType<typeof setTimeout> | undefined;
+  const nasTrack = (t: TrackDoc): Track => ({ videoId: `nas:${t.id}`, title: t.title, artist: t.artist ?? '', ...(t.album ? { album: t.album } : {}), ...(t.durationSec ? { durationSec: t.durationSec } : {}), status: 'ok', manual: true });
+  async function runNas(q: string, more = false) {
+    const api = d.sync?.api();
+    if (!api) { lastErr = 'Il NAS non è collegato: collegalo da Impostazioni → NAS.'; nasHits = []; paintSearch(); return; }
+    searchQ = q; searching = true; lastErr = ''; paintSearch();
+    try {
+      const page = await api.library(more ? nasNext : undefined, 100, q);
+      for (const t of page.tracks) { d.library.upsertNas(t); known.set(`nas:${t.id}`, nasTrack(t)); }
+      nasHits = more ? [...nasHits, ...page.tracks.filter((t) => !nasHits.some((x) => x.id === t.id))] : page.tracks;
+      nasNext = page.next;
+    } catch (e) {
+      lastErr = (e as Error).message;
+      if (!more) nasHits = [];
+    } finally { searching = false; paintSearch(); }
+  }
   let searchQ = '';
   let searchRes: SearchResult | undefined;
   let searching = false;
@@ -413,14 +449,27 @@ export function buildDesktopPages(d: PagesDeps) {
   const sGo = btn('🔎 Cerca', 'm-filled', () => submit(sInput.value));
   sInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(sInput.value); });
   sInput.placeholder = 'Cerca una canzone… o scrivi un comando: «i 10 Just Dance più visti, aggiungili a Festa»';
-  sInput.addEventListener('input', () => { if (src === 'library') { searchQ = sInput.value; paintSearch(); } });
-  const tabs = (['youtube', 'library'] as const).map((k) => btn(k === 'youtube' ? '▶ YouTube' : '🎧 La mia musica', 'seg-btn', () => { src = k; paintTabs(); if (k === 'library') { searchQ = sInput.value; paintSearch(); } else if (sInput.value.trim() && sInput.value.trim() !== searchQ) runSearch(sInput.value); else paintSearch(); }, { role: 'tab' }));
+  sInput.addEventListener('input', () => {
+    if (src === 'library') { searchQ = sInput.value; paintSearch(); }
+    else if (src === 'nas') { clearTimeout(nasTimer); nasTimer = setTimeout(() => void runNas(sInput.value.trim()), 350); } // the NAS answers as you type
+  });
+  const TAB_KEYS = ['youtube', 'library', 'nas'] as const;
+  const tabs = TAB_KEYS.map((k) => btn(k === 'youtube' ? '▶ YouTube' : k === 'library' ? '🎧 La mia musica' : '☁ NAS', 'seg-btn', () => {
+    src = k; paintTabs();
+    if (k !== 'youtube') examples.open = false; // the commands are for YouTube: the results come first
+    if (k === 'library') { searchQ = sInput.value; paintSearch(); }
+    else if (k === 'nas') void runNas(sInput.value.trim());
+    else if (sInput.value.trim() && sInput.value.trim() !== searchQ) runSearch(sInput.value); else paintSearch();
+  }, { role: 'tab' }));
   const paintTabs = () => {
-    tabs.forEach((b, i) => { const on = (i === 0 ? 'youtube' : 'library') === src; b.setAttribute('aria-selected', String(on)); b.classList.toggle('on', on); });
-    if (typeof sCols !== 'undefined') sCols.children[1].textContent = src === 'youtube' ? 'Titolo · Canale' : 'Titolo · Artista · Dove si trova';
+    const nasOn = !!d.sync?.config();
+    if (!nasOn && src === 'nas') src = 'library';
+    tabs.forEach((b, i) => { const on = TAB_KEYS[i] === src; b.setAttribute('aria-selected', String(on)); b.classList.toggle('on', on); });
+    tabs[2].classList.toggle('hidden', !nasOn);
+    if (typeof sCols !== 'undefined') sCols.children[1].textContent = src === 'youtube' ? 'Titolo · Canale' : src === 'nas' ? 'Titolo · Artista · Album' : 'Titolo · Artista · Dove si trova';
   };
   const sInfo = h('div', { class: 'pg-results-head' });
-  const sMore = btn('Altri risultati', 'm-tonal hidden', () => runSearch(searchQ, searchRes?.next));
+  const sMore = btn('Altri risultati', 'm-tonal hidden', () => (src === 'nas' ? void runNas(searchQ, true) : runSearch(searchQ, searchRes?.next)));
   const sEmpty = emptyState('🔎', 'Cerca musica', 'Scrivi titolo, artista o tutti e due (es. «The Weeknd Blinding Lights») e premi Invio. «La mia musica» cerca tra libreria e playlist, anche senza rete.');
   const hitTrack = (x: SearchHit): Track => ({ videoId: x.videoId, title: x.title, artist: x.channel.replace(/ - Topic$/, ''), durationSec: x.seconds || undefined, thumb: x.thumb, status: 'ok', manual: true });
   const sList = buildSongList({
@@ -433,6 +482,7 @@ export function buildDesktopPages(d: PagesDeps) {
   async function runSearch(q: string, page?: string) {
     q = q.trim();
     if (src === 'library') { searchQ = q; paintSearch(); return; }
+    if (src === 'nas') { void runNas(q); return; }
     if (!q) { sInput.focus(); return; }
     searchQ = q;
     const key = `${q}|${page ?? ''}|${d.apiKey() ? 'api' : 'web'}`;
@@ -540,7 +590,7 @@ export function buildDesktopPages(d: PagesDeps) {
 
   let lastSearchSig = '';
   function paintSearch(force = true) {
-    const sig = `${src}|${searchQ}|${searchRes?.hits.length}|${searching}|${lastErr}|${d.library.version}|${d.playlists.version}|${d.online()}`;
+    const sig = `${src}|${searchQ}|${src === 'nas' ? nasHits.length : searchRes?.hits.length}|${searching}|${lastErr}|${d.library.version}|${d.playlists.version}|${d.online()}`;
     if (!force && sig === lastSearchSig) return;
     const sameQuery = lastSearchSig.split('|').slice(0, 2).join('|') === sig.split('|').slice(0, 2).join('|');
     lastSearchSig = sig;
@@ -549,6 +599,9 @@ export function buildDesktopPages(d: PagesDeps) {
       const words = norm(searchQ.trim()).split(/\s+/).filter(Boolean);
       rows = words.length ? allTracks().rows.filter((x) => words.every((w) => x.key.includes(w))).slice(0, 5000).map((x) => songVM(x.t, x.e, x.lists)) : [];
       sInfo.textContent = !words.length ? '' : `${plural(rows.length, 'risultato', 'risultati')} in libreria e playlist`;
+    } else if (src === 'nas') {
+      rows = nasHits.map((t) => { const tr = nasTrack(t); const vm = songVM(tr, d.library.get(tr.videoId)); vm.sub = [t.artist, t.album].filter(Boolean).join(' · '); return vm; });
+      sInfo.textContent = searching ? 'Cerco sul NAS…' : lastErr ? '' : `${plural(rows.length, 'brano', 'brani')}${nasNext ? '+' : ''} ${searchQ ? `per «${searchQ}» ` : ''}sul NAS · ▶ suona in streaming, ⋮ per coda, playlist o salvarlo qui`;
     } else {
       for (const x of searchRes?.hits ?? []) known.set(x.videoId, hitTrack(x));
       const age = (d0?: number) => (d0 === undefined ? '' : d0 >= 365 ? `${Math.round(d0 / 365)} ${Math.round(d0 / 365) === 1 ? 'anno' : 'anni'} fa` : d0 >= 30 ? `${Math.round(d0 / 30)} mesi fa` : 'questo mese');
@@ -559,7 +612,7 @@ export function buildDesktopPages(d: PagesDeps) {
     if (lastErr) sInfo.textContent = `⚠ ${lastErr}`;
     sEmpty.querySelector('.es-t')!.textContent = searchQ && !searching && !lastErr ? 'Nessun risultato' : 'Cerca musica';
     sList.set(rows, sameQuery ? 'keep' : 'start');
-    sMore.classList.toggle('hidden', src !== 'youtube' || !searchRes?.next || searching);
+    sMore.classList.toggle('hidden', searching || (src === 'nas' ? !nasNext : src !== 'youtube' || !searchRes?.next));
   }
   // eslint-disable-next-line prefer-const
   let sSel: ReturnType<typeof selectionBar> | undefined;
@@ -603,7 +656,7 @@ export function buildDesktopPages(d: PagesDeps) {
   });
   let lastLibSig = '';
   function paintLibrary(force = false) {
-    const sig = `${libFilter}|${libGroup?.name}|${libQuery}|${d.library.version}|${d.playlists.version}|${d.online()}`;
+    const sig = `${libFilter}|${libGroup?.name}|${libQuery}|${d.library.version}|${d.playlists.version}|${d.online()}|${d.sync?.uploader()?.version ?? ''}`;
     if (!force && sig === lastLibSig) return;
     const sameView = lastLibSig.split('|').slice(0, 3).join('|') === sig.split('|').slice(0, 3).join('|');
     lastLibSig = sig;
@@ -636,6 +689,9 @@ export function buildDesktopPages(d: PagesDeps) {
   const libraryPage = h('div', { class: 'pg pg-library' }, libHead.el,
     h('div', { class: 'pg-toolbar' }, libSearch), h('div', { class: 'chips', role: 'group', 'aria-label': 'Mostra' }, ...chips), importMsg, libBack,
     cols('g2', '#', 'Titolo · Artista · Dove si trova', 'Durata', 'Stato'), libList.el, pickFiles, pickFolder, pickOne);
+  // ☁ the NAS files (uploads with a bar per file, NAS songs on this computer, space): at the end of the Libreria
+  const nasFilesHolder = h('div', { class: 'lib-nas' });
+  libraryPage.append(nasFilesHolder);
   libraryPage.addEventListener('dragover', (e) => { if (Array.from(e.dataTransfer?.types ?? []).includes('Files')) { e.preventDefault(); libraryPage.classList.add('dropfiles'); } });
   libraryPage.addEventListener('dragleave', (e) => { if (e.target === libraryPage) libraryPage.classList.remove('dropfiles'); });
   libraryPage.addEventListener('drop', (e) => { if (e.dataTransfer?.files.length) { e.preventDefault(); libraryPage.classList.remove('dropfiles'); void importFiles(e.dataTransfer.files); } });
@@ -665,11 +721,21 @@ export function buildDesktopPages(d: PagesDeps) {
     h('p', { class: 'artist wrap' }, 'Con una chiave gratuita di «YouTube Data API v3» (console.cloud.google.com → API e servizi → Credenziali) la ricerca usa le API ufficiali, mostra la durata e se il video si può riprodurre, e le playlist si leggono intere anche oltre 200 brani. La chiave resta su questo computer.'),
     apiKey);
 
+  // =====================================================================================
+  // ☁ SYNC and 📱 DISPOSITIVI (the NAS)
+  // =====================================================================================
+  const syncUI = d.sync ? buildSyncUI(d.sync) : undefined;
+  syncUI?.setCounter(() => d.playlists.count());
+  if (syncUI) nasFilesHolder.append(syncUI.filesPage);
+
   /** Called by the app's tick (4 times a second): repaints only what changed. */
   function update(page: string) {
+    // the NAS connection and the devices are in Impostazioni, the NAS files in Libreria
+    if (page === 'settings') { syncUI?.update('sync'); syncUI?.update('devices'); }
+    else if (page === 'library') syncUI?.update('files');
     if (apiKey.value !== d.apiKey() && document.activeElement !== apiKey) apiKey.value = d.apiKey();
     if (page === 'playlists') { if (detailId) paintDetail(); else paintPlaylists(); }
-    else if (page === 'search') paintSearch(false);
+    else if (page === 'search') { if (tabs[2].classList.contains('hidden') === !!d.sync?.config()) paintTabs(); paintSearch(false); }
     else if (page === 'library') paintLibrary();
     else if (page === 'downloads') { dl?.update(); dlHead.sub.textContent = d.downloads ? `${d.downloads.active()} in corso · ${d.downloads.list().length} in tutto` : ''; }
   }
@@ -678,7 +744,7 @@ export function buildDesktopPages(d: PagesDeps) {
   paintLibrary(true);
 
   return {
-    pages: { playlists: playlistsPage, search: searchPage, library: libraryPage, downloads: d.downloads ? downloadsPage : undefined },
+    pages: { playlists: playlistsPage, search: searchPage, library: libraryPage, downloads: d.downloads ? downloadsPage : undefined, sync: syncUI?.syncPage, devices: syncUI?.devicesPage },
     settingsCard,
     update,
     known: (id: string) => known.get(id),

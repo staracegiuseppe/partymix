@@ -44,6 +44,8 @@ export type Settings = {
   playlistRefreshMin: number;
   /** Per-video lyrics alignment chosen by the user (karaoke and other versions). */
   lyricsAlign: Record<string, Align>;
+  /** Songs imported or downloaded on this computer go to the NAS by themselves (when the NAS is linked). */
+  nasUploadAuto: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -62,6 +64,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lyricsHighlight: true,
   playlistRefreshMin: 5,
   lyricsAlign: {},
+  nasUploadAuto: true,
   playlists: ['', '', '', ''],
   playlistNames: ['', '', '', ''],
   playlistSlot: 0,
@@ -115,6 +118,7 @@ export function loadSettings(store: Storage): Settings {
       lyricsHighlight: j.lyricsHighlight !== false,
       playlistRefreshMin: REFRESH_CHOICES.includes(j.playlistRefreshMin) ? j.playlistRefreshMin : DEFAULT_SETTINGS.playlistRefreshMin,
       lyricsAlign: cleanAlign(j.lyricsAlign),
+      nasUploadAuto: j.nasUploadAuto !== false,
       playlists: SLOTS.map((i) => (Array.isArray(j.playlists) && typeof j.playlists[i] === 'string' ? j.playlists[i] : '')),
       playlistNames: SLOTS.map((i) => (Array.isArray(j.playlistNames) && typeof j.playlistNames[i] === 'string' ? j.playlistNames[i].slice(0, 60) : '')),
       playlistSlot: Number.isInteger(j.playlistSlot) && j.playlistSlot >= 0 && j.playlistSlot < PLAYLIST_SLOTS ? j.playlistSlot : 0,

@@ -4,3 +4,4 @@ target
 spike
 .superpowers
 dist-release
+server/dist

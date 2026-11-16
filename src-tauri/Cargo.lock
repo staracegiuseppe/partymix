@@ -2789,7 +2789,7 @@ dependencies = [
 
 [[package]]
 name = "partymix-ai"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "cpal",
  "gtk",
@@ -2798,6 +2798,7 @@ dependencies = [
  "rustfft",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-localhost",

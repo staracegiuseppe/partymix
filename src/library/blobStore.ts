@@ -1,5 +1,6 @@
 import type { KV } from './kv';
 import { blobBytes } from './library';
+import { sha256Blob } from './sha256';
 
 /** Where the audio files of the library are kept. `ref` is what the library remembers to find the file again. */
 export interface BlobStore {
@@ -12,6 +13,10 @@ export interface BlobStore {
   release(ref: string): void;
   /** The whole file (small files only: covers). */
   read(ref: string): Promise<Blob | undefined>;
+  /** SHA-256 of the file (its identity on the NAS), read in pieces. */
+  sha256(ref: string): Promise<string>;
+  /** `len` bytes from `from`: one piece of an upload, without the whole file in memory. */
+  readRange(ref: string, from: number, len: number): Promise<Uint8Array>;
   /** Where the files are, as the user sees it (shown in the library). */
   readonly where: string;
 }
@@ -39,6 +44,16 @@ export class KvBlobStore implements BlobStore {
     if (u) { URL.revokeObjectURL(u); this.urls.delete(ref); }
   }
   async read(ref: string): Promise<Blob | undefined> { return this.kv.get<Blob>('blobs', ref); }
+  private async must(ref: string): Promise<Blob> {
+    const b = await this.read(ref);
+    if (!b) throw new Error('Il file non è più nella libreria.');
+    return b;
+  }
+  async sha256(ref: string): Promise<string> { return sha256Blob(await this.must(ref)); }
+  async readRange(ref: string, from: number, len: number): Promise<Uint8Array> {
+    const b = await this.must(ref);
+    return new Uint8Array(await blobBytes(b.slice(from, Math.min(b.size, from + len))));
+  }
   async delete(ref: string): Promise<void> {
     this.release(ref);
     await this.kv.delete('blobs', ref);
@@ -97,6 +112,12 @@ export class NativeBlobStore implements BlobStore {
     } catch {
       return undefined; // moved or deleted outside the app
     }
+  }
+  /** Rust reads the file in pieces and hashes it: the page never holds a whole file. */
+  async sha256(ref: string): Promise<string> { return String(await this.invoke('file_sha256', { path: ref })); }
+  async readRange(ref: string, from: number, len: number): Promise<Uint8Array> {
+    const bytes = await this.invoke('lib_read_range', { path: ref, from, len });
+    return bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes as number[]);
   }
   private root?: Promise<string | undefined>;
   private rootDir() { return (this.root ??= this.invoke('lib_root').then((r) => String(r), () => undefined)); }

@@ -1,0 +1,17 @@
+{
+  "name": "partymix-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "PartyMix: libreria musicale personale sul NAS (playlist, brani, dispositivi)",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start:built": "node dist/server/src/main.js",
+    "test": "node --test --disable-warning=ExperimentalWarning 'tests/*.test.ts'",
+    "test:sqljs": "PARTYMIX_DB=sql.js node --test --disable-warning=ExperimentalWarning 'tests/*.test.ts'"
+  }
+}

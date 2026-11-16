@@ -7,7 +7,7 @@ export type SavedPlaylist = { name: string; link: string; source: 'YouTube' | 'S
 
 const key = (slot: number) => `partymix.playlist.${slot}`;
 /** A YouTube id or a song of the local library (`local:` + content hash). */
-export const TRACK_ID = /^(?:[\w-]{6,20}|local:[0-9a-f]{8,64})$/;
+export const TRACK_ID = /^(?:[\w-]{6,20}|local:[0-9a-f]{8,64}|nas:[0-9a-f]{64})$/;
 
 /** Only the fields a saved track may have, checked one by one (the data comes from storage the user could have edited). */
 export function cleanTrack(v: unknown): Track | undefined {

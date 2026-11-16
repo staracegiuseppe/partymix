@@ -1,5 +1,5 @@
 import { isIOSApp, isTablet } from './platform';
-import { canCast, castMessage, castState, isAndroidApp, onSharedLink } from './androidBridge';
+import { canCast, castMessage, castState, ensureLocalNetwork, isAndroidApp, onSharedLink, openAppSettings } from './androidBridge';
 import './ui/style.css';
 import './ui/material.css';
 import './ui/desktop.css';
@@ -39,6 +39,11 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { followSystemTheme } from './ui/systemTheme';
 import { listInputs } from './projector/mic';
 import { createYouTubeDeck } from './youtubeDeck';
+import { HttpSyncClient, isPrivateHost, type SyncApi } from './sync/client';
+import { loadNasConfig, saveNasConfig, type NasConfig } from './sync/config';
+import { SyncEngine } from './sync/engine';
+import { Uploader } from './sync/uploader';
+import { NasMusic } from './sync/nasMusic';
 
 const store: Storage | undefined = (() => { try { return window.localStorage; } catch { return undefined; } })();
 const settings = store ? loadSettings(store) : loadSettings({ getItem: () => null, setItem: () => {} } as unknown as Storage);
@@ -78,11 +83,16 @@ const kv: KV = {
 };
 const tauriInvoke = (window as unknown as { __TAURI_INTERNALS__?: { invoke(c: string, a?: unknown, o?: unknown): Promise<unknown> } }).__TAURI_INTERNALS__?.invoke;
 /** The computer console (not the phone or tablet layout): the only one with the library, the side bar and the YouTube search. */
-const desktopUI = !materialUI() && !isIOSApp() && !isAndroidApp();
+/** The app on a computer (Tauri on macOS/Windows/Linux): its own files on disk, Download Manager, system colours. */
+const computerApp = !materialUI() && !isIOSApp() && !isAndroidApp();
+/** The phone (Android app, or ?android in the browser): same pages as the computer, laid out for a phone. */
+const phoneUI = !isIOSApp() && materialUI();
+/** The pages of the computer (Playlist, Cerca, Libreria, Impostazioni): computer and Android alike. */
+const desktopUI = !isIOSApp();
 const plStore = new PlaylistStore(kv);
 const library = new MusicLibrary({
   kv,
-  blobs: desktopUI && tauriInvoke ? new NativeBlobStore((c, a, o) => tauriInvoke(c, a, o), convertFileSrc) : new KvBlobStore(kv),
+  blobs: computerApp && tauriInvoke ? new NativeBlobStore((c, a, o) => tauriInvoke(c, a, o), convertFileSrc) : new KvBlobStore(kv),
   probe: (b) => probeWithAudio(b),
 });
 window.addEventListener('pagehide', () => void plStore.flush().catch(() => {}));
@@ -98,7 +108,8 @@ const mkAudio = () => {
   document.body.append(a);
   return new AudioDeck(a);
 };
-const hybridDeps = { localUrl: (id: string) => library.urlFor(id), canStream: netOk, preferYouTube: () => settings.projectorMode === 'video' };
+// a song of the NAS without a copy here plays in streaming from the NAS (a short signed link)
+const hybridDeps = { localUrl: async (id: string) => (await library.urlFor(id)) ?? (id.startsWith('nas:') ? await nasMusic?.streamUrl(id) : undefined), canStream: netOk, preferYouTube: () => settings.projectorMode === 'video' };
 const decks: [HybridDeck, HybridDeck] = [new HybridDeck(mkAudio(), hybridDeps), new HybridDeck(mkAudio(), hybridDeps)];
 let queue = new Queue([]);
 let listId: string | undefined;
@@ -313,11 +324,111 @@ function trackById(id: string): Track | undefined {
 }
 
 /** Download Manager (computer app): yt-dlp runs in the app, finished files join My Library and the chosen playlist. */
-const downloads = desktopUI && tauriInvoke ? new DownloadCoordinator(
+const downloads = computerApp && tauriInvoke ? new DownloadCoordinator(
   tauriDownloadClient((c, a) => tauriInvoke(c, a), (ev, fn) => listen(ev, fn)),
   library, plStore,
   { status: (t, e) => ui.setStatus(t, e), playlistChanged: (id) => syncQueueWith(id) },
 ) : undefined;
+
+// --- The NAS: playlists kept the same on every device (src/sync). Linked from ☁ Sync; the token stays on this computer. ---
+let nasConfig = loadNasConfig(store);
+let syncApi: SyncApi | undefined;
+let syncEngine: SyncEngine | undefined;
+let uploader: Uploader | undefined;
+let nasMusic: NasMusic | undefined;
+/** Room for copies of NAS songs: the disk (computer app) or what the browser/phone storage still allows. */
+async function freeSpace(): Promise<number | undefined> {
+  if (computerApp && tauriInvoke) { try { const n = await tauriInvoke('disk_free', {}); return typeof n === 'number' ? n : undefined; } catch { /* unknown */ } }
+  try { const e = await navigator.storage?.estimate?.(); return e?.quota != null ? e.quota - (e.usage ?? 0) : undefined; } catch { return undefined; }
+}
+const thisDeviceName = () => { const ua = navigator.userAgent; return isAndroidApp() ? 'Telefono Android' : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'PC Windows' : /Linux/.test(ua) ? 'PC Linux' : 'Computer'; };
+function startSync(cfg: NasConfig) {
+  nasConfig = cfg;
+  syncApi = new HttpSyncClient(cfg.url, cfg.token);
+  const api = syncApi;
+  nasMusic = new NasMusic({ library, api: () => syncApi, freeSpace, log: (m) => log('info', 'sync.nas_music', { m }) });
+  syncEngine = new SyncEngine(plStore, kv, syncApi, {
+    onLine: () => navigator.onLine, log: (m) => log('info', 'sync', { m }),
+    // a NAS song saved here (nas:<sha>) is the same line on every device: it keeps its nas: id
+    nasIdOf: (id) => library.nasIdOf(id),
+    localIdOf: (sha) => { const id = library.idForNas(sha); return id && !id.startsWith('nas:') ? id : undefined; },
+    onTracks: (t) => nasMusic?.applyTracks(t),
+  });
+  // first link of this device (or after an update): the whole NAS library once, then only the changes
+  void (async () => {
+    try {
+      const done = await kv.get<{ key: string; value: number }>('sync', 'nasLibrary');
+      if (done?.value) return;
+      const n = await nasMusic!.refreshAll();
+      if (syncApi === api) await kv.put('sync', 'nasLibrary', { key: 'nasLibrary', value: Date.now() });
+      log('info', 'sync.nas_library', { tracks: n });
+    } catch (e) { log('warn', 'sync.nas_library_failed', { error: String(e) }); }
+  })();
+  // the files: what is on this computer goes to the NAS; a song that arrived there is pushed again in its playlists
+  if (desktopUI) uploader = new Uploader({ api: syncApi, library, auto: () => settings.nasUploadAuto, log: (m) => log('info', 'sync.upload', { m }), onDone: () => void syncEngine?.syncNow() });
+  let lastNews = '';
+  let wasConnected = false;
+  syncEngine.onChange(() => {
+    const s = syncEngine?.status();
+    if (s?.connected && !wasConnected) uploader?.resume();
+    wasConnected = !!s?.connected;
+    if (s?.lastNews && s.lastNews !== lastNews) { lastNews = s.lastNews; ui.setStatus(`☁ ${s.lastNews}`); }
+    if (s?.conflicts.length && !document.body.classList.contains('sync-asked')) { document.body.classList.add('sync-asked'); ui.setStatus(`☁ Due dispositivi hanno cambiato la stessa playlist in modi diversi: decidi in Impostazioni → NAS.`, true); }
+  });
+  void syncEngine.start();
+  uploader?.start();
+}
+window.addEventListener('online', () => void syncEngine?.syncNow());
+/** Android 17+: without the «local network» permission the NAS at home cannot be reached at all. */
+async function needLocalNetwork() {
+  if ((await ensureLocalNetwork()) === 'granted') return;
+  openAppSettings();
+  throw new Error('Android non permette a PartyMix di usare la rete di casa. Nelle impostazioni dell’app che si sono aperte: Autorizzazioni → «Dispositivi nelle vicinanze» (rete locale) → Consenti, poi riprova.');
+}
+// a playlist changed by another device (or by this one): the phone's playlist menu shows it at once
+let slotsSoon = 0;
+plStore.onChange(() => { if (!desktopUI && !slotsSoon) slotsSoon = window.setTimeout(() => { slotsSoon = 0; showSlots(); }, 300); });
+const syncDeps = !isIOSApp() ? {
+  config: () => nasConfig,
+  engine: () => syncEngine,
+  api: () => syncApi,
+  async probe(url: string) {
+    await needLocalNetwork();
+    return new HttpSyncClient(url).health();
+  },
+  async connect(url: string, how: { kind: 'setup' | 'login'; name: string; password: string } | { kind: 'pair'; code: string }) {
+    const u = new URL(url);
+    if (u.protocol === 'http:' && !isPrivateHost(u.hostname)) throw new Error('Senza HTTPS PartyMix parla solo con indirizzi della rete di casa o della VPN.');
+    await needLocalNetwork();
+    const c = new HttpSyncClient(url);
+    const dev = { deviceName: thisDeviceName(), deviceKind: isAndroidApp() ? 'android' as const : 'pc' as const };
+    const s = how.kind === 'pair' ? await c.pair(how.code, dev) : how.kind === 'setup' ? await c.setup(how.name, how.password, dev) : await c.login(how.name, how.password, dev);
+    const cfg: NasConfig = { url, token: s.token, deviceId: s.device.id, deviceName: s.device.name, userName: s.user.name };
+    saveNasConfig(store, cfg);
+    log('info', 'sync.linked', { url });
+    startSync(cfg);
+  },
+  async disconnect() {
+    try { await syncApi?.logout(); } catch { /* the NAS may be away: the token is forgotten here anyway */ }
+    await syncEngine?.reset();
+    uploader?.stop();
+    nasMusic?.stop();
+    await kv.delete('sync', 'nasLibrary').catch(() => {});
+    syncEngine = undefined; syncApi = undefined; nasConfig = undefined; uploader = undefined; nasMusic = undefined;
+    saveNasConfig(store, undefined);
+    log('info', 'sync.unlinked', {});
+  },
+  status: (t: string, e?: boolean) => ui.setStatus(t, e),
+  here: phoneUI ? 'questo telefono' : 'questo computer',
+  where: 'Impostazioni → NAS',
+  copies: () => library.all().filter((e) => e.source === 'nas' && (e.state === 'downloading' || e.state === 'error')).map((e) => ({ id: e.id, title: e.title, artist: e.artist, state: e.state!, progress: e.progress, error: e.error })),
+  uploader: () => uploader,
+  uploadAuto: () => settings.nasUploadAuto,
+  setUploadAuto: (on: boolean) => { settings.nasUploadAuto = on; save(); },
+  nasMusic: () => nasMusic,
+  playlists: () => plStore.list(),
+  nasCounts: () => { let total = 0, saved = 0, savedBytes = 0; for (const e of library.all()) if (e.nasId) { total++; if (e.file) { saved++; savedBytes += e.size ?? 0; } } return { total, saved, savedBytes }; },
+} : undefined;
 
 /** The computer's pages (Playlist, Cerca, Download, Libreria), built with the shell's menu and navigation. */
 let libUI: ReturnType<typeof buildDesktopPages> | undefined;
@@ -351,7 +462,9 @@ const desktopPages = desktopUI ? (parts: DesktopParts) => (libUI = buildDesktopP
   status: (t, e) => ui.setStatus(t, e),
   menu: parts.menu,
   go: parts.go,
+  nasState: (id) => { const st = uploader?.stateOf(id); return st ? { state: st, error: uploader?.errorOf(id) } : undefined; },
   store,
+  sync: desktopUI ? syncDeps : undefined,
 })) : undefined;
 
 /**
@@ -550,8 +663,8 @@ const ui: ReturnType<typeof buildConsole> & { selectById(id: string): void } = O
     const t = i > 0 ? queue.all()[i - 1] : undefined;
     if (t && am && t.status !== 'unplayable') am.playNow(t.videoId);
   },
-}, { hasMusic: !!settings.currentPlaylistId, desktop: desktopPages }), { selectById: selectPlaylist });
-if (desktopUI) followSystemTheme(tauriInvoke ? (c, args) => tauriInvoke(c, args) : undefined);
+}, { hasMusic: !!settings.currentPlaylistId, desktop: desktopPages, phone: phoneUI }), { selectById: selectPlaylist });
+if (computerApp) followSystemTheme(tauriInvoke ? (c, args) => tauriInvoke(c, args) : undefined);
 ui.setSensitivity(settings.micSensitivity);
 ui.setProjectorMode(settings.projectorMode);
 if (canCast()) window.setInterval(() => ui.setProjectorInfo(castMessage(castState())), 1000);
@@ -905,7 +1018,7 @@ function publishVideo() {
     id = d.videoIdForProjector(); t = d.position(); playing = st !== 'paused' && d.duration() > 0;
     // during a crossfade the next video is the incoming deck's, until it becomes the one heard
     const n = st === 'crossfading' ? (am.mixProgress() > 0.5 ? undefined : decks[(1 - idx) as 0 | 1].currentVideoId()) : (am.upcomingId() ?? queue.peekNext()?.videoId);
-    next = n && n !== id && !n.startsWith('local:') ? n : '';
+    next = n && n !== id && !n.includes(':') ? n : '';
   }
   const key = `${id}|${playing}|${next}`, now = Date.now();
   if (key === lastVideo.key && now - lastVideo.at < 1000) return; // the playhead is re-sent once a second, a change at once
@@ -958,6 +1071,7 @@ window.setInterval(() => { if (navigator.onLine && !ytReady) void bootYouTube();
     const migrated = migrateLegacy(plStore, settings, store);
     if (migrated) { settings.currentPlaylistId = migrated; save(); log('info', 'playlists.migrated', { count: plStore.count() }); }
     if (!plStore.get(settings.currentPlaylistId) && plStore.count()) { settings.currentPlaylistId = plStore.list(settings.playlistSort)[0].id; save(); }
+    if (nasConfig && syncDeps) { if (isAndroidApp()) await ensureLocalNetwork(); startSync(nasConfig); }
   } catch (e) {
     log('error', 'library.load_failed', { error: String(e) });
     ui.setStatus('Non riesco a leggere le playlist salvate: riavvia l’app. Se succede ancora, scrivimi da «💬 Commenti».', true);

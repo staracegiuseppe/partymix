@@ -134,6 +134,14 @@ export class PlaylistStore {
     return p;
   }
 
+  /** Puts a playlist as it comes from the NAS (same id, its own dates and version): new, or in place of the one there. */
+  upsert(p: Playlist): Playlist {
+    const c = cleanPlaylist(p)!;
+    this.byId.set(c.id, c);
+    this.changed(c.id);
+    return c;
+  }
+
   private edit(id: string, fn: (p: Playlist) => void): Playlist | undefined {
     const p = this.byId.get(id);
     if (!p) return undefined;
