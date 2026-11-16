@@ -54,8 +54,12 @@ export function uploadErrorText(e: unknown): { text: string; retry: boolean } {
     if (e.status >= 500) return { text: `Il NAS ha risposto con un errore (${e.message}).`, retry: true };
     return { text: e.message, retry: false };
   }
+  // the app's own commands answer with plain words (a string), the web view with a DOMException: say what it was
+  if (typeof e === 'string' && e.trim()) return { text: `Il file non si legge: ${e}`, retry: false };
   const m = (e as Error)?.message;
-  return { text: m && !/^[A-Z][a-zA-Z]+Error\b/.test(m) ? m : 'Errore imprevisto: riprova.', retry: false };
+  if (m && !/^[A-Z][a-zA-Z]+Error\b/.test(m)) return { text: m, retry: false };
+  const name = (e as { name?: string })?.name;
+  return { text: name && name !== 'Error' ? `Errore imprevisto (${name}): riprova.` : 'Errore imprevisto: riprova.', retry: false };
 }
 
 export class Uploader {

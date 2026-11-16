@@ -137,6 +137,7 @@ export function buildDesktopPages(d: PagesDeps) {
       sub: [t.artist, t.album, w?.short].filter(Boolean).join(' · '),
       dur: t.durationSec || e?.durationSec, thumb: covers.get(e, t), off, pct: d.library.progressOf(t.videoId),
       fav: !!e?.favorite, skip: !d.online() && off !== 'offline' && !t.videoId.startsWith('nas:'), reason: w?.full,
+      fmt: d.library.formatOf(t.videoId),
     };
     const ns = e?.file && e.source !== 'nas' ? d.nasState?.(t.videoId) : undefined;
     if (t.videoId.startsWith('nas:')) { vm.nas = 'nas'; vm.nasTip = e?.file ? 'Dal NAS, salvato su questo computer' : 'Sul NAS: suona in streaming a casa (⋮ → Salva per averlo anche fuori)'; }
@@ -632,12 +633,12 @@ export function buildDesktopPages(d: PagesDeps) {
   // =====================================================================================
   // 🎧 LIBRERIA
   // =====================================================================================
-  type LibFilter = 'all' | 'offline' | 'imported' | 'downloaded' | 'fav' | 'artists' | 'albums';
+  type LibFilter = 'all' | 'offline' | 'audio' | 'video' | 'imported' | 'downloaded' | 'fav' | 'artists' | 'albums';
   let libFilter: LibFilter = 'all';
   let libGroup: { kind: 'artist' | 'album'; name: string } | undefined;
   let libQuery = '';
   const libSearch = h('input', { type: 'search', class: 'pg-search libsearch', placeholder: '🔎 Cerca nella libreria', 'aria-label': 'Cerca nella libreria', onInput: () => { libQuery = libSearch.value; paintLibrary(true); } });
-  const chipDefs: [LibFilter, string][] = [['all', 'Tutta la musica'], ['offline', 'Offline'], ['downloaded', 'Scaricati'], ['imported', 'Importati'], ['fav', 'Preferiti'], ['artists', 'Artisti'], ['albums', 'Album']];
+  const chipDefs: [LibFilter, string][] = [['all', 'Tutta la musica'], ['offline', 'Offline'], ['audio', '🎵 Audio'], ['video', '🎬 Video'], ['downloaded', 'Scaricati'], ['imported', 'Importati'], ['fav', 'Preferiti'], ['artists', 'Artisti'], ['albums', 'Album']];
   const chips = chipDefs.map(([k, l]) => btn(l, 'chip', () => { libFilter = k; libGroup = undefined; paintLibrary(true); }, { 'aria-pressed': 'false' }));
   const libBack = btn('', 'm-text-btn hidden', () => { libGroup = undefined; paintLibrary(true); });
   const libHead = pageHeader('Libreria', btn('+ Importa musica', 'm-filled', () => importMenu()));
@@ -664,7 +665,9 @@ export function buildDesktopPages(d: PagesDeps) {
     const words = norm(libQuery.trim()).split(/\s+/).filter(Boolean);
     const all = allTracks().rows.filter((x) => words.every((w) => x.key.includes(w)));
     const entries = d.library.all();
-    libHead.sub.textContent = `${plural(entries.length, 'brano', 'brani')} in libreria · ${entries.filter((e) => e.file).length} offline · ${fmtSize(d.library.bytes())} ${d.library.where}`;
+    const fmts = entries.map((e) => d.library.formatOf(e.id));
+    const nA = fmts.filter((f) => f === 'audio' || f === 'both').length, nV = fmts.filter((f) => f === 'video' || f === 'both').length;
+    libHead.sub.textContent = `${plural(entries.length, 'brano', 'brani')} in libreria · ${entries.filter((e) => e.file).length} offline (🎵 ${nA} audio · 🎬 ${nV} video) · ${fmtSize(d.library.bytes())} ${d.library.where}`;
     libBack.classList.toggle('hidden', !libGroup);
     libBack.textContent = libGroup ? `← ${libGroup.kind === 'artist' ? 'Tutti gli artisti' : 'Tutti gli album'}` : '';
     let rows: SongVM[];
@@ -677,7 +680,9 @@ export function buildDesktopPages(d: PagesDeps) {
       libList.setHead(libFilter === 'artists' ? 'ARTISTI' : 'ALBUM', `${rows.length}`);
     } else {
       const pred: Record<LibFilter, (x: Known) => boolean> = {
-        all: (x) => !!x.e, offline: (x) => !!x.e?.file, imported: (x) => x.e?.source === 'file', downloaded: (x) => x.e?.source === 'download' || x.e?.source === 'url',
+        all: (x) => !!x.e, offline: (x) => !!x.e?.file,
+        audio: (x) => { const f = d.library.formatOf(x.t.videoId); return f === 'audio' || f === 'both'; },
+        video: (x) => { const f = d.library.formatOf(x.t.videoId); return f === 'video' || f === 'both'; }, imported: (x) => x.e?.source === 'file', downloaded: (x) => x.e?.source === 'download' || x.e?.source === 'url',
         fav: (x) => !!x.e?.favorite, artists: (x) => (x.t.artist || 'Artista sconosciuto') === libGroup?.name, albums: (x) => x.t.album === libGroup?.name,
       };
       rows = all.filter(pred[libFilter]).map((x) => songVM(x.t, x.e, x.lists));

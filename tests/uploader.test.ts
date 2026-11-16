@@ -209,7 +209,7 @@ describe('Uploader', () => {
     expect(uploadErrorText(new SyncError(403, 'FORBIDDEN', 'x')).text).toMatch(/permesso/);
     expect(uploadErrorText(new SyncError(507, 'NO_SPACE', 'x')).text).toMatch(/Spazio/);
     expect(uploadErrorText(new TypeError('boom')).text).toBe('boom');
-    expect(uploadErrorText(new TypeError('NetworkError when attempting')).text).toBe('Errore imprevisto: riprova.');
+    expect(uploadErrorText(new TypeError('NetworkError when attempting')).text).toMatch(/^Errore imprevisto/);
   });
 });
 

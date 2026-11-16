@@ -23,8 +23,11 @@ export type LibEntry = {
   mime?: string;
   /** The link it was downloaded from (url) or nothing. */
   url?: string;
-  /** Where the local copy is (see BlobStore); none = no local copy. */
+  /** Where the local copy is (see BlobStore); none = no local copy. With both formats this is the audio one. */
   file?: string;
+  /** The same song also saved as a video (MP4/WebM), next to the audio `file`: both kept, shown as 🎵+🎬. */
+  videoFile?: string;
+  videoSize?: number;
   /** Where the file came from on the computer when it was imported («Cartella/brano.mp3»), shown for information only. */
   origin?: string;
   /** The song is on the NAS: the SHA-256 of its file (its id there). Set after the upload, or when the NAS had it already. */
@@ -128,13 +131,30 @@ export class MusicLibrary {
   private changed() { this.version++; for (const fn of this.listeners) fn(); }
   private async save(e: LibEntry) {
     const { progress: _p, ...keep } = e;
-    await this.d.kv.put('library', e.id, keep);
+    try {
+      await this.d.kv.put('library', e.id, keep);
+    } catch (err) {
+      // a cover picture whose data the web view lost cannot be stored again: the song is kept without it
+      if (!e.cover) throw err;
+      delete e.cover;
+      const { progress: _q, cover: _c, ...rest } = keep as LibEntry;
+      await this.d.kv.put('library', e.id, rest);
+    }
   }
 
   all(): LibEntry[] { return [...this.byId.values()].sort((a, b) => a.addedAt - b.addedAt); }
   get(id: string): LibEntry | undefined { return this.byId.get(id); }
   size(): number { return this.byId.size; }
-  bytes(): number { let n = 0; for (const e of this.byId.values()) if (e.file) n += e.size ?? 0; return n; }
+  bytes(): number { let n = 0; for (const e of this.byId.values()) { if (e.file) n += e.size ?? 0; if (e.videoFile) n += e.videoSize ?? 0; } return n; }
+
+  /** What the local copies are: only sound, a video, or both (shown on every song of the library). */
+  formatOf(id: string): 'audio' | 'video' | 'both' | undefined {
+    const e = this.byId.get(id);
+    if (!e?.file) return undefined;
+    const v = isVideoName(e.file, e.mime);
+    if (e.videoFile) return v ? 'video' : 'both';
+    return v ? 'video' : 'audio';
+  }
 
   // ---- the NAS: which songs are there, and reading the files to send them ----
   /** The NAS id (SHA-256) of a song, when it is on the NAS. */
@@ -409,6 +429,15 @@ export class MusicLibrary {
    */
   async addDownloaded(d: { id: string; title: string; artist?: string; album?: string; durationSec?: number; file: string; size: number; url: string; mime?: string; thumb?: string; thumbFile?: string; origin?: string }): Promise<LibEntry> {
     const old = this.byId.get(d.id);
+    // the same song in the other format (audio ↔ video): both are kept, the audio one stays the main copy
+    const newVideo = isVideoName(d.file, d.mime);
+    if (old?.file && old.file !== d.file && isVideoName(old.file, old.mime) !== newVideo) {
+      if (newVideo) { old.videoFile = d.file; old.videoSize = d.size; }
+      else { old.videoFile = old.file; old.videoSize = old.size; old.file = d.file; old.size = d.size; old.mime = d.mime; }
+      await this.save(old);
+      this.changed();
+      return old;
+    }
     const e: LibEntry = {
       ...(old ?? { addedAt: this.now() }),
       id: d.id, source: 'download', url: d.url, file: d.file, size: d.size,
@@ -445,7 +474,8 @@ export class MusicLibrary {
     const e = this.byId.get(id);
     if (!e?.file) return;
     await this.d.blobs.delete(e.file).catch(() => {});
-    delete e.file; delete e.size; delete e.state; delete e.error;
+    if (e.videoFile) await this.d.blobs.delete(e.videoFile).catch(() => {});
+    delete e.file; delete e.size; delete e.videoFile; delete e.videoSize; delete e.state; delete e.error;
     await this.save(e);
     this.changed();
   }
@@ -456,6 +486,7 @@ export class MusicLibrary {
     if (!e) return;
     this.cancel(id);
     if (e.file) await this.d.blobs.delete(e.file).catch(() => {});
+    if (e.videoFile) await this.d.blobs.delete(e.videoFile).catch(() => {});
     if (e.nasId) this.byNas.delete(e.nasId);
     this.byId.delete(id);
     await this.d.kv.delete('library', id);
@@ -472,6 +503,12 @@ export class MusicLibrary {
     for (const old of this.recentUrls.splice(KEEP_URLS)) this.d.blobs.release(old);
     return u;
   }
+}
+
+/** A video file (MP4, WebM, MOV…), by its type or its name. */
+export function isVideoName(file: string, mime?: string): boolean {
+  if (mime) return mime.startsWith('video/');
+  return /\.(mp4|webm|mov|mkv|m4v)$/i.test(file);
 }
 
 /** Opens the file in a hidden audio player to learn its length; a file the player cannot open is damaged. */

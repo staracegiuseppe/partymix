@@ -67,7 +67,7 @@ export class DownloadCoordinator {
     this.integrated.add(j.id);
     const id = await this.libraryId(j);
     const have = this.lib.get(id);
-    const e = have?.file === m.local_filename ? have : await this.lib.addDownloaded({
+    const e = have && (have.file === m.local_filename || have.videoFile === m.local_filename) ? have : await this.lib.addDownloaded({
       id, title: m.title, artist: m.artist ?? undefined, album: m.album ?? undefined, durationSec: m.duration ?? undefined,
       file: m.local_filename, size: m.file_size, url: m.source_url, mime: m.mime_type, thumb: m.thumbnail ?? undefined,
       thumbFile: m.thumbnail_file ?? undefined, origin: `Scaricato da ${m.extractor ?? 'internet'}: ${m.original_filename ?? m.source_url}`,

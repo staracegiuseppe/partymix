@@ -16,6 +16,8 @@ export type SongVM = {
   /** The file on the NAS: ☁ there, ⬆ going up, ⚠ not there (or failed, with `nasTip` saying why). */
   nas?: 'nas' | 'uploading' | 'missing' | 'error';
   nasTip?: string;
+  /** What the local copy is: 🎵 only sound, 🎬 video, or both. */
+  fmt?: 'audio' | 'video' | 'both';
   fav?: boolean;
   dur?: number;
   /** The song on air is paused. */
@@ -60,6 +62,11 @@ export const STATE: Record<NonNullable<SongVM['off']>, [string, string, string]>
   error: ['⚠', 'Errore', 'Problema con il file'],
 };
 /** The NAS state as a small tag after the title: icon, and the words of the tooltip. */
+export const FMT_TAG: Record<NonNullable<SongVM['fmt']>, [string, string]> = {
+  audio: ['🎵 Audio', 'Solo audio (MP3, M4A…): sul proiettore niente video'],
+  video: ['🎬 Video', 'Video (MP4, WebM): sul proiettore si vede il video'],
+  both: ['🎵+🎬', 'Salvato sia come audio sia come video'],
+};
 export const NAS_TAG: Record<NonNullable<SongVM['nas']>, [string, string]> = {
   nas: ['☁', 'Sul NAS'],
   uploading: ['⬆', 'In caricamento sul NAS'],
@@ -125,6 +132,7 @@ export function buildSongList(o: SongListOpts) {
       if (img) { const src = r.thumb ?? ''; if (img.getAttribute('src') !== src) { if (src) img.src = src; else img.removeAttribute('src'); } }
       const tags = [r.current ? ['tag on', r.paused ? 'in pausa' : 'in onda'] : null, r.locked ? ['tag', 'bloccato'] : null,
         r.lyr === 'none' ? ['tag', 'senza testo'] : r.lyr === 'plain' ? ['tag soft', 'testo stimato'] : r.lyr === 'synced' ? ['tag ok', 'testo a tempo'] : null,
+        r.fmt ? [`tag fmt ${r.fmt}`, FMT_TAG[r.fmt][0], FMT_TAG[r.fmt][1]] : null,
         r.bad ? ['tag', 'non riproducibile'] : null, r.fav ? ['tag fav', '♥'] : null,
         r.nas ? [`tag nas ${r.nas}`, NAS_TAG[r.nas][0], r.nasTip ?? NAS_TAG[r.nas][1]] : null].filter((x): x is string[] => !!x);
       q('.t').replaceChildren(r.title, ...tags.map(([c, s, tip]) => h('span', { class: c, ...(tip ? { title: tip } : {}) }, s)));
