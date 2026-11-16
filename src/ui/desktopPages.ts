@@ -139,6 +139,11 @@ export function buildDesktopPages(d: PagesDeps) {
       fav: !!e?.favorite, skip: !d.online() && off !== 'offline' && !t.videoId.startsWith('nas:'), reason: w?.full,
       fmt: d.library.formatOf(t.videoId),
     };
+    const job = off !== 'offline' && !t.videoId.includes(':') ? d.downloads?.jobForVideo(t.videoId) : undefined;
+    if (job && (job.status === 'QUEUED' || job.status === 'DOWNLOADING' || job.status === 'PROCESSING')) {
+      vm.off = job.status === 'QUEUED' ? 'queued' : 'downloading';
+      vm.pct = Math.max(0, Math.min(1, (job.progress || 0) / 100));
+    }
     const ns = e?.file && e.source !== 'nas' ? d.nasState?.(t.videoId) : undefined;
     if (t.videoId.startsWith('nas:')) { vm.nas = 'nas'; vm.nasTip = e?.file ? 'Dal NAS, salvato su questo computer' : 'Sul NAS: suona in streaming a casa (⋮ → Salva per averlo anche fuori)'; }
     else if (ns) {
@@ -168,7 +173,7 @@ export function buildDesktopPages(d: PagesDeps) {
   function offline(id: string) {
     if (canDownload(id)) {
       const t = trackOf(id);
-      chooseFormat(t?.title ? `«${t.title}»` : 'il brano', 1, (c) => void d.downloads!.download({ url: youtubeUrl(id), type: c.type, format: c.format, quality: c.quality }));
+      chooseFormat(t?.title ? `«${t.title}»` : 'il brano', 1, (c) => { void d.downloads!.download({ url: youtubeUrl(id), type: c.type, format: c.format, quality: c.quality }); pointToDownloads('Download in corso: qui vedi l’avanzamento'); });
       return;
     }
     pickOneFor = id; pickOne.click();
@@ -189,13 +194,48 @@ export function buildDesktopPages(d: PagesDeps) {
       run: () => { const p = { type: c.type, format: c.format, quality: c.quality }; storePrefs(d.store, p); dl?.setPrefs(p); go(p); },
     })));
   }
+  /**
+   * Where to follow the downloads: a bubble with an arrow pointing at «Download» in the menu, for a few seconds,
+   * right after a download starts. On a narrow screen (bar at the bottom) it points at the bar item.
+   */
+  function pointToDownloads(text: string) {
+    const nav = [...document.querySelectorAll<HTMLElement>('.m-nav-item')].find((b) => b.title === 'Download' && b.offsetParent);
+    if (!nav) return;
+    document.querySelector('.nav-pointer')?.remove();
+    const r = nav.getBoundingClientRect();
+    const below = r.top > innerHeight / 2; // bar at the bottom: the bubble goes above it, the arrow points down
+    const tip = h('div', { class: `nav-pointer ${below ? 'up' : 'side'}`, role: 'status' },
+      h('span', { class: 'np-arrow', 'aria-hidden': 'true' }, below ? '⬇' : '⬅'), h('span', { class: 'np-text' }, text));
+    document.body.append(tip);
+    const place = () => {
+      const q = nav.getBoundingClientRect();
+      if (below) { tip.style.left = `${Math.max(8, q.left + q.width / 2 - tip.offsetWidth / 2)}px`; tip.style.top = `${q.top - tip.offsetHeight - 10}px`; }
+      else { tip.style.left = `${q.right + 12}px`; tip.style.top = `${q.top + q.height / 2 - tip.offsetHeight / 2}px`; }
+    };
+    place();
+    nav.classList.add('nav-attn');
+    const done = () => { tip.classList.add('out'); nav.classList.remove('nav-attn'); setTimeout(() => tip.remove(), 400); };
+    const t = setTimeout(done, 7000);
+    tip.addEventListener('click', () => { clearTimeout(t); done(); d.go('downloads'); });
+    addEventListener('resize', place, { once: true });
+  }
+  /** «Download» in the menu carries how many are going (a pulsing badge), so they can always be found. */
+  function paintDlBadge() {
+    const nav = [...document.querySelectorAll<HTMLElement>('.m-nav-item')].find((b) => b.title === 'Download');
+    if (!nav || !d.downloads) return;
+    const n = d.downloads.active();
+    let b = nav.querySelector<HTMLElement>('.dl-badge');
+    if (!n) { b?.remove(); return; }
+    if (!b) { b = h('span', { class: 'dl-badge', 'aria-label': 'download in corso' }); nav.querySelector('.m-ind')?.append(b); }
+    if (b.textContent !== String(n)) b.textContent = String(n);
+  }
   /** Downloads many songs (a playlist, a selection) with one choice of format and one request to the app. */
   function downloadTracks(ids: string[], what: string) {
     if (!d.downloads?.available()) { d.status('Il download funziona nell’app installata sul computer, con yt-dlp.', true); return; }
     const todo = ids.filter((id) => !id.includes(':'));
     const local = ids.length - todo.length;
     if (!todo.length) { d.status(local ? 'Questi brani sono già file sul computer.' : 'Niente da scaricare.'); return; }
-    chooseFormat(what, todo.length, (c) => void d.downloads!.downloadMany(todo.map((id) => ({ url: youtubeUrl(id), type: c.type, format: c.format, quality: c.quality })), what));
+    chooseFormat(what, todo.length, (c) => { void d.downloads!.downloadMany(todo.map((id) => ({ url: youtubeUrl(id), type: c.type, format: c.format, quality: c.quality })), what); pointToDownloads(`${todo.length === 1 ? 'Il download' : `${todo.length} download`} in corso: qui vedi l’avanzamento`); });
   }
 
   /** «☑ Seleziona»: a bar with the count and what can be done with the songs ticked. */
@@ -395,7 +435,24 @@ export function buildDesktopPages(d: PagesDeps) {
   });
   dtSel = selectionBar(dtList, () => `«${d.playlists.get(detailId)?.name ?? 'playlist'}»`);
   dtHead.el.querySelector('.sel-slot')!.replaceWith(dtSel.toggleBtn);
-  const detail = h('div', { class: 'pl-detail hidden' }, dtBack, dtHead.el, dtSource, dtSel.bar, cols('g3', '#', 'Titolo · Artista', 'Durata', 'Stato'), dtList.el);
+  // ⬇ while the songs of this playlist are being downloaded: how it stands, and where to see each one
+  const dtDlText = h('div', { class: 'dl-banner-t' });
+  const dtDlBar = h('div', { class: 'up-bar uploading' }, h('span', { style: 'width:0%' }));
+  const dtDl = h('div', { class: 'dl-banner hidden', role: 'status', 'aria-live': 'polite' },
+    h('div', { class: 'dl-banner-row' }, dtDlText, btn('Vedi i dettagli in Download →', 'm-tonal', () => d.go('downloads'))), dtDlBar);
+  let dtDlSig = '';
+  function paintDtDl(ids: string[]) {
+    const pr = d.downloads?.progressOf(ids);
+    const show = !!pr && (pr.running + pr.queued > 0);
+    dtDl.classList.toggle('hidden', !show);
+    if (!show || !pr) return;
+    const sig = JSON.stringify(pr);
+    if (sig === dtDlSig) return;
+    dtDlSig = sig;
+    dtDlText.textContent = `⬇ Download in corso: ${pr.done} scaricati su ${pr.total}${pr.running ? ` · ${pr.running} in scaricamento` : ''}${pr.queued ? ` · ${pr.queued} in coda` : ''}${pr.failed ? ` · ⚠ ${pr.failed} non riusciti` : ''}`;
+    (dtDlBar.firstChild as HTMLElement).style.width = `${pr.total ? Math.round((pr.done / pr.total) * 100) : 0}%`;
+  }
+  const detail = h('div', { class: 'pl-detail hidden' }, dtBack, dtHead.el, dtSource, dtDl, dtSel.bar, cols('g3', '#', 'Titolo · Artista', 'Durata', 'Stato'), dtList.el);
   const listView = h('div', { class: 'pl-listview' }, plHead.el, h('div', { class: 'pg-toolbar' }, plSearch, plSort), plList, plEmpty);
   let lastDetailSig = '';
   function openDetail(id: string) { if (detailId !== id) dtSel?.toggle(false); detailId = id; lastDetailSig = ''; listView.classList.add('hidden'); detail.classList.remove('hidden'); paintDetail(true, true); d.go('playlists'); }
@@ -403,7 +460,8 @@ export function buildDesktopPages(d: PagesDeps) {
   function paintDetail(force = false, start = false) {
     const p = d.playlists.get(detailId);
     if (!p) { if (detailId) closeDetail(); return; }
-    const sig = `${d.playlists.version}|${d.library.version}|${d.online()}|${d.playingId()}`;
+    paintDtDl(p.tracks.map((t) => t.videoId));
+    const sig = `${d.playlists.version}|${d.library.version}|${d.online()}|${d.playingId()}|${d.downloads?.version ?? ''}`;
     if (!force && sig === lastDetailSig) return;
     lastDetailSig = sig;
     dtHead.title.textContent = p.name;
@@ -735,6 +793,7 @@ export function buildDesktopPages(d: PagesDeps) {
 
   /** Called by the app's tick (4 times a second): repaints only what changed. */
   function update(page: string) {
+    paintDlBadge();
     // the NAS connection and the devices are in Impostazioni, the NAS files in Libreria
     if (page === 'settings') { syncUI?.update('sync'); syncUI?.update('devices'); }
     else if (page === 'library') syncUI?.update('files');

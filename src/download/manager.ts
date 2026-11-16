@@ -44,6 +44,26 @@ export class DownloadCoordinator {
   available(): boolean { return !!this.cfg; }
   list(): DlJob[] { return [...this.jobs.values()].sort((a, b) => b.created_at - a.created_at); }
   get(id: string): DlJob | undefined { return this.jobs.get(id); }
+  /** The latest download of a YouTube song (by its video id), for the state shown next to it in the lists. */
+  jobForVideo(videoId: string): DlJob | undefined {
+    let best: DlJob | undefined;
+    for (const j of this.jobs.values()) if (youtubeIdOf(j.request.url) === videoId && (!best || j.created_at > best.created_at)) best = j;
+    return best;
+  }
+  /** How the downloads of these songs stand (a playlist, a selection): done, being downloaded, waiting, failed. */
+  progressOf(videoIds: string[]): { total: number; done: number; running: number; queued: number; failed: number } {
+    const r = { total: 0, done: 0, running: 0, queued: 0, failed: 0 };
+    for (const id of new Set(videoIds)) {
+      const j = this.jobForVideo(id);
+      if (!j) continue;
+      r.total++;
+      if (j.status === 'COMPLETED') r.done++;
+      else if (j.status === 'QUEUED') r.queued++;
+      else if (j.status === 'FAILED' || j.status === 'CANCELLED') r.failed++;
+      else r.running++;
+    }
+    return r;
+  }
   active(): number { let n = 0; for (const j of this.jobs.values()) if (j.status === 'QUEUED' || j.status === 'DOWNLOADING' || j.status === 'PROCESSING') n++; return n; }
 
   apply(j: DlJob, initial = false): void {
