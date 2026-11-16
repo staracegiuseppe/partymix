@@ -99,6 +99,8 @@ export function isPrivateHost(host: string): boolean {
 }
 
 type Fetch = typeof fetch;
+/** How long a call to the NAS may take (pieces of files: longer). */
+export const CALL_TIMEOUT_MS = 15_000;
 type EventSourceCtor = new (url: string) => EventSource;
 
 export class HttpSyncClient implements SyncApi {
@@ -124,10 +126,15 @@ export class HttpSyncClient implements SyncApi {
 
   private async send<T>(method: string, path: string, body: BodyInit | undefined, headers: Record<string, string>): Promise<T> {
     let res: Response;
+    // a NAS that does not answer must not leave the app waiting forever (a blocked request never ends by itself)
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), body instanceof Uint8Array || body instanceof Blob ? 120_000 : CALL_TIMEOUT_MS);
     try {
-      res = await this.fetchFn(this.base + path, { method, headers: { ...headers, ...(this.token ? { authorization: `Bearer ${this.token}` } : {}) }, body });
+      res = await this.fetchFn(this.base + path, { method, headers: { ...headers, ...(this.token ? { authorization: `Bearer ${this.token}` } : {}) }, body, signal: ctl.signal });
     } catch (e) {
-      throw new SyncError(0, 'OFFLINE', `NAS non raggiungibile (${(e as Error).message})`);
+      throw new SyncError(0, 'OFFLINE', ctl.signal.aborted ? `Il NAS non risponde (${CALL_TIMEOUT_MS / 1000} s): controlla indirizzo e Wi-Fi.` : `NAS non raggiungibile (${(e as Error).message})`);
+    } finally {
+      clearTimeout(timer);
     }
     const text = await res.text();
     let json: Record<string, unknown> = {};

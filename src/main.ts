@@ -1,5 +1,5 @@
 import { isIOSApp, isTablet } from './platform';
-import { canCast, castMessage, castState, isAndroidApp, onSharedLink } from './androidBridge';
+import { canCast, castMessage, castState, ensureLocalNetwork, isAndroidApp, onSharedLink, openAppSettings } from './androidBridge';
 import './ui/style.css';
 import './ui/material.css';
 import './ui/desktop.css';
@@ -374,6 +374,12 @@ function startSync(cfg: NasConfig) {
   uploader?.start();
 }
 window.addEventListener('online', () => void syncEngine?.syncNow());
+/** Android 17+: without the «local network» permission the NAS at home cannot be reached at all. */
+async function needLocalNetwork() {
+  if ((await ensureLocalNetwork()) === 'granted') return;
+  openAppSettings();
+  throw new Error('Android non permette a PartyMix di usare la rete di casa. Nelle impostazioni dell’app che si sono aperte: Autorizzazioni → «Dispositivi nelle vicinanze» (rete locale) → Consenti, poi riprova.');
+}
 // a playlist changed by another device (or by this one): the phone's playlist menu shows it at once
 let slotsSoon = 0;
 plStore.onChange(() => { if (!desktopUI && !slotsSoon) slotsSoon = window.setTimeout(() => { slotsSoon = 0; showSlots(); }, 300); });
@@ -381,10 +387,14 @@ const syncDeps = !isIOSApp() ? {
   config: () => nasConfig,
   engine: () => syncEngine,
   api: () => syncApi,
-  probe: (url: string) => new HttpSyncClient(url).health(),
+  async probe(url: string) {
+    await needLocalNetwork();
+    return new HttpSyncClient(url).health();
+  },
   async connect(url: string, how: { kind: 'setup' | 'login'; name: string; password: string } | { kind: 'pair'; code: string }) {
     const u = new URL(url);
     if (u.protocol === 'http:' && !isPrivateHost(u.hostname)) throw new Error('Senza HTTPS PartyMix parla solo con indirizzi della rete di casa o della VPN.');
+    await needLocalNetwork();
     const c = new HttpSyncClient(url);
     const dev = { deviceName: thisDeviceName(), deviceKind: isAndroidApp() ? 'android' as const : 'pc' as const };
     const s = how.kind === 'pair' ? await c.pair(how.code, dev) : how.kind === 'setup' ? await c.setup(how.name, how.password, dev) : await c.login(how.name, how.password, dev);
@@ -1054,7 +1064,7 @@ window.setInterval(() => { if (navigator.onLine && !ytReady) void bootYouTube();
     const migrated = migrateLegacy(plStore, settings, store);
     if (migrated) { settings.currentPlaylistId = migrated; save(); log('info', 'playlists.migrated', { count: plStore.count() }); }
     if (!plStore.get(settings.currentPlaylistId) && plStore.count()) { settings.currentPlaylistId = plStore.list(settings.playlistSort)[0].id; save(); }
-    if (nasConfig && syncDeps) startSync(nasConfig);
+    if (nasConfig && syncDeps) { if (isAndroidApp()) await ensureLocalNetwork(); startSync(nasConfig); }
   } catch (e) {
     log('error', 'library.load_failed', { error: String(e) });
     ui.setStatus('Non riesco a leggere le playlist salvate: riavvia l’app. Se succede ancora, scrivimi da «💬 Commenti».', true);

@@ -45,6 +45,11 @@ class MainActivity : TauriActivity() {
   private var cast: CastProjector? = null
   /** Height of the status bar and of the navigation bar in CSS pixels, so the page can keep its bars clear of them. */
   @Volatile private var insetsJson = "{}"
+  /** The «local network» dialog was shown once in this run (a second «no» means: do not ask again). */
+  @Volatile private var localAsked = false
+  /** The dialog is up, the user has not answered yet. */
+  @Volatile private var localPending = false
+  private val LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
 
   override fun onCreate(savedInstanceState: Bundle?) {
     // transparent bars drawn behind by the page; their icons dark or light like the phone's theme
@@ -67,6 +72,11 @@ class MainActivity : TauriActivity() {
     }
     PartyService.start(this)
     cast = CastProjector(this, ALWAYS_VISIBLE)
+  }
+
+  override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    if (requestCode == 2) localPending = false
   }
 
   override fun onNewIntent(intent: Intent) {
@@ -173,6 +183,28 @@ class MainActivity : TauriActivity() {
       } catch (e: Exception) {
         false
       }
+    }
+
+    /**
+     * Android 17+: the NAS is on the home network, which needs the «local network» permission.
+     * "granted" (or older Android: nothing to ask), "denied" (the user said no for good: only Settings can change it),
+     * "asking" (the system dialog is up now: ask again in a moment).
+     */
+    @JavascriptInterface
+    fun localNetwork(): String {
+      if (Build.VERSION.SDK_INT < 37) return "granted"
+      if (checkSelfPermission(LOCAL_NETWORK) == PackageManager.PERMISSION_GRANTED) return "granted"
+      if (localPending) return "asking"
+      if (localAsked) return "denied" // answered «no» in this run: the button in the page opens the app settings
+      localAsked = true
+      localPending = true
+      runOnUiThread { requestPermissions(arrayOf(LOCAL_NETWORK), 2) }
+      return "asking"
+    }
+
+    @JavascriptInterface
+    fun openAppSettings() {
+      runOnUiThread { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName"))) }
     }
 
     @JavascriptInterface

@@ -1,5 +1,21 @@
 /** Bridge to the Android app (MainActivity.Bridge). Absent on desktop: every function then does nothing. */
-type Bridge = { takeShared(): string | null; openApp(which: string): boolean; castState?(): string; castStart?(): string; castStop?(): void; castSettings?(): void };
+type Bridge = { takeShared(): string | null; openApp(which: string): boolean; castState?(): string; castStart?(): string; castStop?(): void; castSettings?(): void; localNetwork?(): string; openAppSettings?(): void };
+
+/**
+ * Android 17+: the NAS at home needs the «local network» permission. Asks once (the system dialog) and waits for the
+ * answer, up to a minute. True outside Android or on older Android.
+ */
+export async function ensureLocalNetwork(): Promise<'granted' | 'denied'> {
+  const b = bridge();
+  if (!b?.localNetwork) return 'granted';
+  let st = b.localNetwork();
+  for (let i = 0; st === 'asking' && i < 120; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    st = b.localNetwork();
+  }
+  return st === 'granted' ? 'granted' : 'denied';
+}
+export function openAppSettings(): void { bridge()?.openAppSettings?.(); }
 
 const bridge = (): Bridge | undefined => (window as unknown as { PartyMixAndroid?: Bridge }).PartyMixAndroid;
 
