@@ -128,11 +128,13 @@ export class HttpSyncClient implements SyncApi {
     let res: Response;
     // a NAS that does not answer must not leave the app waiting forever (a blocked request never ends by itself)
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), body instanceof Uint8Array || body instanceof Blob ? 120_000 : CALL_TIMEOUT_MS);
+    // a file piece can be big; signing in waits for the NAS to check the password (DSM on a small NAS is slow)
+    const limit = body instanceof Uint8Array || body instanceof Blob ? 120_000 : path.startsWith('/api/auth/') ? 45_000 : CALL_TIMEOUT_MS;
+    const timer = setTimeout(() => ctl.abort(), limit);
     try {
       res = await this.fetchFn(this.base + path, { method, headers: { ...headers, ...(this.token ? { authorization: `Bearer ${this.token}` } : {}) }, body, signal: ctl.signal });
     } catch (e) {
-      throw new SyncError(0, 'OFFLINE', ctl.signal.aborted ? `Il NAS non risponde (${CALL_TIMEOUT_MS / 1000} s): controlla indirizzo e Wi-Fi.` : `NAS non raggiungibile (${(e as Error).message})`);
+      throw new SyncError(0, 'OFFLINE', ctl.signal.aborted ? `Il NAS non risponde (${limit / 1000} s): controlla indirizzo e Wi-Fi.` : `NAS non raggiungibile (${(e as Error).message})`);
     } finally {
       clearTimeout(timer);
     }
