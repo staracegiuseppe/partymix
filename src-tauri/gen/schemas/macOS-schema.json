@@ -201,6 +201,12 @@
           "markdownDescription": "Enables the close_projector command without any pre-configured scope."
         },
         {
+          "description": "Enables the disk_free command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-disk-free",
+          "markdownDescription": "Enables the disk_free command without any pre-configured scope."
+        },
+        {
           "description": "Enables the dl_cancel command without any pre-configured scope.",
           "type": "string",
           "const": "allow-dl-cancel",
@@ -243,6 +249,12 @@
           "markdownDescription": "Enables the dl_remove command without any pre-configured scope."
         },
         {
+          "description": "Enables the file_sha256 command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-file-sha256",
+          "markdownDescription": "Enables the file_sha256 command without any pre-configured scope."
+        },
+        {
           "description": "Enables the http_get command without any pre-configured scope.",
           "type": "string",
           "const": "allow-http-get",
@@ -265,6 +277,12 @@
           "type": "string",
           "const": "allow-lib-read",
           "markdownDescription": "Enables the lib_read command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the lib_read_range command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-lib-read-range",
+          "markdownDescription": "Enables the lib_read_range command without any pre-configured scope."
         },
         {
           "description": "Enables the lib_root command without any pre-configured scope.",
@@ -339,6 +357,12 @@
           "markdownDescription": "Denies the close_projector command without any pre-configured scope."
         },
         {
+          "description": "Denies the disk_free command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-disk-free",
+          "markdownDescription": "Denies the disk_free command without any pre-configured scope."
+        },
+        {
           "description": "Denies the dl_cancel command without any pre-configured scope.",
           "type": "string",
           "const": "deny-dl-cancel",
@@ -381,6 +405,12 @@
           "markdownDescription": "Denies the dl_remove command without any pre-configured scope."
         },
         {
+          "description": "Denies the file_sha256 command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-file-sha256",
+          "markdownDescription": "Denies the file_sha256 command without any pre-configured scope."
+        },
+        {
           "description": "Denies the http_get command without any pre-configured scope.",
           "type": "string",
           "const": "deny-http-get",
@@ -403,6 +433,12 @@
           "type": "string",
           "const": "deny-lib-read",
           "markdownDescription": "Denies the lib_read command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the lib_read_range command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-lib-read-range",
+          "markdownDescription": "Denies the lib_read_range command without any pre-configured scope."
         },
         {
           "description": "Denies the lib_root command without any pre-configured scope.",
