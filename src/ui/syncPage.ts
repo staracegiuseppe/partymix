@@ -15,6 +15,8 @@ export type SyncUIDeps = {
   disconnect(): Promise<void>;
   status(text: string, error?: boolean): void;
   now?: () => number;
+  /** How this device is called in the texts: «questo computer» (default) or «questo telefono». */
+  here?: string;
 };
 
 const FIELD_LABEL: Record<string, string> = { name: 'Nome', description: 'Descrizione', color: 'Colore', cover: 'Copertina', link: 'Link', source: 'Origine', sortOrder: 'Posizione' };
@@ -34,6 +36,8 @@ export function ago(t: number | undefined, now = Date.now()): string {
 
 export function buildSyncUI(d: SyncUIDeps) {
   const now = d.now ?? Date.now;
+  const here = d.here ?? 'questo computer';
+  const Here = here[0].toUpperCase() + here.slice(1);
   const errText = (e: unknown) => (e instanceof SyncError ? e.message : (e as Error)?.message ?? String(e));
 
   // =====================================================================================
@@ -83,7 +87,7 @@ export function buildSyncUI(d: SyncUIDeps) {
     if (!health) return;
     const setup = !health.setup;
     accountBox.replaceChildren(
-      setup ? h('p', { class: 'pg-hint' }, 'Primo avvio: scegli nome e password dell’account PartyMix. Questo computer sarà il primo dispositivo autorizzato.') : h('div', { class: 'seg', role: 'tablist' }, ...modeBtns),
+      setup ? h('p', { class: 'pg-hint' }, `Primo avvio: scegli nome e password dell’account PartyMix. ${Here} sarà il primo dispositivo autorizzato.`) : h('div', { class: 'seg', role: 'tablist' }, ...modeBtns),
       ...(setup || mode === 'login' ? [h('div', { class: 'row' }, nameIn, passIn)] : [h('p', { class: 'pg-hint' }, 'Su un dispositivo già collegato: 📱 Dispositivi → «+ Aggiungi dispositivo», poi scrivi qui il codice.'), h('div', { class: 'row' }, codeIn)]),
       h('div', { class: 'row' }, goBtn));
     modeBtns.forEach((b, i) => { const on = (i === 0 ? 'login' : 'pair') === mode; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
@@ -105,7 +109,7 @@ export function buildSyncUI(d: SyncUIDeps) {
   const syncBtn = btn('Sincronizza ora', 'm-filled', () => void d.engine()?.syncNow());
   const unlinkBtn = btn('Scollega', 'm-outlined', (b) => {
     if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Sicuro? Scollega'; setTimeout(() => { b.dataset.sure = ''; b.textContent = 'Scollega'; }, 3000); return; }
-    void d.disconnect().then(() => { b.dataset.sure = ''; b.textContent = 'Scollega'; health = undefined; d.status('NAS scollegato: le playlist restano su questo computer.'); paintAll(); });
+    void d.disconnect().then(() => { b.dataset.sure = ''; b.textContent = 'Scollega'; health = undefined; d.status(`NAS scollegato: le playlist restano su ${here}.`); paintAll(); });
   });
   const statePanel = h('section', { class: 'panel sync-state' },
     h('h3', {}, 'NAS'),
@@ -123,7 +127,7 @@ export function buildSyncUI(d: SyncUIDeps) {
       return h('div', { class: 'conflict' },
         h('div', { class: 'conflict-t' }, `«${c.name}» · ${FIELD_LABEL[c.field] ?? c.field}`),
         h('div', { class: 'conflict-v' }, h('span', {}, 'Qui: ', h('b', {}, String(c.mine ?? '—'))), h('span', {}, 'Sul NAS: ', h('b', {}, String(c.theirs ?? '—')))),
-        h('div', { class: 'row' }, btn('Usa questo computer', 'm-tonal', () => void eng.resolve(c, 'mine')), btn('Usa il NAS', 'm-outlined', () => void eng.resolve(c, 'theirs'))));
+        h('div', { class: 'row' }, btn(`Usa ${here}`, 'm-tonal', () => void eng.resolve(c, 'mine')), btn('Usa il NAS', 'm-outlined', () => void eng.resolve(c, 'theirs'))));
     }
     return h('div', { class: 'conflict' },
       h('div', { class: 'conflict-t' }, `«${c.name}» è stata eliminata su un altro dispositivo, ma qui l’hai modificata.`),
@@ -158,7 +162,7 @@ export function buildSyncUI(d: SyncUIDeps) {
     dot.className = `sync-dot ${s.syncing ? 'busy' : s.connected ? 'on' : 'off'}`;
     stateText.textContent = s.syncing ? 'Sincronizzazione in corso…' : s.connected ? (s.live ? 'Connesso, aggiornamenti in tempo reale' : 'Connesso') : 'Non raggiungibile';
     urlText.textContent = cfg.url;
-    whoText.textContent = `${cfg.userName} · questo computer è «${cfg.deviceName}»`;
+    whoText.textContent = `${cfg.userName} · ${here} è «${cfg.deviceName}»`;
     lastText.replaceChildren('Ultima sincronizzazione: ', h('b', {}, ago(s.lastSync, now())));
     countText.replaceChildren('Playlist: ', h('b', {}, String(eng ? countPlaylists() : 0)));
     pendingText.replaceChildren('In attesa: ', h('b', {}, s.pending ? `${s.pending} modifiche` : 'niente'));
@@ -221,7 +225,7 @@ export function buildSyncUI(d: SyncUIDeps) {
     });
     return h('div', { class: `dev-row${dev.revoked ? ' revoked' : ''}` },
       h('span', { class: 'dev-ic', 'aria-hidden': 'true' }, KIND_ICON[dev.kind] ?? '🎵'),
-      h('div', { class: 'dev-t' }, name, dev.current ? h('span', { class: 'dev-me' }, ' · questo computer') : null,
+      h('div', { class: 'dev-t' }, name, dev.current ? h('span', { class: 'dev-me' }, ` · ${here}`) : null,
         h('div', { class: 'artist' }, dev.revoked ? 'Accesso revocato' : `Visto ${ago(dev.lastSeen, now())} · ${dev.perms.includes('ADMIN') ? 'amministratore' : dev.perms.includes('EDIT_PLAYLIST') ? 'può modificare le playlist' : 'solo ascolto'}`)),
       h('div', { class: 'dev-a' }, ...(dev.revoked ? [] : [rename, revoke])));
   }

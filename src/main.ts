@@ -326,7 +326,7 @@ const downloads = desktopUI && tauriInvoke ? new DownloadCoordinator(
 let nasConfig = loadNasConfig(store);
 let syncApi: SyncApi | undefined;
 let syncEngine: SyncEngine | undefined;
-const thisDeviceName = () => { const ua = navigator.userAgent; return /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'PC Windows' : /Linux/.test(ua) ? 'PC Linux' : 'Computer'; };
+const thisDeviceName = () => { const ua = navigator.userAgent; return isAndroidApp() ? 'Telefono Android' : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'PC Windows' : /Linux/.test(ua) ? 'PC Linux' : 'Computer'; };
 function startSync(cfg: NasConfig) {
   nasConfig = cfg;
   syncApi = new HttpSyncClient(cfg.url, cfg.token);
@@ -340,7 +340,10 @@ function startSync(cfg: NasConfig) {
   void syncEngine.start();
 }
 window.addEventListener('online', () => void syncEngine?.syncNow());
-const syncDeps = desktopUI ? {
+// a playlist changed by another device (or by this one): the phone's playlist menu shows it at once
+let slotsSoon = 0;
+plStore.onChange(() => { if (!desktopUI && !slotsSoon) slotsSoon = window.setTimeout(() => { slotsSoon = 0; showSlots(); }, 300); });
+const syncDeps = !isIOSApp() ? {
   config: () => nasConfig,
   engine: () => syncEngine,
   api: () => syncApi,
@@ -349,7 +352,7 @@ const syncDeps = desktopUI ? {
     const u = new URL(url);
     if (u.protocol === 'http:' && !isPrivateHost(u.hostname)) throw new Error('Senza HTTPS PartyMix parla solo con indirizzi della rete di casa o della VPN.');
     const c = new HttpSyncClient(url);
-    const dev = { deviceName: thisDeviceName(), deviceKind: 'pc' as const };
+    const dev = { deviceName: thisDeviceName(), deviceKind: isAndroidApp() ? 'android' as const : 'pc' as const };
     const s = how.kind === 'pair' ? await c.pair(how.code, dev) : how.kind === 'setup' ? await c.setup(how.name, how.password, dev) : await c.login(how.name, how.password, dev);
     const cfg: NasConfig = { url, token: s.token, deviceId: s.device.id, deviceName: s.device.name, userName: s.user.name };
     saveNasConfig(store, cfg);
@@ -364,6 +367,7 @@ const syncDeps = desktopUI ? {
     log('info', 'sync.unlinked', {});
   },
   status: (t: string, e?: boolean) => ui.setStatus(t, e),
+  here: desktopUI ? 'questo computer' : 'questo telefono',
 } : undefined;
 
 /** The computer's pages (Playlist, Cerca, Download, Libreria), built with the shell's menu and navigation. */
@@ -399,7 +403,7 @@ const desktopPages = desktopUI ? (parts: DesktopParts) => (libUI = buildDesktopP
   menu: parts.menu,
   go: parts.go,
   store,
-  sync: syncDeps,
+  sync: desktopUI ? syncDeps : undefined,
 })) : undefined;
 
 /**
@@ -598,7 +602,7 @@ const ui: ReturnType<typeof buildConsole> & { selectById(id: string): void } = O
     const t = i > 0 ? queue.all()[i - 1] : undefined;
     if (t && am && t.status !== 'unplayable') am.playNow(t.videoId);
   },
-}, { hasMusic: !!settings.currentPlaylistId, desktop: desktopPages }), { selectById: selectPlaylist });
+}, { hasMusic: !!settings.currentPlaylistId, desktop: desktopPages, phoneSync: !desktopUI && syncDeps ? { deps: syncDeps, count: () => plStore.count() } : undefined }), { selectById: selectPlaylist });
 if (desktopUI) followSystemTheme(tauriInvoke ? (c, args) => tauriInvoke(c, args) : undefined);
 ui.setSensitivity(settings.micSensitivity);
 ui.setProjectorMode(settings.projectorMode);
@@ -1006,7 +1010,7 @@ window.setInterval(() => { if (navigator.onLine && !ytReady) void bootYouTube();
     const migrated = migrateLegacy(plStore, settings, store);
     if (migrated) { settings.currentPlaylistId = migrated; save(); log('info', 'playlists.migrated', { count: plStore.count() }); }
     if (!plStore.get(settings.currentPlaylistId) && plStore.count()) { settings.currentPlaylistId = plStore.list(settings.playlistSort)[0].id; save(); }
-    if (nasConfig && desktopUI) startSync(nasConfig);
+    if (nasConfig && syncDeps) startSync(nasConfig);
   } catch (e) {
     log('error', 'library.load_failed', { error: String(e) });
     ui.setStatus('Non riesco a leggere le playlist salvate: riavvia l’app. Se succede ancora, scrivimi da «💬 Commenti».', true);

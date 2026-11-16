@@ -136,7 +136,11 @@ fn fullscreen_soon(w: tauri::WebviewWindow, target: Option<tauri::Monitor>) {
             }
         }
         let _ = &target;
+        // no windows to resize on a phone: full screen is a desktop call
+        #[cfg(desktop)]
         let _ = w.set_fullscreen(true);
+        #[cfg(mobile)]
+        let _ = &w;
     });
 }
 

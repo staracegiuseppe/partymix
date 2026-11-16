@@ -135,174 +135,6 @@
           "type": "object",
           "allOf": [
             {
-              "if": {
-                "properties": {
-                  "identifier": {
-                    "anyOf": [
-                      {
-                        "description": "This permission set allows opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application\nas well as reveal file in directories using default file explorer\n#### This default permission set includes:\n\n- `allow-open-url`\n- `allow-reveal-item-in-dir`\n- `allow-default-urls`",
-                        "type": "string",
-                        "const": "opener:default",
-                        "markdownDescription": "This permission set allows opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application\nas well as reveal file in directories using default file explorer\n#### This default permission set includes:\n\n- `allow-open-url`\n- `allow-reveal-item-in-dir`\n- `allow-default-urls`"
-                      },
-                      {
-                        "description": "This enables opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application.",
-                        "type": "string",
-                        "const": "opener:allow-default-urls",
-                        "markdownDescription": "This enables opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application."
-                      },
-                      {
-                        "description": "Enables the open_path command without any pre-configured scope.",
-                        "type": "string",
-                        "const": "opener:allow-open-path",
-                        "markdownDescription": "Enables the open_path command without any pre-configured scope."
-                      },
-                      {
-                        "description": "Enables the open_url command without any pre-configured scope.",
-                        "type": "string",
-                        "const": "opener:allow-open-url",
-                        "markdownDescription": "Enables the open_url command without any pre-configured scope."
-                      },
-                      {
-                        "description": "Enables the reveal_item_in_dir command without any pre-configured scope.",
-                        "type": "string",
-                        "const": "opener:allow-reveal-item-in-dir",
-                        "markdownDescription": "Enables the reveal_item_in_dir command without any pre-configured scope."
-                      },
-                      {
-                        "description": "Denies the open_path command without any pre-configured scope.",
-                        "type": "string",
-                        "const": "opener:deny-open-path",
-                        "markdownDescription": "Denies the open_path command without any pre-configured scope."
-                      },
-                      {
-                        "description": "Denies the open_url command without any pre-configured scope.",
-                        "type": "string",
-                        "const": "opener:deny-open-url",
-                        "markdownDescription": "Denies the open_url command without any pre-configured scope."
-                      },
-                      {
-                        "description": "Denies the reveal_item_in_dir command without any pre-configured scope.",
-                        "type": "string",
-                        "const": "opener:deny-reveal-item-in-dir",
-                        "markdownDescription": "Denies the reveal_item_in_dir command without any pre-configured scope."
-                      }
-                    ]
-                  }
-                }
-              },
-              "then": {
-                "properties": {
-                  "allow": {
-                    "items": {
-                      "title": "OpenerScopeEntry",
-                      "description": "Opener scope entry.",
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "required": [
-                            "url"
-                          ],
-                          "properties": {
-                            "app": {
-                              "description": "An application to open this url with, for example: firefox.",
-                              "allOf": [
-                                {
-                                  "$ref": "#/definitions/Application"
-                                }
-                              ]
-                            },
-                            "url": {
-                              "description": "A URL that can be opened by the webview when using the Opener APIs.\n\nWildcards can be used following the UNIX glob pattern.\n\nExamples:\n\n- \"https://*\" : allows all HTTPS origin\n\n- \"https://*.github.com/tauri-apps/tauri\": allows any subdomain of \"github.com\" with the \"tauri-apps/api\" path\n\n- \"https://myapi.service.com/users/*\": allows access to any URLs that begins with \"https://myapi.service.com/users/\"",
-                              "type": "string"
-                            }
-                          }
-                        },
-                        {
-                          "type": "object",
-                          "required": [
-                            "path"
-                          ],
-                          "properties": {
-                            "app": {
-                              "description": "An application to open this path with, for example: xdg-open.",
-                              "allOf": [
-                                {
-                                  "$ref": "#/definitions/Application"
-                                }
-                              ]
-                            },
-                            "path": {
-                              "description": "A path that can be opened by the webview when using the Opener APIs.\n\nThe pattern can start with a variable that resolves to a system base directory. The variables are: `$AUDIO`, `$CACHE`, `$CONFIG`, `$DATA`, `$LOCALDATA`, `$DESKTOP`, `$DOCUMENT`, `$DOWNLOAD`, `$EXE`, `$FONT`, `$HOME`, `$PICTURE`, `$PUBLIC`, `$RUNTIME`, `$TEMPLATE`, `$VIDEO`, `$RESOURCE`, `$APP`, `$LOG`, `$TEMP`, `$APPCONFIG`, `$APPDATA`, `$APPLOCALDATA`, `$APPCACHE`, `$APPLOG`.",
-                              "type": "string"
-                            }
-                          }
-                        }
-                      ]
-                    }
-                  },
-                  "deny": {
-                    "items": {
-                      "title": "OpenerScopeEntry",
-                      "description": "Opener scope entry.",
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "required": [
-                            "url"
-                          ],
-                          "properties": {
-                            "app": {
-                              "description": "An application to open this url with, for example: firefox.",
-                              "allOf": [
-                                {
-                                  "$ref": "#/definitions/Application"
-                                }
-                              ]
-                            },
-                            "url": {
-                              "description": "A URL that can be opened by the webview when using the Opener APIs.\n\nWildcards can be used following the UNIX glob pattern.\n\nExamples:\n\n- \"https://*\" : allows all HTTPS origin\n\n- \"https://*.github.com/tauri-apps/tauri\": allows any subdomain of \"github.com\" with the \"tauri-apps/api\" path\n\n- \"https://myapi.service.com/users/*\": allows access to any URLs that begins with \"https://myapi.service.com/users/\"",
-                              "type": "string"
-                            }
-                          }
-                        },
-                        {
-                          "type": "object",
-                          "required": [
-                            "path"
-                          ],
-                          "properties": {
-                            "app": {
-                              "description": "An application to open this path with, for example: xdg-open.",
-                              "allOf": [
-                                {
-                                  "$ref": "#/definitions/Application"
-                                }
-                              ]
-                            },
-                            "path": {
-                              "description": "A path that can be opened by the webview when using the Opener APIs.\n\nThe pattern can start with a variable that resolves to a system base directory. The variables are: `$AUDIO`, `$CACHE`, `$CONFIG`, `$DATA`, `$LOCALDATA`, `$DESKTOP`, `$DOCUMENT`, `$DOWNLOAD`, `$EXE`, `$FONT`, `$HOME`, `$PICTURE`, `$PUBLIC`, `$RUNTIME`, `$TEMPLATE`, `$VIDEO`, `$RESOURCE`, `$APP`, `$LOG`, `$TEMP`, `$APPCONFIG`, `$APPDATA`, `$APPLOCALDATA`, `$APPCACHE`, `$APPLOG`.",
-                              "type": "string"
-                            }
-                          }
-                        }
-                      ]
-                    }
-                  }
-                }
-              },
-              "properties": {
-                "identifier": {
-                  "description": "Identifier of the permission or permission set.",
-                  "allOf": [
-                    {
-                      "$ref": "#/definitions/Identifier"
-                    }
-                  ]
-                }
-              }
-            },
-            {
               "properties": {
                 "identifier": {
                   "description": "Identifier of the permission or permission set.",
@@ -369,6 +201,48 @@
           "markdownDescription": "Enables the close_projector command without any pre-configured scope."
         },
         {
+          "description": "Enables the dl_cancel command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dl-cancel",
+          "markdownDescription": "Enables the dl_cancel command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the dl_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dl-config",
+          "markdownDescription": "Enables the dl_config command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the dl_create command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dl-create",
+          "markdownDescription": "Enables the dl_create command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the dl_create_many command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dl-create-many",
+          "markdownDescription": "Enables the dl_create_many command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the dl_get command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dl-get",
+          "markdownDescription": "Enables the dl_get command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the dl_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dl-list",
+          "markdownDescription": "Enables the dl_list command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the dl_remove command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dl-remove",
+          "markdownDescription": "Enables the dl_remove command without any pre-configured scope."
+        },
+        {
           "description": "Enables the http_get command without any pre-configured scope.",
           "type": "string",
           "const": "allow-http-get",
@@ -379,6 +253,30 @@
           "type": "string",
           "const": "allow-keep-awake",
           "markdownDescription": "Enables the keep_awake command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the lib_delete command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-lib-delete",
+          "markdownDescription": "Enables the lib_delete command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the lib_read command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-lib-read",
+          "markdownDescription": "Enables the lib_read command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the lib_root command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-lib-root",
+          "markdownDescription": "Enables the lib_root command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the lib_write command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-lib-write",
+          "markdownDescription": "Enables the lib_write command without any pre-configured scope."
         },
         {
           "description": "Enables the list_displays command without any pre-configured scope.",
@@ -411,6 +309,12 @@
           "markdownDescription": "Enables the stop_audio_capture command without any pre-configured scope."
         },
         {
+          "description": "Enables the system_accent command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-system-accent",
+          "markdownDescription": "Enables the system_accent command without any pre-configured scope."
+        },
+        {
           "description": "Denies the ad_debug_log command without any pre-configured scope.",
           "type": "string",
           "const": "deny-ad-debug-log",
@@ -435,6 +339,48 @@
           "markdownDescription": "Denies the close_projector command without any pre-configured scope."
         },
         {
+          "description": "Denies the dl_cancel command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dl-cancel",
+          "markdownDescription": "Denies the dl_cancel command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the dl_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dl-config",
+          "markdownDescription": "Denies the dl_config command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the dl_create command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dl-create",
+          "markdownDescription": "Denies the dl_create command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the dl_create_many command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dl-create-many",
+          "markdownDescription": "Denies the dl_create_many command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the dl_get command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dl-get",
+          "markdownDescription": "Denies the dl_get command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the dl_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dl-list",
+          "markdownDescription": "Denies the dl_list command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the dl_remove command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dl-remove",
+          "markdownDescription": "Denies the dl_remove command without any pre-configured scope."
+        },
+        {
           "description": "Denies the http_get command without any pre-configured scope.",
           "type": "string",
           "const": "deny-http-get",
@@ -445,6 +391,30 @@
           "type": "string",
           "const": "deny-keep-awake",
           "markdownDescription": "Denies the keep_awake command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the lib_delete command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-lib-delete",
+          "markdownDescription": "Denies the lib_delete command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the lib_read command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-lib-read",
+          "markdownDescription": "Denies the lib_read command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the lib_root command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-lib-root",
+          "markdownDescription": "Denies the lib_root command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the lib_write command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-lib-write",
+          "markdownDescription": "Denies the lib_write command without any pre-configured scope."
         },
         {
           "description": "Denies the list_displays command without any pre-configured scope.",
@@ -475,6 +445,12 @@
           "type": "string",
           "const": "deny-stop-audio-capture",
           "markdownDescription": "Denies the stop_audio_capture command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the system_accent command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-system-accent",
+          "markdownDescription": "Denies the system_accent command without any pre-configured scope."
         },
         {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
@@ -2515,54 +2491,6 @@
           "type": "string",
           "const": "core:window:deny-unminimize",
           "markdownDescription": "Denies the unminimize command without any pre-configured scope."
-        },
-        {
-          "description": "This permission set allows opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application\nas well as reveal file in directories using default file explorer\n#### This default permission set includes:\n\n- `allow-open-url`\n- `allow-reveal-item-in-dir`\n- `allow-default-urls`",
-          "type": "string",
-          "const": "opener:default",
-          "markdownDescription": "This permission set allows opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application\nas well as reveal file in directories using default file explorer\n#### This default permission set includes:\n\n- `allow-open-url`\n- `allow-reveal-item-in-dir`\n- `allow-default-urls`"
-        },
-        {
-          "description": "This enables opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application.",
-          "type": "string",
-          "const": "opener:allow-default-urls",
-          "markdownDescription": "This enables opening `mailto:`, `tel:`, `https://` and `http://` urls using their default application."
-        },
-        {
-          "description": "Enables the open_path command without any pre-configured scope.",
-          "type": "string",
-          "const": "opener:allow-open-path",
-          "markdownDescription": "Enables the open_path command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the open_url command without any pre-configured scope.",
-          "type": "string",
-          "const": "opener:allow-open-url",
-          "markdownDescription": "Enables the open_url command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the reveal_item_in_dir command without any pre-configured scope.",
-          "type": "string",
-          "const": "opener:allow-reveal-item-in-dir",
-          "markdownDescription": "Enables the reveal_item_in_dir command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the open_path command without any pre-configured scope.",
-          "type": "string",
-          "const": "opener:deny-open-path",
-          "markdownDescription": "Denies the open_path command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the open_url command without any pre-configured scope.",
-          "type": "string",
-          "const": "opener:deny-open-url",
-          "markdownDescription": "Denies the open_url command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the reveal_item_in_dir command without any pre-configured scope.",
-          "type": "string",
-          "const": "opener:deny-reveal-item-in-dir",
-          "markdownDescription": "Denies the reveal_item_in_dir command without any pre-configured scope."
         }
       ]
     },
@@ -2657,23 +2585,6 @@
           "enum": [
             "iOS"
           ]
-        }
-      ]
-    },
-    "Application": {
-      "description": "Opener scope application.",
-      "anyOf": [
-        {
-          "description": "Open in default application.",
-          "type": "null"
-        },
-        {
-          "description": "If true, allow open with any application.",
-          "type": "boolean"
-        },
-        {
-          "description": "Allow specific application to open with.",
-          "type": "string"
         }
       ]
     }

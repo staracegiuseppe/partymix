@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The app is served by its own local server (http://localhost:9527): the YouTube player needs a real http origin.
-     Plain http is allowed only towards this device, never to the internet. -->
+     Plain http is also needed for the PartyMix server on the home NAS (e.g. http://192.168.1.87:8788): Android cannot
+     list address ranges here, so the app itself refuses plain http towards anything that is not a home/VPN address
+     (isPrivateHost in src/sync/client.ts). Everything else on the internet is https. -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">localhost</domain>
-        <domain includeSubdomains="false">127.0.0.1</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>
