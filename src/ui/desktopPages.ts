@@ -139,7 +139,7 @@ export function buildDesktopPages(d: PagesDeps) {
       fav: !!e?.favorite, skip: !d.online() && off !== 'offline' && !t.videoId.startsWith('nas:'), reason: w?.full,
       fmt: d.library.formatOf(t.videoId),
     };
-    const job = off !== 'offline' && !t.videoId.includes(':') ? d.downloads?.jobForVideo(t.videoId) : undefined;
+    const job = off !== 'offline' && !t.videoId.includes(':') ? d.downloads?.jobForVideo?.(t.videoId) : undefined;
     if (job && (job.status === 'QUEUED' || job.status === 'DOWNLOADING' || job.status === 'PROCESSING')) {
       vm.off = job.status === 'QUEUED' ? 'queued' : 'downloading';
       vm.pct = Math.max(0, Math.min(1, (job.progress || 0) / 100));
@@ -442,7 +442,7 @@ export function buildDesktopPages(d: PagesDeps) {
     h('div', { class: 'dl-banner-row' }, dtDlText, btn('Vedi i dettagli in Download →', 'm-tonal', () => d.go('downloads'))), dtDlBar);
   let dtDlSig = '';
   function paintDtDl(ids: string[]) {
-    const pr = d.downloads?.progressOf(ids);
+    const pr = d.downloads?.progressOf?.(ids);
     const show = !!pr && (pr.running + pr.queued > 0);
     dtDl.classList.toggle('hidden', !show);
     if (!show || !pr) return;
