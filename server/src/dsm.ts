@@ -9,6 +9,9 @@ import { request } from 'node:http';
  * shared playlists.
  */
 
+/** How PartyMix shows itself to DSM: first as itself, then as the NAS apps a normal user is usually allowed to use. */
+const SESSIONS = ['PartyMix', 'FileStation', 'AudioStation', 'VideoStation', 'DownloadStation'];
+
 export type DsmCheck = { ok: true; admin: boolean } | { ok: false; reason: 'wrong' | 'otp' | 'disabled' | 'unreachable'; message: string };
 
 export type DsmOptions = {
@@ -39,24 +42,31 @@ export function dsmAdmins(groupFile: string): Set<string> {
 /** DSM error codes for a login: 400 wrong password, 401 account disabled, 402 no permission, 403/404/406 two-step verification. */
 export async function dsmLogin(o: DsmOptions, name: string, password: string): Promise<DsmCheck> {
   if (!o.url) return { ok: false, reason: 'unreachable', message: 'Accesso con gli utenti del NAS non disponibile' };
-  const q = new URLSearchParams({ api: 'SYNO.API.Auth', version: '6', method: 'login', account: name, passwd: password, session: 'PartyMix', format: 'sid' });
-  let j: { success?: boolean; data?: { sid?: string }; error?: { code?: number } };
-  try {
-    // a small NAS can take several seconds to check a password (and DSM slows down wrong ones on purpose)
-    j = await post(o, q, 25_000) as typeof j;
-  } catch (e) {
-    return { ok: false, reason: 'unreachable', message: `DSM non risponde (${(e as Error).message})` };
+  // DSM lets an unknown «session» in only for users allowed on the DSM desktop (often only administrators): a user
+  // without it (402) is checked again as one of the NAS apps they may use. Right password + any of them = welcome.
+  let j: { success?: boolean; data?: { sid?: string }; error?: { code?: number } } = {};
+  let session = '';
+  for (const s of SESSIONS) {
+    const q = new URLSearchParams({ api: 'SYNO.API.Auth', version: '6', method: 'login', account: name, passwd: password, session: s, format: 'sid' });
+    try {
+      // a small NAS can take several seconds to check a password (and DSM slows down wrong ones on purpose)
+      j = await post(o, q, 25_000) as typeof j;
+    } catch (e) {
+      return { ok: false, reason: 'unreachable', message: `DSM non risponde (${(e as Error).message})` };
+    }
+    session = s;
+    if (j.success || j.error?.code !== 402) break;
   }
   if (!j.success) {
     const c = j.error?.code ?? 0;
     if (c === 403 || c === 404 || c === 406) return { ok: false, reason: 'otp', message: 'Questo utente del NAS usa la verifica in due passaggi: collega il dispositivo con il codice a 6 cifre da un dispositivo già collegato' };
     if (c === 401) return { ok: false, reason: 'disabled', message: 'Questo utente del NAS è disattivato' };
-    if (c === 402) return { ok: false, reason: 'disabled', message: 'Questo utente del NAS non ha il permesso di accedere' };
+    if (c === 402) return { ok: false, reason: 'disabled', message: 'La password è giusta, ma questo utente non può usare nessuna app del NAS. In DSM → Pannello di controllo → Privilegi applicazione, consenti a questo utente File Station (oppure Audio Station o Video Station), poi riprova' };
     return { ok: false, reason: 'wrong', message: 'Nome o password sbagliati' };
   }
   // the DSM session was only to check the password: closed at once
   if (j.data?.sid) {
-    const out = new URLSearchParams({ api: 'SYNO.API.Auth', version: '6', method: 'logout', session: 'PartyMix', _sid: j.data.sid });
+    const out = new URLSearchParams({ api: 'SYNO.API.Auth', version: '6', method: 'logout', session, _sid: j.data.sid });
     void post(o, out, 10_000).catch(() => {});
   }
   return { ok: true, admin: dsmAdmins(o.groupFile ?? '/etc/group').has(name.toLowerCase()) };

@@ -10,7 +10,7 @@ import { openDb } from '../src/db.ts';
 import { dsmAdmins } from '../src/dsm.ts';
 
 // a fake DSM: stareis (administrator) and raffaele (normal user), lucia with two-step verification
-const USERS: Record<string, string> = { stareis: 'pw-stareis', raffaele: 'pw-raffaele', lucia: 'pw-lucia' };
+const USERS: Record<string, string> = { stareis: 'pw-stareis', raffaele: 'pw-raffaele', lucia: 'pw-lucia', mario: 'pw-mario' };
 let dsm: Server, dsmUrl = '', logouts = 0;
 let root: string, app: App, server: Server, base: string;
 
@@ -23,6 +23,8 @@ before(async () => {
       res.setHeader('content-type', 'application/json');
       if (q.get('method') === 'logout') { logouts++; res.end('{"success":true}'); return; }
       const name = q.get('account') ?? '';
+      // like DSM: a normal user may not use the DSM desktop (unknown session), only File Station; «mario» may use nothing
+      if (USERS[name] === q.get('passwd') && (name === 'raffaele' || name === 'mario') && (name === 'mario' || q.get('session') !== 'FileStation')) { res.end('{"success":false,"error":{"code":402}}'); return; }
       if (name === 'lucia' && q.get('passwd') === USERS.lucia) { res.end('{"success":false,"error":{"code":403}}'); return; }
       res.end(USERS[name] && USERS[name] === q.get('passwd') ? `{"success":true,"data":{"sid":"sid-${name}"}}` : '{"success":false,"error":{"code":400}}');
     });
@@ -98,6 +100,12 @@ describe('accesso con gli utenti del NAS (DSM)', () => {
     assert.equal(r.status, 401);
     assert.match(r.body.message, /utente del NAS/);
     assert.equal((await login('nessuno', 'x')).status, 401);
+  });
+
+  test('un utente senza nessuna app del NAS: dice quale privilegio concedere in DSM', async () => {
+    const r = await login('mario', 'pw-mario');
+    assert.equal(r.status, 401);
+    assert.match(r.body.message, /Privilegi applicazione/);
   });
 
   test('verifica in due passaggi: spiega di usare il codice a 6 cifre', async () => {
