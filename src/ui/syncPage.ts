@@ -5,6 +5,8 @@ import type { SyncConflict, SyncEngine } from '../sync/engine';
 import type { Uploader } from '../sync/uploader';
 import type { NasMusic } from '../sync/nasMusic';
 import type { Playlist } from '../library/playlists';
+import type { Track } from '../queue';
+import type { TrackDoc } from '../../shared/model';
 import { h } from './dom';
 
 /** What the ☁ Sync and 📱 Dispositivi pages need from the app. */
@@ -22,6 +24,9 @@ export type SyncUIDeps = {
   here?: string;
   /** Where the NAS connection is, in words for the hints («Impostazioni → NAS» on the computer, «NAS» on the phone). */
   where?: string;
+  /** Phone only (it has no Cerca page): a search box over the NAS music, with these actions on each song. */
+  play?(t: Track): void;
+  enqueue?(t: Track, next: boolean): void;
   /** Songs being copied from the NAS to this device, for the list with a bar per file. */
   copies?(): { id: string; title: string; artist: string; state: 'downloading' | 'error'; progress?: number; error?: string }[];
   /** The upload queue to the NAS (when linked). */
@@ -221,10 +226,12 @@ export function buildSyncUI(d: SyncUIDeps) {
   const savePlBtn = btn('⬇ Salva i brani delle playlist', 'm-tonal', () => void runSave('playlists'));
   const saveAllBtn = btn('⬇ Salva tutta la musica del NAS', 'm-outlined', () => void runSave('all'));
   const stopBtn = btn('Ferma', 'm-outlined', () => d.nasMusic?.()?.stop());
-  const scanBtn = btn('🔎 Cerca brani copiati sul NAS', 'm-outlined', async (b) => {
+  const scanMsg = h('div', { class: 'pg-hint' });
+  const scanBtn = btn('🔄 Aggiorna dalla cartella music del NAS', 'm-outlined', async (b) => {
     const api = d.api();
     if (!api?.scan) return;
     b.disabled = true;
+    scanMsg.textContent = 'Controllo la cartella PartyMix/music del NAS…';
     try {
       await api.scan();
       for (let i = 0; i < 600; i++) { // up to 10 minutes: hashing a big folder on a small NAS takes a while
@@ -232,20 +239,52 @@ export function buildSyncUI(d: SyncUIDeps) {
         const s = await api.scanStatus!();
         if (!s.running) {
           const l = s.last;
-          d.status(l ? (l.added ? `🔎 Trovati ${l.added} brani nuovi nella cartella music del NAS${l.duplicates ? ` (${l.duplicates} doppioni ignorati)` : ''}.` : 'Nessun brano nuovo nella cartella music del NAS.') : 'Ricerca finita.');
+          const msg = !l ? 'Controllo finito.'
+            : !l.found ? 'Nella cartella music non ci sono file nuovi: tutto quello che c’è è già nell’elenco del NAS.'
+            : `Trovati ${l.found} file nuovi: ${l.added} aggiunti${l.duplicates ? `, ${l.duplicates} già presenti (doppioni)` : ''}${l.failed ? `, ${l.failed} non leggibili` : ''}.`;
+          scanMsg.textContent = `${msg} (${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })})`;
+          d.status(`🔄 ${msg}`);
           void d.engine()?.syncNow();
           break;
         }
       }
-    } catch (e) { d.status(`Ricerca non riuscita: ${errText(e)}`, true); }
+    } catch (e) { scanMsg.textContent = `Controllo non riuscito: ${errText(e)}`; d.status(scanMsg.textContent, true); }
     b.disabled = false;
   });
   const musicPanel = h('section', { class: 'panel sync-music' }, h('h3', {}, `Musica del NAS su ${here}`),
     mText,
     h('div', { class: 'sync-upload' }, savePlBtn, saveAllBtn, stopBtn),
     mJob,
-    h('div', { class: 'sync-upload' }, scanBtn),
-    h('p', { class: 'pg-hint' }, `☁ = suona dal NAS quando sei a casa (o in VPN). ✓ = salvato su ${here}: suona anche senza NAS. I file messi a mano nella cartella PartyMix/music del NAS entrano con «Cerca brani copiati».`));
+    h('div', { class: 'sync-upload' }, scanBtn), scanMsg,
+    h('p', { class: 'pg-hint' }, `☁ = suona dal NAS quando sei a casa (o in VPN). ✓ = salvato su ${here}: suona anche senza NAS. I file copiati a mano (File Station, cartella condivisa) nella cartella PartyMix/music del NAS entrano nell’elenco con «Aggiorna dalla cartella music». Per trovare un brano usa la ricerca${d.play ? ' qui sopra' : ' (Cerca → ☁ NAS)'}.`));
+
+  // ---- phone: search the NAS music (the computer has it in Cerca → ☁ NAS) ----
+  const nsInput = h('input', { type: 'search', class: 'pg-input', placeholder: 'Cerca sul NAS: titolo, artista, album', 'aria-label': 'Cerca sul NAS' }) as HTMLInputElement;
+  const nsInfo = h('div', { class: 'pg-hint' });
+  const nsList = h('div', { class: 'up-list ns-list', role: 'list' });
+  const searchPanel = h('section', { class: 'panel ns-panel' }, h('h3', {}, '🔎 Cerca sul NAS'), nsInput, nsInfo, nsList);
+  let nsTimer: ReturnType<typeof setTimeout> | undefined, nsSeq = 0;
+  const toTrack = (t: TrackDoc): Track => ({ videoId: `nas:${t.id}`, title: t.title, artist: t.artist ?? '', ...(t.album ? { album: t.album } : {}), ...(t.durationSec ? { durationSec: t.durationSec } : {}), status: 'ok', manual: true });
+  async function nasSearch() {
+    const api = d.api(), q = nsInput.value.trim(), my = ++nsSeq;
+    if (!api) return;
+    nsInfo.textContent = 'Cerco…';
+    try {
+      const page = await api.library(undefined, 60, q);
+      if (my !== nsSeq) return;
+      nsInfo.textContent = page.tracks.length ? `${page.tracks.length}${page.next ? '+' : ''} brani${q ? ` per «${q}»` : ''}` : 'Nessun brano trovato.';
+      nsList.replaceChildren(...page.tracks.map((t) => {
+        const tr = toTrack(t);
+        return h('div', { class: 'up-row ns-row', role: 'listitem' },
+          h('div', { class: 'up-t' }, h('span', { class: 'up-title' }, t.title), t.artist ? h('span', { class: 'up-artist' }, ` · ${t.artist}`) : null),
+          h('div', { class: 'ns-a' },
+            btn('▶', 'm-tonal', () => d.play?.(tr), { title: 'Suona adesso', 'aria-label': `Suona ${t.title}` }),
+            btn('⤵', 'm-outlined', () => d.enqueue?.(tr, false), { title: 'Metti in coda', 'aria-label': `Metti in coda ${t.title}` }),
+            btn('⬇', 'm-outlined', () => { d.nasMusic?.()?.save([tr.videoId]).then(() => d.status(`⬇ Salvo «${t.title}» su ${here}.`), (e) => d.status(errText(e), true)); }, { title: `Salva su ${here}`, 'aria-label': `Salva ${t.title}` })));
+      }));
+    } catch (e) { if (my === nsSeq) nsInfo.textContent = `Ricerca non riuscita: ${errText(e)}`; }
+  }
+  nsInput.addEventListener('input', () => { clearTimeout(nsTimer); nsTimer = setTimeout(() => void nasSearch(), 350); });
   let lastMusic = '';
   function paintMusic() {
     const m = d.nasMusic?.();
@@ -277,7 +316,7 @@ export function buildSyncUI(d: SyncUIDeps) {
   const syncPage = h('div', { class: 'pg pg-sync' }, syncHead, connectPanel, statePanel, conflictPanel);
   const filesHead = h('header', { class: 'pg-head' }, h('div', { class: 'pg-tt' }, h('h2', { class: 'pg-title' }, '☁ Musica sul NAS'), h('div', { class: 'pg-sub' }, `Caricamenti, brani del NAS su ${here}, spazio`)));
   const filesNotLinked = h('p', { class: 'pg-hint' }, `Il NAS non è collegato: collegalo da ${where}.`);
-  const filesPage = h('div', { class: 'pg pg-nasfiles' }, filesHead, filesNotLinked, uploadPanel, listPanel, musicPanel, storagePanel);
+  const filesPage = h('div', { class: 'pg pg-nasfiles' }, filesHead, filesNotLinked, ...(d.play ? [searchPanel] : []), uploadPanel, listPanel, musicPanel, storagePanel);
 
   let lastPaint = '';
   function paintSync() {
@@ -365,7 +404,9 @@ export function buildSyncUI(d: SyncUIDeps) {
     const linked = !!d.config() && !!d.engine();
     filesNotLinked.classList.toggle('hidden', linked);
     storagePanel.classList.toggle('hidden', !linked);
+    searchPanel.classList.toggle('hidden', !linked);
     if (!linked) { uploadPanel.classList.add('hidden'); musicPanel.classList.add('hidden'); listPanel.classList.add('hidden'); return; }
+    if (d.play && !nsSeq) void nasSearch(); // first look: the latest songs, before typing
     paintUpload();
     paintMusic();
     paintList();

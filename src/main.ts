@@ -416,6 +416,7 @@ const syncDeps = !isIOSApp() ? {
   status: (t: string, e?: boolean) => ui.setStatus(t, e),
   here: desktopUI ? 'questo computer' : 'questo telefono',
   where: desktopUI ? 'Impostazioni → NAS' : 'la scheda NAS',
+  ...(desktopUI ? {} : { play: (t: Track) => playTrack(t), enqueue: (t: Track, next: boolean) => enqueue(t, next) }),
   copies: () => library.all().filter((e) => e.source === 'nas' && (e.state === 'downloading' || e.state === 'error')).map((e) => ({ id: e.id, title: e.title, artist: e.artist, state: e.state!, progress: e.progress, error: e.error })),
   uploader: () => uploader,
   uploadAuto: () => settings.nasUploadAuto,
