@@ -20,6 +20,10 @@ export type SyncUIDeps = {
   now?: () => number;
   /** How this device is called in the texts: «questo computer» (default) or «questo telefono». */
   here?: string;
+  /** Where the NAS connection is, in words for the hints («Impostazioni → NAS» on the computer, «NAS» on the phone). */
+  where?: string;
+  /** Songs being copied from the NAS to this device, for the list with a bar per file. */
+  copies?(): { id: string; title: string; artist: string; state: 'downloading' | 'error'; progress?: number; error?: string }[];
   /** The upload queue to the NAS (when linked). */
   uploader(): Uploader | undefined;
   /** The NAS songs on this device: streaming, copies to listen without the NAS. */
@@ -50,6 +54,7 @@ export function ago(t: number | undefined, now = Date.now()): string {
 export function buildSyncUI(d: SyncUIDeps) {
   const now = d.now ?? Date.now;
   const here = d.here ?? 'questo computer';
+  const where = d.where ?? 'Impostazioni → NAS';
   const Here = here[0].toUpperCase() + here.slice(1);
   const errText = (e: unknown) => (e instanceof SyncError ? e.message : (e as Error)?.message ?? String(e));
 
@@ -156,7 +161,40 @@ export function buildSyncUI(d: SyncUIDeps) {
     h('div', { class: 'sync-upload' }, upText, upBtn),
     h('div', { class: 'sync-upload' }, h('label', { for: 'nas-upload-auto' }, autoBox, 'Carica sul NAS i brani importati')),
     h('p', { class: 'pg-hint' }, 'Ogni file va sul NAS una volta sola: se c’è già, viene solo collegato. Un file arrivato danneggiato viene scartato e segnato come errore.'));
+
+  // one line per file: what is going up, what waits, what failed (and why), what just arrived
+  const STATE_TEXT: Record<string, string> = { uploading: '⬆ Caricamento', checking: '🔎 Controllo', queued: '⏳ In attesa', error: '⚠ Non riuscito', done: '✓ Sul NAS', downloading: '⬇ Salvataggio' };
+  const listFilter = { v: 'all' as 'all' | 'active' | 'error' };
+  const filterBtns = (['all', 'active', 'error'] as const).map((f) => btn(f === 'all' ? 'Tutti' : f === 'active' ? 'In corso' : 'Non riusciti', 'chip', () => { listFilter.v = f; lastList = ''; paintList(); }));
+  const listHead = h('div', { class: 'chips' }, ...filterBtns);
+  const listBox = h('div', { class: 'up-list', role: 'list', 'aria-label': 'Avanzamento dei file' });
+  const listPanel = h('section', { class: 'panel up-panel' }, h('h3', {}, 'Avanzamento dei file'), listHead, listBox);
+  let lastList = '';
+  function fileRow(r: { id: string; title: string; artist: string; state: string; progress?: number; error?: string }, retry?: () => void) {
+    const pct = r.state === 'done' ? 100 : Math.round((r.progress ?? 0) * 100);
+    return h('div', { class: `up-row ${r.state}`, role: 'listitem' },
+      h('div', { class: 'up-t' }, h('span', { class: 'up-title' }, r.title), r.artist ? h('span', { class: 'up-artist' }, ` · ${r.artist}`) : null),
+      h('div', { class: 'up-s' }, (STATE_TEXT[r.state] ?? r.state) + (r.state === 'uploading' || r.state === 'downloading' ? ` ${pct}%` : '')),
+      h('div', { class: `up-bar ${r.state}` }, h('span', { style: `width:${r.state === 'queued' || r.state === 'checking' ? 0 : pct}%` })),
+      r.error ? h('div', { class: 'up-err' }, r.error) : null,
+      retry && r.state === 'error' ? btn('Riprova', 'm-text-btn up-retry', retry) : null);
+  }
+  function paintList() {
+    const up = d.uploader();
+    const rows = [...(up?.list() ?? []).map((r) => ({ r: r as Parameters<typeof fileRow>[0], retry: (() => up?.retry(r.id)) as (() => void) | undefined })), ...(d.copies?.() ?? []).map((r) => ({ r: r as Parameters<typeof fileRow>[0], retry: undefined }))];
+    listPanel.classList.toggle('hidden', !rows.length);
+    if (!rows.length) return;
+    const f = listFilter.v;
+    const shown = rows.filter(({ r }) => f === 'all' || (f === 'error' ? r.state === 'error' : r.state !== 'error' && r.state !== 'done')).slice(0, 200);
+    const key = JSON.stringify([f, rows.length, shown.map(({ r }) => [r.id, r.state, Math.round((r.progress ?? 0) * 100), r.error])]);
+    if (key === lastList) return;
+    lastList = key;
+    const n = { all: rows.length, active: rows.filter(({ r }) => r.state !== 'error' && r.state !== 'done').length, error: rows.filter(({ r }) => r.state === 'error').length };
+    filterBtns.forEach((b, i) => { const k = (['all', 'active', 'error'] as const)[i]; b.classList.toggle('on', k === f); b.textContent = `${k === 'all' ? 'Tutti' : k === 'active' ? 'In corso' : 'Non riusciti'} (${n[k]})`; });
+    listBox.replaceChildren(...(shown.length ? shown.map(({ r, retry }) => fileRow(r, retry)) : [h('p', { class: 'pg-hint' }, 'Niente qui.')]));
+  }
   let lastUp = '';
+
   function paintUpload() {
     const up = d.uploader();
     uploadPanel.classList.toggle('hidden', !up);
@@ -235,18 +273,18 @@ export function buildSyncUI(d: SyncUIDeps) {
     storText.replaceChildren(h('div', {}, 'Musica: ', h('b', {}, storage ? `${fmtSize(storage.musicBytes)} · ${storage.tracks.toLocaleString('it-IT')} brani` : '—')), h('div', {}, 'Libero: ', h('b', {}, fmtSize(storage?.freeBytes))), h('div', {}, 'Totale: ', h('b', {}, fmtSize(storage?.totalBytes))));
   }
 
-  const syncHead = h('header', { class: 'pg-head' }, h('div', { class: 'pg-tt' }, h('h1', { class: 'pg-title' }, 'Sync'), h('div', { class: 'pg-sub' }, 'Le playlist uguali su tutti i tuoi dispositivi, con il NAS al centro')));
-  const syncPage = h('div', { class: 'pg pg-sync' }, syncHead, connectPanel, statePanel, conflictPanel, musicPanel, uploadPanel, storagePanel);
+  const syncHead = h('header', { class: 'pg-head' }, h('div', { class: 'pg-tt' }, h('h2', { class: 'pg-title' }, '☁ NAS e sincronizzazione'), h('div', { class: 'pg-sub' }, 'Le playlist uguali su tutti i tuoi dispositivi, con il NAS al centro')));
+  const syncPage = h('div', { class: 'pg pg-sync' }, syncHead, connectPanel, statePanel, conflictPanel);
+  const filesHead = h('header', { class: 'pg-head' }, h('div', { class: 'pg-tt' }, h('h2', { class: 'pg-title' }, '☁ Musica sul NAS'), h('div', { class: 'pg-sub' }, `Caricamenti, brani del NAS su ${here}, spazio`)));
+  const filesNotLinked = h('p', { class: 'pg-hint' }, `Il NAS non è collegato: collegalo da ${where}.`);
+  const filesPage = h('div', { class: 'pg pg-nasfiles' }, filesHead, filesNotLinked, uploadPanel, listPanel, musicPanel, storagePanel);
 
   let lastPaint = '';
   function paintSync() {
     const cfg = d.config(), eng = d.engine();
     connectPanel.classList.toggle('hidden', !!cfg);
     statePanel.classList.toggle('hidden', !cfg);
-    storagePanel.classList.toggle('hidden', !cfg);
-    if (!cfg || !eng) { conflictPanel.classList.add('hidden'); uploadPanel.classList.add('hidden'); musicPanel.classList.add('hidden'); return; }
-    paintUpload();
-    paintMusic();
+    if (!cfg || !eng) { conflictPanel.classList.add('hidden'); return; }
     const s = eng.status();
     const key = JSON.stringify([s.connected, s.live, s.syncing, s.lastSync, s.pending, s.error, s.lastNews, s.conflicts.length, Math.floor(now() / 30_000)]);
     if (key === lastPaint) return;
@@ -281,7 +319,7 @@ export function buildSyncUI(d: SyncUIDeps) {
       const { code, expiresAt } = await api.pairCode();
       pairBox.classList.remove('hidden');
       const left = h('span', {});
-      pairBox.replaceChildren(h('h3', {}, 'Codice per il nuovo dispositivo'), h('div', { class: 'pair-code' }, code), h('p', { class: 'pg-hint' }, 'Sull’altro dispositivo: ☁ Sync → scrivi l’indirizzo del NAS → «Codice da un altro dispositivo». Vale 5 minuti, una volta sola. ', left));
+      pairBox.replaceChildren(h('h3', {}, 'Codice per il nuovo dispositivo'), h('div', { class: 'pair-code' }, code), h('p', { class: 'pg-hint' }, `Sull’altro dispositivo: ${where} → scrivi l’indirizzo del NAS → «Codice da un altro dispositivo». Vale 5 minuti, una volta sola. `, left));
       const tick = () => { const s = Math.max(0, Math.round((expiresAt - now()) / 1000)); left.textContent = s ? `Scade tra ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}.` : 'Scaduto.'; if (!s) { clearInterval(iv); } };
       const iv = setInterval(tick, 1000); tick();
     } catch (e) { d.status(errText(e), true); }
@@ -292,7 +330,7 @@ export function buildSyncUI(d: SyncUIDeps) {
   let devices: DeviceDoc[] = [], devicesAt = 0;
   async function refreshDevices(force = false) {
     const api = d.api();
-    if (!api) { devMsg.textContent = 'Collega prima il NAS dalla pagina ☁ Sync.'; devList.replaceChildren(); addBtn.disabled = true; return; }
+    if (!api) { devMsg.textContent = `Collega prima il NAS da ${where}.`; devList.replaceChildren(); addBtn.disabled = true; return; }
     addBtn.disabled = false;
     if (!force && now() - devicesAt < 15_000) return;
     devicesAt = now();
@@ -322,15 +360,28 @@ export function buildSyncUI(d: SyncUIDeps) {
       h('div', { class: 'dev-a' }, ...(dev.revoked ? [] : [rename, revoke])));
   }
 
-  function paintAll() { lastPaint = ''; paintSync(); void refreshDevices(true); }
+  /** The NAS files part (Libreria on the computer): uploads with a bar per file, NAS songs here, space. */
+  function paintFiles() {
+    const linked = !!d.config() && !!d.engine();
+    filesNotLinked.classList.toggle('hidden', linked);
+    storagePanel.classList.toggle('hidden', !linked);
+    if (!linked) { uploadPanel.classList.add('hidden'); musicPanel.classList.add('hidden'); listPanel.classList.add('hidden'); return; }
+    paintUpload();
+    paintMusic();
+    paintList();
+  }
+  function paintAll() { lastPaint = ''; paintSync(); paintFiles(); void refreshDevices(true); }
   paintSync();
+  paintFiles();
 
   return {
     syncPage,
+    filesPage,
     devicesPage,
     /** Called by the app's tick: repaints only what changed; the NAS is asked only on the open page, and not too often. */
     update(page: string) {
-      if (page === 'sync') { paintSync(); void refreshStorage(); }
+      if (page === 'sync') paintSync();
+      else if (page === 'files') { paintFiles(); void refreshStorage(); }
       else if (page === 'devices') void refreshDevices();
     },
     /** How many playlists this computer has (shown next to the NAS state). */

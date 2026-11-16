@@ -454,3 +454,25 @@ body.md.desk .m-nav .m-nav-item.on { color: var(--md-on-secondary-container); }
 .desk .dev-a { display: flex; gap: 4px; }
 .desk .dev-a .danger { color: var(--err, #b3261e); }
 .desk .pair-code { font-size: 44px; font-weight: 700; letter-spacing: .25em; font-variant-numeric: tabular-nums; margin: 8px 0; color: var(--md-primary); }
+
+/* ☁ NAS files in Libreria and NAS connection in Impostazioni */
+.desk .lib-nas { margin-top: 24px; }
+.desk .lib-nas .pg-nasfiles, .desk .settings-nas { display: grid; gap: 16px; }
+.desk .settings-nas { margin-top: 24px; }
+.desk .pg-nasfiles .pg-title, .desk .settings-nas .pg-title { font-size: 22px; line-height: 28px; }
+
+/* One line per file going to (or coming from) the NAS, with its bar */
+.desk .up-list { display: grid; gap: 2px; max-height: 420px; overflow: auto; margin-top: 8px; }
+.desk .up-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 4px; border-bottom: 1px solid color-mix(in srgb, var(--md-outline-variant) 50%, transparent); align-items: center; }
+.desk .up-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desk .up-artist { color: var(--md-on-surface-variant); font-size: 13px; }
+.desk .up-s { font-size: 12px; color: var(--md-on-surface-variant); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.desk .up-bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--md-surface-highest, #ddd); overflow: hidden; }
+.desk .up-bar span { display: block; height: 100%; background: var(--md-primary); transition: width .3s; }
+.desk .up-bar.done span { background: var(--ok); }
+.desk .up-bar.error span { background: var(--md-error); width: 100% !important; opacity: .5; }
+.desk .up-row.error .up-s { color: var(--md-error); }
+.desk .up-row.done .up-s { color: var(--ok); }
+.desk .up-err { grid-column: 1; font-size: 12px; color: var(--md-error); }
+.desk .up-retry { grid-column: 2; justify-self: end; min-height: 32px; }
+.desk .up-row.queued .up-bar, .desk .up-row.checking .up-bar { background: repeating-linear-gradient(90deg, var(--md-surface-highest, #ddd) 0 6px, transparent 6px 10px); }

@@ -14,6 +14,8 @@ import { SyncError, type SyncApi } from './client';
 /** What the user sees next to a song: ☁ on the NAS, ⬆ going up (or waiting its turn), ⚠ not on the NAS, error. */
 export type NasState = 'nas' | 'queued' | 'checking' | 'uploading' | 'error' | 'missing';
 
+export type UploadRow = { id: string; title: string; artist: string; size: number; state: Exclude<NasState, 'nas' | 'missing'> | 'done'; progress?: number; error?: string };
+
 export type NasSummary = {
   /** Songs with a file on this computer. */
   total: number;
@@ -63,6 +65,8 @@ export class Uploader {
   private listeners = new Set<() => void>();
   private stopFns: (() => void)[] = [];
   private stopped = false;
+  /** The last songs that reached the NAS, newest first (shown as ✓ in the upload list). */
+  private recent: { id: string; title: string; at: number }[] = [];
   private d: UploaderDeps;
   version = 0;
 
@@ -88,6 +92,8 @@ export class Uploader {
 
   /** «Carica ora»: everything not on the NAS, failed ones included. */
   uploadNow(): void { this.scan(true); }
+  /** Tries one failed song again. */
+  retry(id: string): void { const j = this.jobs.get(id); if (j?.state === 'error') this.enqueue(id); }
 
   /** The NAS is back: what failed for that reason is tried again. */
   resume(): void {
@@ -132,6 +138,19 @@ export class Uploader {
     return e?.file ? 'missing' : undefined;
   }
   progressOf(id: string): number | undefined { return this.jobs.get(id)?.progress; }
+
+  /** Every song being sent, waiting or failed, plus the last ones done: for the list with a bar per file. */
+  list(): UploadRow[] {
+    const order: Record<Job['state'], number> = { uploading: 0, checking: 1, queued: 2, error: 3 };
+    const rows: UploadRow[] = [];
+    for (const [id, j] of this.jobs) {
+      const e = this.d.library.get(id);
+      rows.push({ id, title: e?.title || id, artist: e?.artist ?? '', size: e?.size ?? 0, state: j.state, progress: j.progress, error: j.error });
+    }
+    rows.sort((a, b) => order[a.state as Job['state']] - order[b.state as Job['state']] || a.title.localeCompare(b.title, 'it'));
+    for (const r of this.recent) if (!this.jobs.has(r.id)) rows.push({ id: r.id, title: r.title, artist: this.d.library.get(r.id)?.artist ?? '', size: this.d.library.get(r.id)?.size ?? 0, state: 'done', progress: 1 });
+    return rows;
+  }
   errorOf(id: string): string | undefined { return this.jobs.get(id)?.error; }
 
   summary(): NasSummary {
@@ -195,6 +214,7 @@ export class Uploader {
   private async finish(id: string, sha: string) {
     await this.d.library.setNasId(id, sha);
     this.jobs.delete(id);
+    this.recent = [{ id, title: this.d.library.get(id)?.title || id, at: Date.now() }, ...this.recent.filter((r) => r.id !== id)].slice(0, 30);
     this.changed();
     this.d.onDone?.(id, sha);
   }

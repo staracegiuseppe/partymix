@@ -368,7 +368,7 @@ function startSync(cfg: NasConfig) {
     if (s?.connected && !wasConnected) uploader?.resume();
     wasConnected = !!s?.connected;
     if (s?.lastNews && s.lastNews !== lastNews) { lastNews = s.lastNews; ui.setStatus(`☁ ${s.lastNews}`); }
-    if (s?.conflicts.length && !document.body.classList.contains('sync-asked')) { document.body.classList.add('sync-asked'); ui.setStatus('☁ Due dispositivi hanno cambiato la stessa playlist in modi diversi: decidi in ☁ Sync.', true); }
+    if (s?.conflicts.length && !document.body.classList.contains('sync-asked')) { document.body.classList.add('sync-asked'); ui.setStatus(`☁ Due dispositivi hanno cambiato la stessa playlist in modi diversi: decidi in ${desktopUI ? 'Impostazioni → NAS' : 'NAS'}.`, true); }
   });
   void syncEngine.start();
   uploader?.start();
@@ -415,6 +415,8 @@ const syncDeps = !isIOSApp() ? {
   },
   status: (t: string, e?: boolean) => ui.setStatus(t, e),
   here: desktopUI ? 'questo computer' : 'questo telefono',
+  where: desktopUI ? 'Impostazioni → NAS' : 'la scheda NAS',
+  copies: () => library.all().filter((e) => e.source === 'nas' && (e.state === 'downloading' || e.state === 'error')).map((e) => ({ id: e.id, title: e.title, artist: e.artist, state: e.state!, progress: e.progress, error: e.error })),
   uploader: () => uploader,
   uploadAuto: () => settings.nasUploadAuto,
   setUploadAuto: (on: boolean) => { settings.nasUploadAuto = on; save(); },

@@ -214,7 +214,7 @@ export function buildDesktopPages(d: PagesDeps) {
     const id = t.videoId, e = d.library.get(id), st = d.library.stateOf(id);
     const fromNas = id.startsWith('nas:');
     const playable = d.online() || st === 'offline' || fromNas; // a NAS song needs the home network, not the internet
-    const saveNas = () => { const m = d.sync?.nasMusic?.(); if (!m) { d.status('Collega il NAS in ☁ Sync per salvare i suoi brani.', true); return; } m.save([id]).then(() => d.status(`⬇ Salvo «${t.title}» su questo computer.`), (err) => d.status((err as Error).message, true)); };
+    const saveNas = () => { const m = d.sync?.nasMusic?.(); if (!m) { d.status('Collega il NAS in Impostazioni → NAS per salvare i suoi brani.', true); return; } m.save([id]).then(() => d.status(`⬇ Salvo «${t.title}» su questo computer.`), (err) => d.status((err as Error).message, true)); };
     const items: SheetItem[] = [
       { label: 'Riproduci adesso', icon: 'play', disabled: !playable, run: () => d.playTrack(t) },
       { label: 'Suona dopo quello in onda', icon: 'playNext', disabled: !playable, run: () => d.enqueue(t, true) },
@@ -652,6 +652,9 @@ export function buildDesktopPages(d: PagesDeps) {
   const libraryPage = h('div', { class: 'pg pg-library' }, libHead.el,
     h('div', { class: 'pg-toolbar' }, libSearch), h('div', { class: 'chips', role: 'group', 'aria-label': 'Mostra' }, ...chips), importMsg, libBack,
     cols('g2', '#', 'Titolo · Artista · Dove si trova', 'Durata', 'Stato'), libList.el, pickFiles, pickFolder, pickOne);
+  // ☁ the NAS files (uploads with a bar per file, NAS songs on this computer, space): at the end of the Libreria
+  const nasFilesHolder = h('div', { class: 'lib-nas' });
+  libraryPage.append(nasFilesHolder);
   libraryPage.addEventListener('dragover', (e) => { if (Array.from(e.dataTransfer?.types ?? []).includes('Files')) { e.preventDefault(); libraryPage.classList.add('dropfiles'); } });
   libraryPage.addEventListener('dragleave', (e) => { if (e.target === libraryPage) libraryPage.classList.remove('dropfiles'); });
   libraryPage.addEventListener('drop', (e) => { if (e.dataTransfer?.files.length) { e.preventDefault(); libraryPage.classList.remove('dropfiles'); void importFiles(e.dataTransfer.files); } });
@@ -686,10 +689,13 @@ export function buildDesktopPages(d: PagesDeps) {
   // =====================================================================================
   const syncUI = d.sync ? buildSyncUI(d.sync) : undefined;
   syncUI?.setCounter(() => d.playlists.count());
+  if (syncUI) nasFilesHolder.append(syncUI.filesPage);
 
   /** Called by the app's tick (4 times a second): repaints only what changed. */
   function update(page: string) {
-    syncUI?.update(page);
+    // the NAS connection and the devices are in Impostazioni, the NAS files in Libreria
+    if (page === 'settings') { syncUI?.update('sync'); syncUI?.update('devices'); }
+    else if (page === 'library') syncUI?.update('files');
     if (apiKey.value !== d.apiKey() && document.activeElement !== apiKey) apiKey.value = d.apiKey();
     if (page === 'playlists') { if (detailId) paintDetail(); else paintPlaylists(); }
     else if (page === 'search') paintSearch(false);

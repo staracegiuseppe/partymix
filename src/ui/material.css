@@ -293,3 +293,22 @@ body.md.light {
 .md button.m-outlined { background: transparent; color: var(--md-primary); box-shadow: inset 0 0 0 1px var(--md-outline); }
 .md .sync-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; background: var(--md-outline); }
 .md .sync-dot.on { background: var(--ok); } .md .sync-dot.busy { background: var(--warn); }
+
+/* One line per file going to (or coming from) the NAS, with its bar */
+.md .up-list { display: grid; gap: 2px; max-height: 420px; overflow: auto; margin-top: 8px; }
+.md .up-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 4px; border-bottom: 1px solid color-mix(in srgb, var(--md-outline-variant) 50%, transparent); align-items: center; }
+.md .up-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.md .up-artist { color: var(--md-on-surface-variant); font-size: 13px; }
+.md .up-s { font-size: 12px; color: var(--md-on-surface-variant); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.md .up-bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--md-surface-highest, #ddd); overflow: hidden; }
+.md .up-bar span { display: block; height: 100%; background: var(--md-primary); transition: width .3s; }
+.md .up-bar.done span { background: var(--ok); }
+.md .up-bar.error span { background: var(--md-error); width: 100% !important; opacity: .5; }
+.md .up-row.error .up-s { color: var(--md-error); }
+.md .up-row.done .up-s { color: var(--ok); }
+.md .up-err { grid-column: 1; font-size: 12px; color: var(--md-error); }
+.md .up-retry { grid-column: 2; justify-self: end; min-height: 32px; }
+.md .up-row.queued .up-bar, .md .up-row.checking .up-bar { background: repeating-linear-gradient(90deg, var(--md-surface-highest, #ddd) 0 6px, transparent 6px 10px); }
+.md .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.md .chip { height: 32px; min-height: 32px; padding: 0 12px; border-radius: 8px; background: transparent; color: var(--md-on-surface-variant); box-shadow: inset 0 0 0 1px var(--md-outline); font-size: 13px; }
+.md .chip.on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); box-shadow: none; }
