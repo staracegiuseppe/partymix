@@ -83,11 +83,16 @@ const kv: KV = {
 };
 const tauriInvoke = (window as unknown as { __TAURI_INTERNALS__?: { invoke(c: string, a?: unknown, o?: unknown): Promise<unknown> } }).__TAURI_INTERNALS__?.invoke;
 /** The computer console (not the phone or tablet layout): the only one with the library, the side bar and the YouTube search. */
-const desktopUI = !materialUI() && !isIOSApp() && !isAndroidApp();
+/** The app on a computer (Tauri on macOS/Windows/Linux): its own files on disk, Download Manager, system colours. */
+const computerApp = !materialUI() && !isIOSApp() && !isAndroidApp();
+/** The phone (Android app, or ?android in the browser): same pages as the computer, laid out for a phone. */
+const phoneUI = !isIOSApp() && materialUI();
+/** The pages of the computer (Playlist, Cerca, Libreria, Impostazioni): computer and Android alike. */
+const desktopUI = !isIOSApp();
 const plStore = new PlaylistStore(kv);
 const library = new MusicLibrary({
   kv,
-  blobs: desktopUI && tauriInvoke ? new NativeBlobStore((c, a, o) => tauriInvoke(c, a, o), convertFileSrc) : new KvBlobStore(kv),
+  blobs: computerApp && tauriInvoke ? new NativeBlobStore((c, a, o) => tauriInvoke(c, a, o), convertFileSrc) : new KvBlobStore(kv),
   probe: (b) => probeWithAudio(b),
 });
 window.addEventListener('pagehide', () => void plStore.flush().catch(() => {}));
@@ -319,7 +324,7 @@ function trackById(id: string): Track | undefined {
 }
 
 /** Download Manager (computer app): yt-dlp runs in the app, finished files join My Library and the chosen playlist. */
-const downloads = desktopUI && tauriInvoke ? new DownloadCoordinator(
+const downloads = computerApp && tauriInvoke ? new DownloadCoordinator(
   tauriDownloadClient((c, a) => tauriInvoke(c, a), (ev, fn) => listen(ev, fn)),
   library, plStore,
   { status: (t, e) => ui.setStatus(t, e), playlistChanged: (id) => syncQueueWith(id) },
@@ -333,7 +338,7 @@ let uploader: Uploader | undefined;
 let nasMusic: NasMusic | undefined;
 /** Room for copies of NAS songs: the disk (computer app) or what the browser/phone storage still allows. */
 async function freeSpace(): Promise<number | undefined> {
-  if (desktopUI && tauriInvoke) { try { const n = await tauriInvoke('disk_free', {}); return typeof n === 'number' ? n : undefined; } catch { /* unknown */ } }
+  if (computerApp && tauriInvoke) { try { const n = await tauriInvoke('disk_free', {}); return typeof n === 'number' ? n : undefined; } catch { /* unknown */ } }
   try { const e = await navigator.storage?.estimate?.(); return e?.quota != null ? e.quota - (e.usage ?? 0) : undefined; } catch { return undefined; }
 }
 const thisDeviceName = () => { const ua = navigator.userAgent; return isAndroidApp() ? 'Telefono Android' : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'PC Windows' : /Linux/.test(ua) ? 'PC Linux' : 'Computer'; };
@@ -368,7 +373,7 @@ function startSync(cfg: NasConfig) {
     if (s?.connected && !wasConnected) uploader?.resume();
     wasConnected = !!s?.connected;
     if (s?.lastNews && s.lastNews !== lastNews) { lastNews = s.lastNews; ui.setStatus(`☁ ${s.lastNews}`); }
-    if (s?.conflicts.length && !document.body.classList.contains('sync-asked')) { document.body.classList.add('sync-asked'); ui.setStatus(`☁ Due dispositivi hanno cambiato la stessa playlist in modi diversi: decidi in ${desktopUI ? 'Impostazioni → NAS' : 'NAS'}.`, true); }
+    if (s?.conflicts.length && !document.body.classList.contains('sync-asked')) { document.body.classList.add('sync-asked'); ui.setStatus(`☁ Due dispositivi hanno cambiato la stessa playlist in modi diversi: decidi in Impostazioni → NAS.`, true); }
   });
   void syncEngine.start();
   uploader?.start();
@@ -414,9 +419,8 @@ const syncDeps = !isIOSApp() ? {
     log('info', 'sync.unlinked', {});
   },
   status: (t: string, e?: boolean) => ui.setStatus(t, e),
-  here: desktopUI ? 'questo computer' : 'questo telefono',
-  where: desktopUI ? 'Impostazioni → NAS' : 'la scheda NAS',
-  ...(desktopUI ? {} : { play: (t: Track) => playTrack(t), enqueue: (t: Track, next: boolean) => enqueue(t, next) }),
+  here: phoneUI ? 'questo telefono' : 'questo computer',
+  where: 'Impostazioni → NAS',
   copies: () => library.all().filter((e) => e.source === 'nas' && (e.state === 'downloading' || e.state === 'error')).map((e) => ({ id: e.id, title: e.title, artist: e.artist, state: e.state!, progress: e.progress, error: e.error })),
   uploader: () => uploader,
   uploadAuto: () => settings.nasUploadAuto,
@@ -659,8 +663,8 @@ const ui: ReturnType<typeof buildConsole> & { selectById(id: string): void } = O
     const t = i > 0 ? queue.all()[i - 1] : undefined;
     if (t && am && t.status !== 'unplayable') am.playNow(t.videoId);
   },
-}, { hasMusic: !!settings.currentPlaylistId, desktop: desktopPages, phoneSync: !desktopUI && syncDeps ? { deps: syncDeps, count: () => plStore.count() } : undefined }), { selectById: selectPlaylist });
-if (desktopUI) followSystemTheme(tauriInvoke ? (c, args) => tauriInvoke(c, args) : undefined);
+}, { hasMusic: !!settings.currentPlaylistId, desktop: desktopPages, phone: phoneUI }), { selectById: selectPlaylist });
+if (computerApp) followSystemTheme(tauriInvoke ? (c, args) => tauriInvoke(c, args) : undefined);
 ui.setSensitivity(settings.micSensitivity);
 ui.setProjectorMode(settings.projectorMode);
 if (canCast()) window.setInterval(() => ui.setProjectorInfo(castMessage(castState())), 1000);

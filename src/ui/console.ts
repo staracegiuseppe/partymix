@@ -8,7 +8,6 @@ import { UNAVAILABLE_WITH_YOUTUBE } from './unavailable';
 import { APP_VERSION, AUTHOR, PAYPAL_QR } from '../info';
 import { buildQueueList, QueueRowVM } from './queueList';
 import type { SheetItem as MenuItem } from './material';
-import { buildSyncUI, type SyncUIDeps } from './syncPage';
 import { applyPhoneTheme, applySystemInsets, buildShell, icon, materialUI, setLabel, SheetItem, withIcon } from './material';
 
 export type Actions = {
@@ -121,12 +120,12 @@ const fmtSpeed = (v: number) => '×' + v.toFixed(2).replace('.', ',');
 const ROLE_LABEL: Record<DeckVM['role'], string> = { live: 'IN ONDA', out: 'IN USCITA', ready: 'PRONTO', loading: 'PREPARAZIONE…', idle: 'FERMO' };
 
 /** `hasMusic`: a playlist is saved for the slot in use, so the phone opens on «In onda» instead of «Playlist». */
-export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: boolean; desktop?: (parts: DesktopParts) => DesktopPages; phoneSync?: { deps: SyncUIDeps; count: () => number } } = {}) {
+export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: boolean; desktop?: (parts: DesktopParts) => DesktopPages; phone?: boolean } = {}) {
   /** Phone layout (Material Design 3) on Android; the classic console on a computer. */
-  const md = materialUI();
+  /** The old phone layout: only where the computer pages are not given (iPhone/iPad). Android has the computer pages, laid out for a phone. */
+  const md = materialUI() && !opts.desktop;
   const label = (el: HTMLElement, t: string) => (md ? setLabel(el, t) : el.textContent !== t && (el.textContent = t));
   let shell: ReturnType<typeof buildShell> | undefined;
-  let phoneSync: ReturnType<typeof buildSyncUI> | undefined;
   const pill = h('span', { class: 'pill empty', title: 'Incolla qui sotto il link di una playlist Spotify o YouTube' }, md ? 'Nessuna playlist' : EMPTY_SOURCE);
   const status = h('div', { class: 'status', role: 'status' });
   const statusListeners = new Set<(text: string, error: boolean) => void>();
@@ -441,9 +440,6 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     status.classList.add('hidden');
     projModeHint.after(lyShow.parentElement!, lyHl.parentElement!); // projector settings, also before any lyrics are found
     syncBar.prepend(h('h3', {}, 'Testo da cantare'));
-    // the NAS (same pages as the computer's ☁ Sync and 📱 Dispositivi): one more screen, the others stay as they are
-    phoneSync = opts.phoneSync ? buildSyncUI(opts.phoneSync.deps) : undefined;
-    if (phoneSync && opts.phoneSync) phoneSync.setCounter(opts.phoneSync.count);
     shell = buildShell(root, {
       title: h('div', { class: 'logo' }, 'Party', h('b', {}, 'Mix')),
       actions: [pill, castTop],
@@ -454,13 +450,14 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
         { id: 'list', label: 'Playlist', icon: 'queue', body: [loadRow, warnPanel, queuePanel] },
         { id: 'now', label: 'In onda', icon: 'nowPlaying', body: [emptyNow, h('div', { class: 'm-now' }, dA.card, mixer, dB.card)] },
         { id: 'proj', label: 'Proiettore', icon: 'cast', body: [projPanel, syncBar, lyricsPanel] },
-        ...(phoneSync ? [{ id: 'nas', label: 'NAS', icon: 'cloud' as const, body: [phoneSync.syncPage, phoneSync.filesPage, phoneSync.devicesPage] }] : []),
         { id: 'more', label: 'Altro', icon: 'tune', body: [karaokePanel, adPanel, helpPanel, histPanel, probPanel, h('section', { class: 'panel' }, unav)] },
       ],
     });
   } else {
     // ---------- computer: Material 3 with a navigation drawer, one page per job ----------
+    // (Android too: the same pages; on a narrow screen the drawer becomes the bar at the bottom, see desktop.css)
     document.body.classList.add('desk');
+    if (opts.phone) { document.body.classList.add('phone'); applySystemInsets(); applyPhoneTheme(); }
     // colours: the computer's accent colour and light/dark (followSystemTheme, started by the app)
     const parts: DesktopParts = { menu: (t, sub, items) => shell?.sheet(t, sub, items), go: (id) => shell?.go(id) };
     desk = opts.desktop?.(parts);
@@ -576,6 +573,18 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     addEventListener('keydown', (e) => { if (e.key === 'Escape' && sheetEl.classList.contains('open') && !document.querySelector('.m-sheet.on, .modal, .tour-card')) projSheet!.close(); });
     // the Player's own nav item does not look «current» while the sheet is the thing in front
     shell.onScreen((id) => { if (id !== 'now') setOpen(false); });
+    // phone (narrow screen): the bar at the bottom has Player, Playlist, Cerca, Libreria and «Altro» with the rest
+    const moreNav = h('button', { class: 'm-nav-item more-nav', type: 'button', title: 'Altro' },
+      h('span', { class: 'm-ind' }, icon('more')), h('span', { class: 'm-nav-label' }, 'Altro'));
+    navEl.insertBefore(moreNav, projNav);
+    const SEC = new Set(['settings', 'about']);
+    moreNav.addEventListener('click', () => shell?.sheet('Altro', '', [
+      { label: 'Proiettore e testo', icon: 'cast', run: () => projSheet?.open() },
+      { label: 'Impostazioni (anche NAS e dispositivi)', icon: 'settings', run: () => shell?.go('settings') },
+      { label: 'Info e dona', icon: 'heart', run: () => shell?.go('about') },
+      ...(appsBtn ? [{ label: 'Scegli dalle app (YouTube, Spotify)', icon: 'apps' as const, run: () => appsBtn.click() }] : []),
+    ]));
+    shell.onScreen((id) => moreNav.classList.toggle('on', SEC.has(id)));
   }
 
   /** ⋮ on a song of the play queue (computer): the actions that make sense for it, in its state. */
@@ -687,7 +696,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
       playMain.classList.toggle('playing', !idle && !paused);
       stopBtn.disabled = idle;
       if (shell && desk) desk.update(shell.current());
-    } else if (shell && phoneSync && shell.current() === 'nas') { phoneSync.update('sync'); phoneSync.update('files'); phoneSync.update('devices'); }
+    }
     const ly = vm.lyrics;
     lyStatus.textContent = ly.status;
     lyPrev.textContent = ly.prev; lyNext.textContent = ly.next;

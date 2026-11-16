@@ -476,3 +476,42 @@ body.md.desk .m-nav .m-nav-item.on { color: var(--md-on-secondary-container); }
 .desk .up-err { grid-column: 1; font-size: 12px; color: var(--md-error); }
 .desk .up-retry { grid-column: 2; justify-self: end; min-height: 32px; }
 .desk .up-row.queued .up-bar, .desk .up-row.checking .up-bar { background: repeating-linear-gradient(90deg, var(--md-surface-highest, #ddd) 0 6px, transparent 6px 10px); }
+
+/* ===================== Phone (Android, or a narrow window): the same pages, the bar at the bottom ===================== */
+.desk .more-nav { display: none; }
+@media (max-width: 599px) {
+  body.md.desk { --nav-w: 0px; --pad: 12px; }
+  .desk .m-appbar { padding: calc(var(--sys-top, 0px)) 8px 0 16px; height: calc(56px + var(--sys-top, 0px)); }
+  .desk .m-appbar .pill { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .desk .m-nav { inset: auto 0 0 0 !important; width: auto !important; height: calc(72px + var(--sys-bottom, 0px)) !important; flex-direction: row !important;
+    padding: 6px 0 calc(6px + var(--sys-bottom, 0px)) !important; gap: 0 !important; align-items: stretch !important; overflow: hidden !important;
+    border-top: 1px solid var(--md-outline-variant); border-right: 0 !important; background: var(--md-surface-c) !important; z-index: 30; }
+  .desk .m-nav-item { flex: 1 1 0 !important; min-width: 0; width: auto !important; height: auto !important; flex-direction: column !important; gap: 2px !important; padding: 4px 0 !important;
+    margin: 0 !important; border-radius: 0 !important; background: none !important; justify-content: center !important; align-items: center !important; }
+  .desk .m-nav-item.sec { display: none !important; }
+  .desk .more-nav { display: flex; }
+  .desk .m-nav-item .m-ind { width: min(56px, 100%) !important; height: 30px !important; border-radius: 15px !important; display: grid !important; place-items: center; }
+  .desk .m-nav-item.on .m-ind { background: var(--md-secondary-container) !important; }
+  .desk .m-nav-item .m-nav-label { font-size: 11px !important; line-height: 14px !important; text-align: center; white-space: nowrap; }
+  .desk .m-nav-badge { display: none; }
+  .desk .m-main { margin-left: 0 !important; padding: calc(64px + var(--sys-top, 0px)) 12px calc(96px + var(--sys-bottom, 0px)) !important; max-width: 100% !important; }
+  .desk .pg-head { flex-wrap: wrap; gap: 8px; }
+  .desk .pg-title { font-size: 24px !important; line-height: 32px !important; }
+  .desk .pg-row > input { flex: 1 1 100% !important; }
+  .desk .pg-row { gap: 8px; }
+  .desk .seg { width: 100%; }
+  .desk .seg-btn { flex: 1 1 0; padding: 0 6px !important; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .desk .settings-grid, .desk .about-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .desk .player-grid, .desk .player-col { grid-template-columns: minmax(0, 1fr) !important; }
+  .desk .songlist { height: min(60vh, 560px); }
+  .desk .side-sheet { inset: 0 !important; width: 100% !important; max-width: none !important; z-index: 40; }
+  .desk .m-snack { bottom: calc(84px + var(--sys-bottom, 0px)) !important; }
+  .desk .m-sheet-panel { inset: auto 0 0 0 !important; width: 100% !important; border-radius: 28px 28px 0 0 !important; max-height: 80vh !important; }
+  .desk .m-sheet { place-items: end stretch !important; }
+  .desk .selbar { top: calc(60px + var(--sys-top, 0px)); }
+  .desk .cmd-words { display: none; }
+  .desk .dev-row { grid-template-columns: auto minmax(0, 1fr); }
+  .desk .dev-a { grid-column: 2; justify-content: flex-start; }
+  .desk .up-row { grid-template-columns: minmax(0, 1fr); }
+  .desk .up-s, .desk .up-retry { grid-column: 1; justify-self: start; }
+}
