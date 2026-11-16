@@ -1,5 +1,5 @@
 import { apply, diff, type Conflict, type Op } from '../../shared/merge';
-import type { Entry, PlaylistDoc, PlaylistMeta, PlaylistSummary, ServerEvent } from '../../shared/model';
+import type { Entry, PlaylistDoc, PlaylistMeta, PlaylistSummary, ServerEvent, TrackDoc } from '../../shared/model';
 import type { KV } from '../library/kv';
 import type { Playlist, PlaylistStore } from '../library/playlists';
 import type { Track } from '../queue';
@@ -50,6 +50,8 @@ export type EngineDeps = {
   nasIdOf?: (videoId: string) => string | undefined;
   /** The local song that is on the NAS with that id: its lines keep playing from the local file. */
   localIdOf?: (sha256: string) => string | undefined;
+  /** Songs of the NAS changed after the last pull (new, changed, deleted): the library shows them (see NasMusic). */
+  onTracks?: (tracks: TrackDoc[]) => Promise<void> | void;
 };
 
 const YT_ID = /^[\w-]{6,20}$/;
@@ -120,6 +122,7 @@ export class SyncEngine {
   private loaded = false;
   private nasIdOf: (videoId: string) => string | undefined;
   private localIdOf: (sha256: string) => string | undefined;
+  private onTracks: (tracks: TrackDoc[]) => Promise<void> | void;
   private viewOfLocal = (p: Playlist) => ({ meta: metaOf(p), entries: p.tracks.map((t) => entryOf(t, this.nasIdOf)) });
 
   constructor(store: PlaylistStore, kv: KV, api: SyncApi, deps: EngineDeps = {}) {
@@ -133,6 +136,7 @@ export class SyncEngine {
     this.log = deps.log ?? (() => {});
     this.nasIdOf = deps.nasIdOf ?? (() => undefined);
     this.localIdOf = deps.localIdOf ?? (() => undefined);
+    this.onTracks = deps.onTracks ?? (() => {});
   }
 
   status(): SyncStatus { return { ...this.st, conflicts: [...this.conflicts], pending: this.pendingCount() }; }
@@ -310,6 +314,8 @@ export class SyncEngine {
     const news: string[] = [];
     while (more) {
       const ch = await this.api.changes(this.lastSeq);
+      // songs first: a playlist that just got a NAS song finds it in the library
+      if (ch.tracks?.length) { try { await this.onTracks(ch.tracks); } catch (e) { this.log(`brani del NAS non aggiornati: ${(e as Error).message}`); } }
       for (const s of ch.playlists) await this.take(s, news);
       await this.saveSeq(ch.seq);
       more = ch.more;

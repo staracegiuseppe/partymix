@@ -11,7 +11,7 @@ const allowPublic = process.env.PARTYMIX_ALLOW_PUBLIC === '1';
 
 mkdirSync(join(root, 'database'), { recursive: true });
 const db = await openDb(join(root, 'database', 'partymix.sqlite'));
-const app = createApp({ root, allowPublic, db });
+const app = createApp({ root, allowPublic, db, scanAtStart: true });
 const server = createServer(app.handle);
 server.listen(port, host, () => {
   console.log(`PartyMix server ${SERVER_VERSION} (${db.engine}, Node ${process.version}) su http://${host}:${port}, cartella ${root}${allowPublic ? ' (ATTENZIONE: accesso da internet consentito)' : ''}`);

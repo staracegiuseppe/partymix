@@ -54,7 +54,9 @@ export class AudioDeck implements Deck {
   onError(cb: (code: number) => void): void { this.errorCb = cb; }
 }
 
-export const isLocalId = (id: string) => id.startsWith('local:');
+/** A song that is not a YouTube video: a file of this device (`local:`) or a song of the NAS (`nas:<sha256>`). */
+export const isLocalId = (id: string) => id.startsWith('local:') || id.startsWith('nas:');
+export const isNasId = (id: string) => id.startsWith('nas:');
 
 type HybridDeps = {
   /** A playable link for a song with a local copy (local file or downloaded YouTube song), else undefined. */
@@ -70,7 +72,7 @@ type HybridDeps = {
  * The automix sees a single deck, so crossfades work the same between a file and a video.
  * YouTube is optional: offline (or before its player is ready) the deck plays the library only.
  */
-export type DeckSource = 'none' | 'file' | 'sound-file' | 'video-file' | 'youtube' | 'youtube-video-mode' | 'youtube-fallback';
+export type DeckSource = 'none' | 'file' | 'sound-file' | 'video-file' | 'nas' | 'youtube' | 'youtube-video-mode' | 'youtube-fallback';
 
 /** The line under the song: where its sound comes from and, with the projector on «Video YouTube», where the video does. */
 export function sourceText(s: DeckSource, projectorVideo: boolean): string {
@@ -80,6 +82,7 @@ export function sourceText(s: DeckSource, projectorVideo: boolean): string {
     case 'file': return '💾 Dal tuo file sul computer';
     case 'sound-file': return `💾 Audio dal tuo file MP3 sul computer${yt}`;
     case 'video-file': return `💾 Dal tuo video scaricato sul computer${yt}`;
+    case 'nas': return '🗄 Dal NAS di casa (in streaming)';
     case 'youtube': return '☁ Audio e video da YouTube (internet)';
     case 'youtube-video-mode': return '☁ Audio e video da YouTube (proiettore su «Video YouTube»; con «Karaoke» suona il tuo file, se c’è)';
     case 'youtube-fallback': return '⚠ Il file sul computer non si apre: suona da YouTube (internet)';
@@ -93,6 +96,7 @@ export class HybridDeck implements Deck {
   private audioOnly = false; // the local copy is a sound file (MP3…), without its video
   private fellBack = false; // the local copy did not open: the song plays from YouTube
   private chosenYt = false; // played from YouTube because the projector is on «Video YouTube»
+  private fromNas = false; // streamed from the NAS (no copy on this device)
   private playing = false;
   private vol = 100;
   private token = 0;
@@ -129,7 +133,8 @@ export class HybridDeck implements Deck {
     this.chosenYt = false;
     const url = await this.deps.localUrl(id);
     if (tok !== this.token) throw err('Caricamento sostituito', 'superseded');
-    this.audioOnly = !!url && isSoundFile(url);
+    this.fromNas = !!url && isNasId(id) && /^https?:/i.test(url);
+    this.audioOnly = !!url && (this.fromNas || isSoundFile(url));
     this.fellBack = false;
     if (url) {
       if (this.mode === 'yt') this.yt?.stop();
@@ -148,6 +153,7 @@ export class HybridDeck implements Deck {
         return this.yt.load(id);
       }
     }
+    if (isNasId(id)) throw err('Il NAS non risponde e questo brano non è salvato su questo dispositivo.', 'offline');
     if (isLocalId(id)) throw err('Il file di questo brano non è più nella libreria.', 'unplayable');
     if (!this.yt || !this.deps.canStream()) throw err('Sei offline: questo brano è solo online.', 'offline');
     if (this.mode === 'audio') this.audio.stop();
@@ -197,6 +203,7 @@ export class HybridDeck implements Deck {
   source(): DeckSource {
     if (!this.id) return 'none';
     if (this.mode === 'yt') return this.fellBack ? 'youtube-fallback' : this.chosenYt ? 'youtube-video-mode' : 'youtube';
+    if (this.fromNas) return 'nas';
     if (isLocalId(this.id)) return 'file';
     return this.audioOnly ? 'sound-file' : 'video-file';
   }

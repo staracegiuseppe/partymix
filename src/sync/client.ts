@@ -56,7 +56,17 @@ export interface SyncApi {
   library(cursor?: string, limit?: number, q?: string): Promise<LibraryPage>;
   /** Live changes (Server-Sent Events). Returns the function that stops listening. */
   events(onEvent: (ev: ServerEvent) => void, onState?: (open: boolean) => void): () => void;
+  // ---- phase 6–8: listening from the NAS, copies on the device, songs copied by hand ----
+  /** A short signed link to play the song in an <audio> element (15 minutes, this device only). */
+  streamLink?(id: string): Promise<string>;
+  /** The whole file, for a copy on this device (needs DOWNLOAD_TRACK). `onProgress` gets bytes received / total. */
+  download?(id: string, onProgress?: (got: number, total: number) => void, signal?: AbortSignal): Promise<Blob>;
+  /** Looks in the NAS music/ folder for songs copied by hand (File Station, SMB…). */
+  scan?(): Promise<ScanStatus>;
+  scanStatus?(): Promise<ScanStatus>;
 }
+
+export type ScanStatus = { running: boolean; last?: { found: number; added: number; duplicates: number; failed: number; at: number } };
 
 /** `http://192.168.1.10:8787` from whatever the user typed (an address, with or without http:// and port). */
 export function normalizeUrl(input: string): string | undefined {
@@ -155,6 +165,44 @@ export class HttpSyncClient implements SyncApi {
   uploadCover(trackId: string, data: Blob) { return this.raw<TrackDoc>('POST', `/api/tracks/${encodeURIComponent(trackId)}/cover`, data, { 'content-type': data.type || 'image/jpeg' }); }
   track(id: string) { return this.call<TrackDoc>('GET', `/api/tracks/${encodeURIComponent(id)}`); }
   library(cursor?: string, limit = 200, q = '') { return this.call<LibraryPage>('GET', `/api/library?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`); }
+
+  async streamLink(id: string) {
+    const l = await this.call<{ path: string; expiresAt: number }>('GET', `/api/tracks/${encodeURIComponent(id)}/link`);
+    return this.base + l.path;
+  }
+
+  async download(id: string, onProgress?: (got: number, total: number) => void, signal?: AbortSignal): Promise<Blob> {
+    let res: Response;
+    try {
+      res = await this.fetchFn(`${this.base}/api/tracks/${encodeURIComponent(id)}/stream?dl=1`, { headers: { authorization: `Bearer ${this.token}` }, signal });
+    } catch (e) {
+      if (signal?.aborted) throw new SyncError(0, 'ABORTED', 'Annullato');
+      throw new SyncError(0, 'OFFLINE', `NAS non raggiungibile (${(e as Error).message})`);
+    }
+    if (!res.ok) {
+      let j: Record<string, unknown> = {};
+      try { j = await res.json(); } catch { /* not JSON */ }
+      throw new SyncError(res.status, String(j.error ?? 'HTTP'), String(j.message ?? `Errore ${res.status}`));
+    }
+    const total = Number(res.headers.get('content-length')) || 0;
+    const type = res.headers.get('content-type') ?? 'application/octet-stream';
+    if (!res.body || !onProgress) return new Blob([await res.arrayBuffer()], { type });
+    const parts: Uint8Array[] = [];
+    let got = 0;
+    const reader = res.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value);
+      got += value.length;
+      onProgress(got, total);
+    }
+    if (total && got !== total) throw new SyncError(0, 'INCOMPLETE', 'Download interrotto');
+    return new Blob(parts as BlobPart[], { type });
+  }
+
+  scan() { return this.call<ScanStatus>('POST', '/api/scan', {}); }
+  scanStatus() { return this.call<ScanStatus>('GET', '/api/scan'); }
 
   events(onEvent: (ev: ServerEvent) => void, onState?: (open: boolean) => void): () => void {
     if (!this.ES || !this.token) return () => {};

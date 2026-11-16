@@ -137,7 +137,7 @@ export class Uploader {
   summary(): NasSummary {
     const s: NasSummary = { total: 0, onNas: 0, uploading: 0, failed: 0 };
     for (const e of this.d.library.all()) {
-      if (!e.file) continue;
+      if (!e.file || e.source === 'nas') continue; // a copy saved from the NAS is not this computer's music
       s.total++;
       if (e.nasId) { s.onNas++; continue; }
       const j = this.jobs.get(e.id);
@@ -160,7 +160,7 @@ export class Uploader {
       if (chk.present.includes(sha)) { await this.finish(id, sha); return; }
       if (!e.size) throw new Error('Dimensione del file sconosciuta: importalo di nuovo.');
       this.set(id, { state: 'uploading', progress: 0 });
-      const st = await this.d.api.startUpload({ sha256: sha, size: e.size, mime: e.mime || mimeOf(e.file) || 'audio/mpeg', ext: extOf(e.file), meta: metaOf(e), ...(e.id.startsWith('local:') ? {} : { youtubeId: e.id }) });
+      const st = await this.d.api.startUpload({ sha256: sha, size: e.size, mime: e.mime || mimeOf(e.file) || 'audio/mpeg', ext: extOf(e.file), meta: metaOf(e), ...(e.id.includes(':') ? {} : { youtubeId: e.id }) });
       if (!st.track) {
         const chunk = this.d.chunkSize ?? CHUNK_SIZE;
         let from = st.received;

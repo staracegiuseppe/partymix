@@ -1,4 +1,4 @@
-import { createReadStream, mkdirSync, renameSync, statfsSync, statSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, renameSync, statfsSync, statSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { apply, cleanOps, diff, type Conflict, type Op } from '../../shared/merge.ts';
@@ -11,6 +11,7 @@ import { currentSeq, openDbSync, tx, type Db } from './db.ts';
 import { bad, HttpError, isPrivateAddress, num, parseContentRange, readJson, readRaw, Router, sendJson, str } from './http.ts';
 import { MAX_CHUNK, Tracks } from './tracks.ts';
 import { cleanEntry, cleanMeta, Playlists } from './playlists.ts';
+import { checkLink, loadStreamKey, sendFile, signLink } from './stream.ts';
 
 export const SERVER_VERSION = '0.1.0';
 
@@ -24,6 +25,8 @@ export type AppOptions = {
   now?: () => number;
   /** Accept requests from public internet addresses (default no: LAN and VPN only). */
   allowPublic?: boolean;
+  /** Look in music/ for songs copied by hand, a moment after start (the real server; tests ask with POST /api/scan). */
+  scanAtStart?: boolean;
 };
 
 export type App = {
@@ -45,6 +48,9 @@ export function createApp(opts: AppOptions): App {
   const tracks = new Tracks(db, opts.root, now);
   const dropped = tracks.cleanup();
   if (dropped) console.log(`upload abbandonati rimossi: ${dropped}`);
+  const streamKey = loadStreamKey(join(opts.root, 'database', 'stream.key'));
+  // songs copied by hand while the server was off: found at start (and then on demand, POST /api/scan)
+  if (opts.scanAtStart) setTimeout(() => void tracks.scan().then((s) => { if (s.found) console.log(`scansione music/: ${s.added} brani aggiunti, ${s.duplicates} doppi, ${s.failed} saltati`); }).catch(() => {}), 2000);
   const pairing = new PairingCodes(now);
   const limiter = new LoginLimiter(now);
   const listeners = new Set<ServerResponse>();
@@ -329,6 +335,42 @@ export function createApp(opts: AppOptions): App {
     sendJson(res, 200, tracks.library(url.searchParams.get('cursor'), limit, (url.searchParams.get('q') ?? '').trim().slice(0, 100)));
   });
 
+  /** A short signed link to listen to the song (an <audio> element cannot send the token). */
+  r.on('GET', '/api/tracks/:id/link', ({ req, res, url, params }) => {
+    const d = auth(req, url, 'PLAY_TRACK');
+    if (!tracks.filePath(params[0])) throw new HttpError(404, 'NOT_FOUND', 'Brano non trovato');
+    sendJson(res, 200, signLink(streamKey, params[0], d.id, now()));
+  });
+
+  /**
+   * The song's bytes, with Range (206): play, pause, seek. With the device token (a copy for offline listening:
+   * `?dl=1` needs DOWNLOAD_TRACK) or with a signed link from /link (PLAY_TRACK, refused once the device is revoked).
+   */
+  r.on('GET', '/api/tracks/:id/stream', ({ req, res, url, params }) => {
+    const id = params[0];
+    if (req.headers.authorization) auth(req, url, url.searchParams.get('dl') === '1' ? 'DOWNLOAD_TRACK' : 'PLAY_TRACK');
+    else {
+      const devId = checkLink(streamKey, id, url, now());
+      const d = devId ? getDevice(db, devId) : undefined;
+      if (!d || d.revoked_at != null) throw new HttpError(401, 'UNAUTHORIZED', 'Link scaduto o non valido');
+      if ((d.perms & PERM.PLAY_TRACK) === 0) throw new HttpError(403, 'FORBIDDEN', 'Permesso mancante: PLAY_TRACK');
+    }
+    const f = tracks.filePath(id);
+    if (!f || !existsSync(f.path)) throw new HttpError(404, 'NOT_FOUND', 'Brano non trovato');
+    sendFile(req, res, { ...f, size: statSync(f.path).size });
+  });
+
+  /** Songs copied by hand into music/ join the library (see Tracks.scan). Answers at once; GET tells how it went. */
+  r.on('POST', '/api/scan', ({ req, res, url }) => {
+    auth(req, url, 'UPLOAD_TRACK');
+    void tracks.scan().catch((e) => console.error('scansione non riuscita:', (e as Error).message));
+    sendJson(res, 202, tracks.scanStatus());
+  });
+  r.on('GET', '/api/scan', ({ req, res, url }) => {
+    auth(req, url, 'READ_LIBRARY');
+    sendJson(res, 200, tracks.scanStatus());
+  });
+
   r.on('GET', '/api/tracks/:id', ({ req, res, url, params }) => {
     auth(req, url, 'READ_LIBRARY');
     const t = tracks.get(params[0]);
@@ -421,7 +463,8 @@ export function createApp(opts: AppOptions): App {
         const origin = req.headers.origin;
         if (origin && APP_ORIGIN.test(origin)) {
           res.setHeader('access-control-allow-origin', origin);
-          res.setHeader('access-control-allow-headers', 'authorization, content-type, content-range');
+          res.setHeader('access-control-allow-headers', 'authorization, content-type, content-range, range');
+          res.setHeader('access-control-expose-headers', 'content-range, content-length, accept-ranges');
           res.setHeader('access-control-allow-methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
           res.setHeader('access-control-max-age', '600');
           res.setHeader('vary', 'origin');

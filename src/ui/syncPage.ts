@@ -3,6 +3,8 @@ import { isPrivateHost, normalizeUrl, SyncError, type Health, type StorageDoc, t
 import type { NasConfig } from '../sync/config';
 import type { SyncConflict, SyncEngine } from '../sync/engine';
 import type { Uploader } from '../sync/uploader';
+import type { NasMusic } from '../sync/nasMusic';
+import type { Playlist } from '../library/playlists';
 import { h } from './dom';
 
 /** What the ☁ Sync and 📱 Dispositivi pages need from the app. */
@@ -20,6 +22,12 @@ export type SyncUIDeps = {
   here?: string;
   /** The upload queue to the NAS (when linked). */
   uploader(): Uploader | undefined;
+  /** The NAS songs on this device: streaming, copies to listen without the NAS. */
+  nasMusic?(): NasMusic | undefined;
+  /** This device's playlists (to save the ☁ songs they use). */
+  playlists?(): Playlist[];
+  /** How many NAS songs are known here, and how many have a copy here. */
+  nasCounts?(): { total: number; saved: number; savedBytes: number };
   uploadAuto(): boolean;
   setUploadAuto(on: boolean): void;
 };
@@ -162,6 +170,60 @@ export function buildSyncUI(d: SyncUIDeps) {
     if (autoBox.checked !== d.uploadAuto()) autoBox.checked = d.uploadAuto();
   }
 
+  // ---- the NAS songs on this device: listen in streaming, or keep a copy to listen without the NAS ----
+  const mText = h('div', {});
+  const mJob = h('div', { class: 'pg-hint' });
+  const runSave = async (which: 'playlists' | 'all') => {
+    const m = d.nasMusic?.();
+    if (!m) return;
+    const ids = which === 'all' ? m.missing() : m.missing(d.playlists?.() ?? []);
+    if (!ids.length) { d.status(which === 'all' ? `Tutta la musica del NAS è già su ${here}.` : `I brani del NAS delle tue playlist sono già su ${here}.`); return; }
+    try { await m.save(ids); d.status(`⬇ Salvo ${ids.length} brani su ${here} (${fmtSize(m.sizeOf(ids))}).`); } catch (e) { d.status(errText(e), true); }
+  };
+  const savePlBtn = btn('⬇ Salva i brani delle playlist', 'm-tonal', () => void runSave('playlists'));
+  const saveAllBtn = btn('⬇ Salva tutta la musica del NAS', 'm-outlined', () => void runSave('all'));
+  const stopBtn = btn('Ferma', 'm-outlined', () => d.nasMusic?.()?.stop());
+  const scanBtn = btn('🔎 Cerca brani copiati sul NAS', 'm-outlined', async (b) => {
+    const api = d.api();
+    if (!api?.scan) return;
+    b.disabled = true;
+    try {
+      await api.scan();
+      for (let i = 0; i < 600; i++) { // up to 10 minutes: hashing a big folder on a small NAS takes a while
+        await new Promise((r) => setTimeout(r, 1000));
+        const s = await api.scanStatus!();
+        if (!s.running) {
+          const l = s.last;
+          d.status(l ? (l.added ? `🔎 Trovati ${l.added} brani nuovi nella cartella music del NAS${l.duplicates ? ` (${l.duplicates} doppioni ignorati)` : ''}.` : 'Nessun brano nuovo nella cartella music del NAS.') : 'Ricerca finita.');
+          void d.engine()?.syncNow();
+          break;
+        }
+      }
+    } catch (e) { d.status(`Ricerca non riuscita: ${errText(e)}`, true); }
+    b.disabled = false;
+  });
+  const musicPanel = h('section', { class: 'panel sync-music' }, h('h3', {}, `Musica del NAS su ${here}`),
+    mText,
+    h('div', { class: 'sync-upload' }, savePlBtn, saveAllBtn, stopBtn),
+    mJob,
+    h('div', { class: 'sync-upload' }, scanBtn),
+    h('p', { class: 'pg-hint' }, `☁ = suona dal NAS quando sei a casa (o in VPN). ✓ = salvato su ${here}: suona anche senza NAS. I file messi a mano nella cartella PartyMix/music del NAS entrano con «Cerca brani copiati».`));
+  let lastMusic = '';
+  function paintMusic() {
+    const m = d.nasMusic?.();
+    musicPanel.classList.toggle('hidden', !m);
+    if (!m) return;
+    const c = d.nasCounts?.() ?? { total: 0, saved: 0, savedBytes: 0 };
+    const j = m.status();
+    const key = JSON.stringify([c, j]);
+    if (key === lastMusic) return;
+    lastMusic = key;
+    mText.replaceChildren('Brani sul NAS: ', h('b', {}, c.total.toLocaleString('it-IT')), ` · ✓ salvati su ${here}: `, h('b', {}, `${c.saved.toLocaleString('it-IT')} (${fmtSize(c.savedBytes)})`));
+    mJob.textContent = j.running ? `⬇ ${j.done + j.failed}/${j.total} · ${fmtSize(j.bytes)} / ${fmtSize(j.totalBytes)}${j.current ? ` · ${j.current}` : ''}` : j.total ? `Ultimo salvataggio: ${j.done} salvati${j.failed ? `, ${j.failed} non riusciti (${j.error ?? ''})` : ''}.` : '';
+    stopBtn.classList.toggle('hidden', !j.running);
+    savePlBtn.disabled = saveAllBtn.disabled = j.running;
+  }
+
   const storText = h('div', { class: 'sync-grid' });
   const storagePanel = h('section', { class: 'panel' }, h('h3', {}, 'Spazio sul NAS'), storText);
   let storage: StorageDoc | undefined, storageAt = 0;
@@ -174,7 +236,7 @@ export function buildSyncUI(d: SyncUIDeps) {
   }
 
   const syncHead = h('header', { class: 'pg-head' }, h('div', { class: 'pg-tt' }, h('h1', { class: 'pg-title' }, 'Sync'), h('div', { class: 'pg-sub' }, 'Le playlist uguali su tutti i tuoi dispositivi, con il NAS al centro')));
-  const syncPage = h('div', { class: 'pg pg-sync' }, syncHead, connectPanel, statePanel, conflictPanel, uploadPanel, storagePanel);
+  const syncPage = h('div', { class: 'pg pg-sync' }, syncHead, connectPanel, statePanel, conflictPanel, musicPanel, uploadPanel, storagePanel);
 
   let lastPaint = '';
   function paintSync() {
@@ -182,8 +244,9 @@ export function buildSyncUI(d: SyncUIDeps) {
     connectPanel.classList.toggle('hidden', !!cfg);
     statePanel.classList.toggle('hidden', !cfg);
     storagePanel.classList.toggle('hidden', !cfg);
-    if (!cfg || !eng) { conflictPanel.classList.add('hidden'); uploadPanel.classList.add('hidden'); return; }
+    if (!cfg || !eng) { conflictPanel.classList.add('hidden'); uploadPanel.classList.add('hidden'); musicPanel.classList.add('hidden'); return; }
     paintUpload();
+    paintMusic();
     const s = eng.status();
     const key = JSON.stringify([s.connected, s.live, s.syncing, s.lastSync, s.pending, s.error, s.lastNews, s.conflicts.length, Math.floor(now() / 30_000)]);
     if (key === lastPaint) return;

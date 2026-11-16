@@ -18,7 +18,7 @@ export type LibEntry = {
   favorite?: boolean;
   /** file = imported from the computer, url = downloaded from a link to an audio file, youtube = a YouTube video,
    *  download = fetched by the download manager (yt-dlp). */
-  source: 'file' | 'url' | 'youtube' | 'download';
+  source: 'file' | 'url' | 'youtube' | 'download' | 'nas';
   /** download: «audio/mpeg», «video/mp4»… */
   mime?: string;
   /** The link it was downloaded from (url) or nothing. */
@@ -29,6 +29,8 @@ export type LibEntry = {
   origin?: string;
   /** The song is on the NAS: the SHA-256 of its file (its id there). Set after the upload, or when the NAS had it already. */
   nasId?: string;
+  /** source 'nas': bytes of the file on the NAS (what a copy here would take). */
+  nasSize?: number;
   /** Picture from the file's tags, or the YouTube thumbnail link. */
   cover?: Blob;
   thumb?: string;
@@ -51,6 +53,7 @@ type Deps = {
 };
 
 const HEAD = 256 * 1024;
+const EXT_OF_MIME: Record<string, string> = { 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'aac', 'audio/ogg': 'ogg', 'audio/opus': 'opus', 'audio/flac': 'flac', 'audio/wav': 'wav', 'audio/webm': 'webm', 'video/mp4': 'mp4' };
 /** How many decoded files are kept ready in memory (the two decks, plus a little margin). */
 const KEEP_URLS = 4;
 
@@ -159,6 +162,59 @@ export class MusicLibrary {
     return this.d.blobs.readRange(e.file, from, len);
   }
 
+  // ---- songs of the NAS (phase 6–8): listed here, played in streaming, saved on this device on request ----
+  /** A song on the NAS joins the library as ☁ (no copy here). A song this device sent there is left as it is. */
+  upsertNas(t: { id: string; title: string; artist?: string; album?: string; durationSec?: number; size: number; mime: string }): LibEntry | undefined {
+    const mine = this.byNas.get(t.id);
+    if (mine && mine !== `nas:${t.id}`) return undefined; // our own file: it already plays from here
+    const id = `nas:${t.id}`;
+    const old = this.byId.get(id);
+    const e: LibEntry = { ...(old ?? { addedAt: this.now() }), id, source: 'nas', nasId: t.id, nasSize: t.size, mime: t.mime, title: t.title || 'Brano', artist: t.artist ?? '', album: t.album ?? '' } as LibEntry;
+    if (t.durationSec) e.durationSec = t.durationSec;
+    if (old && old.title === e.title && old.artist === e.artist && old.album === e.album && old.durationSec === e.durationSec && old.nasSize === e.nasSize) return old;
+    this.byId.set(id, e);
+    this.byNas.set(t.id, id);
+    void this.save(e).catch(() => {});
+    this.changed();
+    return e;
+  }
+
+  /** Deleted on the NAS: a ☁ song leaves the library; a copy saved here stays and plays (it becomes a file of this device). */
+  async dropNas(sha: string): Promise<void> {
+    const id = this.byNas.get(sha);
+    const e = id ? this.byId.get(id) : undefined;
+    if (!e || e.source !== 'nas') { if (e) { delete e.nasId; this.byNas.delete(sha); await this.save(e); this.changed(); } return; }
+    if (e.file) { delete e.nasId; delete e.nasSize; this.byNas.delete(sha); await this.save(e); this.changed(); return; }
+    await this.remove(e.id);
+  }
+
+  /** Songs of the NAS with no copy on this device. */
+  nasOnly(): LibEntry[] { return this.all().filter((e) => e.source === 'nas' && !e.file); }
+
+  /** A copy of a NAS song saved on this device: from now on it plays without the NAS. */
+  async saveNasCopy(id: string, data: Blob): Promise<LibEntry> {
+    const e = this.byId.get(id);
+    if (!e) throw new Error('Brano non trovato.');
+    const ext = EXT_OF_MIME[(e.mime || data.type || '').split(';')[0]] ?? 'mp3';
+    if (e.file) await this.d.blobs.delete(e.file).catch(() => {});
+    e.file = await this.d.blobs.put(id, data, { artist: e.artist || 'Artista sconosciuto', title: e.title, ext });
+    e.size = data.size;
+    delete e.state; delete e.error; delete e.progress;
+    await this.save(e);
+    this.changed();
+    return e;
+  }
+
+  /** Progress of a copy being saved from the NAS (shown as ⬇ 42%), or its error. */
+  setTransfer(id: string, st: { progress: number } | { error: string } | undefined): void {
+    const e = this.byId.get(id);
+    if (!e) return;
+    if (!st) { delete e.state; delete e.progress; delete e.error; }
+    else if ('error' in st) { e.state = 'error'; e.error = st.error; delete e.progress; void this.save(e).catch(() => {}); }
+    else { e.state = 'downloading'; e.progress = st.progress; }
+    this.changed();
+  }
+
   /** A local copy exists: the song plays without any network. */
   isOffline(id: string): boolean { return !!this.byId.get(id)?.file; }
   stateOf(id: string): OfflineState {
@@ -167,6 +223,7 @@ export class MusicLibrary {
     if (e.state === 'downloading') return 'downloading';
     if (e.file) return 'offline';
     if (e.state === 'error' || e.source === 'file' || id.startsWith('local:')) return 'error';
+    // a ☁ song of the NAS: online (plays in streaming at home)
     return 'online';
   }
   errorOf(id: string): string | undefined {

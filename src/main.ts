@@ -43,6 +43,7 @@ import { HttpSyncClient, isPrivateHost, type SyncApi } from './sync/client';
 import { loadNasConfig, saveNasConfig, type NasConfig } from './sync/config';
 import { SyncEngine } from './sync/engine';
 import { Uploader } from './sync/uploader';
+import { NasMusic } from './sync/nasMusic';
 
 const store: Storage | undefined = (() => { try { return window.localStorage; } catch { return undefined; } })();
 const settings = store ? loadSettings(store) : loadSettings({ getItem: () => null, setItem: () => {} } as unknown as Storage);
@@ -102,7 +103,8 @@ const mkAudio = () => {
   document.body.append(a);
   return new AudioDeck(a);
 };
-const hybridDeps = { localUrl: (id: string) => library.urlFor(id), canStream: netOk, preferYouTube: () => settings.projectorMode === 'video' };
+// a song of the NAS without a copy here plays in streaming from the NAS (a short signed link)
+const hybridDeps = { localUrl: async (id: string) => (await library.urlFor(id)) ?? (id.startsWith('nas:') ? await nasMusic?.streamUrl(id) : undefined), canStream: netOk, preferYouTube: () => settings.projectorMode === 'video' };
 const decks: [HybridDeck, HybridDeck] = [new HybridDeck(mkAudio(), hybridDeps), new HybridDeck(mkAudio(), hybridDeps)];
 let queue = new Queue([]);
 let listId: string | undefined;
@@ -328,13 +330,37 @@ let nasConfig = loadNasConfig(store);
 let syncApi: SyncApi | undefined;
 let syncEngine: SyncEngine | undefined;
 let uploader: Uploader | undefined;
+let nasMusic: NasMusic | undefined;
+/** Room for copies of NAS songs: the disk (computer app) or what the browser/phone storage still allows. */
+async function freeSpace(): Promise<number | undefined> {
+  if (desktopUI && tauriInvoke) { try { const n = await tauriInvoke('disk_free', {}); return typeof n === 'number' ? n : undefined; } catch { /* unknown */ } }
+  try { const e = await navigator.storage?.estimate?.(); return e?.quota != null ? e.quota - (e.usage ?? 0) : undefined; } catch { return undefined; }
+}
 const thisDeviceName = () => { const ua = navigator.userAgent; return isAndroidApp() ? 'Telefono Android' : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'PC Windows' : /Linux/.test(ua) ? 'PC Linux' : 'Computer'; };
 function startSync(cfg: NasConfig) {
   nasConfig = cfg;
   syncApi = new HttpSyncClient(cfg.url, cfg.token);
-  syncEngine = new SyncEngine(plStore, kv, syncApi, { onLine: () => navigator.onLine, log: (m) => log('info', 'sync', { m }), nasIdOf: (id) => library.nasIdOf(id), localIdOf: (sha) => library.idForNas(sha) });
+  const api = syncApi;
+  nasMusic = new NasMusic({ library, api: () => syncApi, freeSpace, log: (m) => log('info', 'sync.nas_music', { m }) });
+  syncEngine = new SyncEngine(plStore, kv, syncApi, {
+    onLine: () => navigator.onLine, log: (m) => log('info', 'sync', { m }),
+    // a NAS song saved here (nas:<sha>) is the same line on every device: it keeps its nas: id
+    nasIdOf: (id) => library.nasIdOf(id),
+    localIdOf: (sha) => { const id = library.idForNas(sha); return id && !id.startsWith('nas:') ? id : undefined; },
+    onTracks: (t) => nasMusic?.applyTracks(t),
+  });
+  // first link of this device (or after an update): the whole NAS library once, then only the changes
+  void (async () => {
+    try {
+      const done = await kv.get<{ key: string; value: number }>('sync', 'nasLibrary');
+      if (done?.value) return;
+      const n = await nasMusic!.refreshAll();
+      if (syncApi === api) await kv.put('sync', 'nasLibrary', { key: 'nasLibrary', value: Date.now() });
+      log('info', 'sync.nas_library', { tracks: n });
+    } catch (e) { log('warn', 'sync.nas_library_failed', { error: String(e) }); }
+  })();
   // the files: what is on this computer goes to the NAS; a song that arrived there is pushed again in its playlists
-  uploader = new Uploader({ api: syncApi, library, auto: () => settings.nasUploadAuto, log: (m) => log('info', 'sync.upload', { m }), onDone: () => void syncEngine?.syncNow() });
+  if (desktopUI) uploader = new Uploader({ api: syncApi, library, auto: () => settings.nasUploadAuto, log: (m) => log('info', 'sync.upload', { m }), onDone: () => void syncEngine?.syncNow() });
   let lastNews = '';
   let wasConnected = false;
   syncEngine.onChange(() => {
@@ -345,7 +371,7 @@ function startSync(cfg: NasConfig) {
     if (s?.conflicts.length && !document.body.classList.contains('sync-asked')) { document.body.classList.add('sync-asked'); ui.setStatus('☁ Due dispositivi hanno cambiato la stessa playlist in modi diversi: decidi in ☁ Sync.', true); }
   });
   void syncEngine.start();
-  uploader.start();
+  uploader?.start();
 }
 window.addEventListener('online', () => void syncEngine?.syncNow());
 // a playlist changed by another device (or by this one): the phone's playlist menu shows it at once
@@ -371,7 +397,9 @@ const syncDeps = !isIOSApp() ? {
     try { await syncApi?.logout(); } catch { /* the NAS may be away: the token is forgotten here anyway */ }
     await syncEngine?.reset();
     uploader?.stop();
-    syncEngine = undefined; syncApi = undefined; nasConfig = undefined; uploader = undefined;
+    nasMusic?.stop();
+    await kv.delete('sync', 'nasLibrary').catch(() => {});
+    syncEngine = undefined; syncApi = undefined; nasConfig = undefined; uploader = undefined; nasMusic = undefined;
     saveNasConfig(store, undefined);
     log('info', 'sync.unlinked', {});
   },
@@ -380,6 +408,9 @@ const syncDeps = !isIOSApp() ? {
   uploader: () => uploader,
   uploadAuto: () => settings.nasUploadAuto,
   setUploadAuto: (on: boolean) => { settings.nasUploadAuto = on; save(); },
+  nasMusic: () => nasMusic,
+  playlists: () => plStore.list(),
+  nasCounts: () => { let total = 0, saved = 0, savedBytes = 0; for (const e of library.all()) if (e.nasId) { total++; if (e.file) { saved++; savedBytes += e.size ?? 0; } } return { total, saved, savedBytes }; },
 } : undefined;
 
 /** The computer's pages (Playlist, Cerca, Download, Libreria), built with the shell's menu and navigation. */
@@ -970,7 +1001,7 @@ function publishVideo() {
     id = d.videoIdForProjector(); t = d.position(); playing = st !== 'paused' && d.duration() > 0;
     // during a crossfade the next video is the incoming deck's, until it becomes the one heard
     const n = st === 'crossfading' ? (am.mixProgress() > 0.5 ? undefined : decks[(1 - idx) as 0 | 1].currentVideoId()) : (am.upcomingId() ?? queue.peekNext()?.videoId);
-    next = n && n !== id && !n.startsWith('local:') ? n : '';
+    next = n && n !== id && !n.includes(':') ? n : '';
   }
   const key = `${id}|${playing}|${next}`, now = Date.now();
   if (key === lastVideo.key && now - lastVideo.at < 1000) return; // the playhead is re-sent once a second, a change at once

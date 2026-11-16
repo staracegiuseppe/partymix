@@ -135,10 +135,11 @@ export function buildDesktopPages(d: PagesDeps) {
       id: t.videoId, title: t.title || `Video ${t.videoId}`, artist: t.artist ?? '',
       sub: [t.artist, t.album, w?.short].filter(Boolean).join(' · '),
       dur: t.durationSec || e?.durationSec, thumb: covers.get(e, t), off, pct: d.library.progressOf(t.videoId),
-      fav: !!e?.favorite, skip: !d.online() && off !== 'offline', reason: w?.full,
+      fav: !!e?.favorite, skip: !d.online() && off !== 'offline' && !t.videoId.startsWith('nas:'), reason: w?.full,
     };
-    const ns = e?.file ? d.nasState?.(t.videoId) : undefined;
-    if (ns) {
+    const ns = e?.file && e.source !== 'nas' ? d.nasState?.(t.videoId) : undefined;
+    if (t.videoId.startsWith('nas:')) { vm.nas = 'nas'; vm.nasTip = e?.file ? 'Dal NAS, salvato su questo computer' : 'Sul NAS: suona in streaming a casa (⋮ → Salva per averlo anche fuori)'; }
+    else if (ns) {
       vm.nas = ns.state === 'nas' ? 'nas' : ns.state === 'error' ? 'error' : ns.state === 'missing' ? 'missing' : 'uploading';
       if (ns.error) vm.nasTip = ns.error;
     }
@@ -160,7 +161,7 @@ export function buildDesktopPages(d: PagesDeps) {
     items.unshift({ label: 'Nuova playlist…', icon: 'add', run: () => { const p = d.playlists.create(); addTo(p.id, ids); openDetail(p.id); renameDialog(p.id); } });
     d.menu(ids.length > 1 ? `Aggiungi ${ids.length} brani a una playlist` : 'Aggiungi a playlist', 'Scegli la playlist', items);
   }
-  const canDownload = (id: string) => !id.startsWith('local:') && !!d.downloads?.available();
+  const canDownload = (id: string) => !id.includes(':') && !!d.downloads?.available();
   /** ⬇ on a song: the Download Manager for a YouTube song, else the user's own audio file. */
   function offline(id: string) {
     if (canDownload(id)) {
@@ -189,7 +190,7 @@ export function buildDesktopPages(d: PagesDeps) {
   /** Downloads many songs (a playlist, a selection) with one choice of format and one request to the app. */
   function downloadTracks(ids: string[], what: string) {
     if (!d.downloads?.available()) { d.status('Il download funziona nell’app installata sul computer, con yt-dlp.', true); return; }
-    const todo = ids.filter((id) => !id.startsWith('local:'));
+    const todo = ids.filter((id) => !id.includes(':'));
     const local = ids.length - todo.length;
     if (!todo.length) { d.status(local ? 'Questi brani sono già file sul computer.' : 'Niente da scaricare.'); return; }
     chooseFormat(what, todo.length, (c) => void d.downloads!.downloadMany(todo.map((id) => ({ url: youtubeUrl(id), type: c.type, format: c.format, quality: c.quality })), what));
@@ -211,7 +212,9 @@ export function buildDesktopPages(d: PagesDeps) {
   /** ⋮ on a song: the actions that make sense for it, in its state (Material menu). */
   function songMenu(t: Track, extra: { inPlaylist?: string } = {}) {
     const id = t.videoId, e = d.library.get(id), st = d.library.stateOf(id);
-    const playable = d.online() || st === 'offline';
+    const fromNas = id.startsWith('nas:');
+    const playable = d.online() || st === 'offline' || fromNas; // a NAS song needs the home network, not the internet
+    const saveNas = () => { const m = d.sync?.nasMusic?.(); if (!m) { d.status('Collega il NAS in ☁ Sync per salvare i suoi brani.', true); return; } m.save([id]).then(() => d.status(`⬇ Salvo «${t.title}» su questo computer.`), (err) => d.status((err as Error).message, true)); };
     const items: SheetItem[] = [
       { label: 'Riproduci adesso', icon: 'play', disabled: !playable, run: () => d.playTrack(t) },
       { label: 'Suona dopo quello in onda', icon: 'playNext', disabled: !playable, run: () => d.enqueue(t, true) },
@@ -219,12 +222,13 @@ export function buildDesktopPages(d: PagesDeps) {
       { label: 'Aggiungi a playlist…', icon: 'add', run: () => pickPlaylist([id]) },
       st === 'offline'
         ? { label: 'Elimina download (resta nelle playlist)', icon: 'del', run: () => void d.library.deleteDownload(id).then(() => d.status(`Download eliminato: «${t.title}» resta nelle playlist.`)) }
-        : st === 'downloading' ? { label: 'Interrompi il download', icon: 'stop', run: () => d.library.cancel(id) }
+        : st === 'downloading' ? { label: 'Interrompi il download', icon: 'stop', run: () => fromNas ? d.sync?.nasMusic?.()?.stop() : d.library.cancel(id) }
+          : fromNas ? { label: '⬇ Salva su questo computer (suona anche senza NAS)', icon: 'down', run: saveNas }
           : { label: canDownload(id) ? 'Scarica' : 'Rendi offline con un tuo file…', icon: 'down', run: () => offline(id) },
       { label: e?.favorite ? 'Togli dai preferiti' : 'Aggiungi ai preferiti', icon: 'lock', run: () => d.library.toggleFavorite(id, t) },
     ];
     if (extra.inPlaylist) items.push({ label: 'Togli da questa playlist', icon: 'del', danger: true, run: () => { const p = d.playlists.get(extra.inPlaylist!); if (d.playlists.removeTrack(extra.inPlaylist!, id)) { d.edited(extra.inPlaylist!); d.status(`Tolto da «${p?.name}».`); } } });
-    if (e) items.push({ label: 'Elimina dalla libreria', icon: 'del', danger: true, run: () => void d.library.remove(id).then(() => d.status(`«${t.title}» tolto dalla libreria (le playlist lo tengono).`)) });
+    if (e && !fromNas) items.push({ label: 'Elimina dalla libreria', icon: 'del', danger: true, run: () => void d.library.remove(id).then(() => d.status(`«${t.title}» tolto dalla libreria (le playlist lo tengono).`)) });
     const lists = allTracks().byId.get(id)?.lists ?? [];
     const info = whereText(e, lists, d.library.where).full.split('\n')[0];
     d.menu(t.title || id, [t.artist, t.durationSec ? fmtTime(t.durationSec) : '', info].filter(Boolean).join(' · '), items);
