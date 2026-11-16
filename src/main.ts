@@ -42,6 +42,7 @@ import { createYouTubeDeck } from './youtubeDeck';
 import { HttpSyncClient, isPrivateHost, type SyncApi } from './sync/client';
 import { loadNasConfig, saveNasConfig, type NasConfig } from './sync/config';
 import { SyncEngine } from './sync/engine';
+import { Uploader } from './sync/uploader';
 
 const store: Storage | undefined = (() => { try { return window.localStorage; } catch { return undefined; } })();
 const settings = store ? loadSettings(store) : loadSettings({ getItem: () => null, setItem: () => {} } as unknown as Storage);
@@ -326,18 +327,25 @@ const downloads = desktopUI && tauriInvoke ? new DownloadCoordinator(
 let nasConfig = loadNasConfig(store);
 let syncApi: SyncApi | undefined;
 let syncEngine: SyncEngine | undefined;
+let uploader: Uploader | undefined;
 const thisDeviceName = () => { const ua = navigator.userAgent; return isAndroidApp() ? 'Telefono Android' : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'PC Windows' : /Linux/.test(ua) ? 'PC Linux' : 'Computer'; };
 function startSync(cfg: NasConfig) {
   nasConfig = cfg;
   syncApi = new HttpSyncClient(cfg.url, cfg.token);
-  syncEngine = new SyncEngine(plStore, kv, syncApi, { onLine: () => navigator.onLine, log: (m) => log('info', 'sync', { m }) });
+  syncEngine = new SyncEngine(plStore, kv, syncApi, { onLine: () => navigator.onLine, log: (m) => log('info', 'sync', { m }), nasIdOf: (id) => library.nasIdOf(id), localIdOf: (sha) => library.idForNas(sha) });
+  // the files: what is on this computer goes to the NAS; a song that arrived there is pushed again in its playlists
+  uploader = new Uploader({ api: syncApi, library, auto: () => settings.nasUploadAuto, log: (m) => log('info', 'sync.upload', { m }), onDone: () => void syncEngine?.syncNow() });
   let lastNews = '';
+  let wasConnected = false;
   syncEngine.onChange(() => {
     const s = syncEngine?.status();
+    if (s?.connected && !wasConnected) uploader?.resume();
+    wasConnected = !!s?.connected;
     if (s?.lastNews && s.lastNews !== lastNews) { lastNews = s.lastNews; ui.setStatus(`☁ ${s.lastNews}`); }
     if (s?.conflicts.length && !document.body.classList.contains('sync-asked')) { document.body.classList.add('sync-asked'); ui.setStatus('☁ Due dispositivi hanno cambiato la stessa playlist in modi diversi: decidi in ☁ Sync.', true); }
   });
   void syncEngine.start();
+  uploader.start();
 }
 window.addEventListener('online', () => void syncEngine?.syncNow());
 // a playlist changed by another device (or by this one): the phone's playlist menu shows it at once
@@ -362,12 +370,16 @@ const syncDeps = !isIOSApp() ? {
   async disconnect() {
     try { await syncApi?.logout(); } catch { /* the NAS may be away: the token is forgotten here anyway */ }
     await syncEngine?.reset();
-    syncEngine = undefined; syncApi = undefined; nasConfig = undefined;
+    uploader?.stop();
+    syncEngine = undefined; syncApi = undefined; nasConfig = undefined; uploader = undefined;
     saveNasConfig(store, undefined);
     log('info', 'sync.unlinked', {});
   },
   status: (t: string, e?: boolean) => ui.setStatus(t, e),
   here: desktopUI ? 'questo computer' : 'questo telefono',
+  uploader: () => uploader,
+  uploadAuto: () => settings.nasUploadAuto,
+  setUploadAuto: (on: boolean) => { settings.nasUploadAuto = on; save(); },
 } : undefined;
 
 /** The computer's pages (Playlist, Cerca, Download, Libreria), built with the shell's menu and navigation. */
@@ -402,6 +414,7 @@ const desktopPages = desktopUI ? (parts: DesktopParts) => (libUI = buildDesktopP
   status: (t, e) => ui.setStatus(t, e),
   menu: parts.menu,
   go: parts.go,
+  nasState: (id) => { const st = uploader?.stateOf(id); return st ? { state: st, error: uploader?.errorOf(id) } : undefined; },
   store,
   sync: desktopUI ? syncDeps : undefined,
 })) : undefined;

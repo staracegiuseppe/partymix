@@ -122,6 +122,13 @@ body.md.desk { --nav-w: 280px; --pg-max: 1280px; --row-h: 56px; overscroll-behav
 .desk .song .tag { font-size: 11px; line-height: 16px; padding: 0 6px; margin-left: 8px; border-radius: 4px; background: var(--md-surface-highest); color: var(--md-on-surface-variant); vertical-align: 2px; }
 .desk .song .tag.on { background: var(--md-primary); color: var(--md-on-primary); }
 .desk .song .tag.ok { color: var(--ok); } .desk .song .tag.fav { color: var(--md-primary); background: none; }
+.desk .song .tag.nas { background: none; padding: 0 2px; cursor: default; }
+.desk .song .tag.nas.nas { color: var(--md-primary); }
+.desk .song .tag.nas.uploading { color: var(--md-tertiary); }
+.desk .song .tag.nas.missing { color: var(--md-on-surface-variant); }
+.desk .song .tag.nas.error { color: var(--md-error); }
+.desk .sync-upload { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.desk .sync-upload label { display: inline-flex; align-items: center; gap: 6px; }
 .desk .song .st { font-size: 12px; line-height: 16px; white-space: nowrap; padding: 4px 8px; border-radius: 8px; justify-self: start; }
 .desk .song .st.offline { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
 .desk .song .st.online { color: var(--md-on-surface-variant); }

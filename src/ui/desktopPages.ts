@@ -13,6 +13,7 @@ import { Command, EXAMPLES, isCommand, parseCommand, WORDS } from '../commands/p
 import { fmtViews, pickResults } from '../commands/pick';
 import type { SheetItem } from './material';
 import { buildSyncUI, type SyncUIDeps } from './syncPage';
+import type { NasState } from '../sync/uploader';
 
 /** What the computer's pages need from the app. */
 export type PagesDeps = {
@@ -46,6 +47,8 @@ export type PagesDeps = {
   store?: Storage;
   /** The NAS (☁ Sync and 📱 Dispositivi pages); none in the browser without a NAS. */
   sync?: SyncUIDeps;
+  /** Where a song's file stands with the NAS (only when a NAS is linked). */
+  nasState?(id: string): { state: NasState; error?: string } | undefined;
 };
 
 /** Where a song is, for information only: the playlists that have it and the file on the computer. */
@@ -128,12 +131,18 @@ export function buildDesktopPages(d: PagesDeps) {
   const songVM = (t: Track, e = d.library.get(t.videoId), lists?: string[]): SongVM => {
     const off = d.library.stateOf(t.videoId);
     const w = lists ? whereText(e, lists, d.library.where) : undefined;
-    return {
+    const vm: SongVM = {
       id: t.videoId, title: t.title || `Video ${t.videoId}`, artist: t.artist ?? '',
       sub: [t.artist, t.album, w?.short].filter(Boolean).join(' · '),
       dur: t.durationSec || e?.durationSec, thumb: covers.get(e, t), off, pct: d.library.progressOf(t.videoId),
       fav: !!e?.favorite, skip: !d.online() && off !== 'offline', reason: w?.full,
     };
+    const ns = e?.file ? d.nasState?.(t.videoId) : undefined;
+    if (ns) {
+      vm.nas = ns.state === 'nas' ? 'nas' : ns.state === 'error' ? 'error' : ns.state === 'missing' ? 'missing' : 'uploading';
+      if (ns.error) vm.nasTip = ns.error;
+    }
+    return vm;
   };
 
   // ---------- the playlist dialog («Aggiungi a playlist») and the song menu ----------
@@ -606,7 +615,7 @@ export function buildDesktopPages(d: PagesDeps) {
   });
   let lastLibSig = '';
   function paintLibrary(force = false) {
-    const sig = `${libFilter}|${libGroup?.name}|${libQuery}|${d.library.version}|${d.playlists.version}|${d.online()}`;
+    const sig = `${libFilter}|${libGroup?.name}|${libQuery}|${d.library.version}|${d.playlists.version}|${d.online()}|${d.sync?.uploader()?.version ?? ''}`;
     if (!force && sig === lastLibSig) return;
     const sameView = lastLibSig.split('|').slice(0, 3).join('|') === sig.split('|').slice(0, 3).join('|');
     lastLibSig = sig;

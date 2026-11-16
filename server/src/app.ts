@@ -1,14 +1,15 @@
-import { mkdirSync, renameSync, statfsSync, writeFileSync } from 'node:fs';
+import { createReadStream, mkdirSync, renameSync, statfsSync, statSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { apply, cleanOps, diff, type Conflict, type Op } from '../../shared/merge.ts';
-import type { DeviceDoc, PlaylistDoc, PlaylistMeta, ServerEvent, SessionDoc } from '../../shared/model.ts';
+import type { DeviceDoc, PlaylistDoc, PlaylistMeta, ServerEvent, SessionDoc, TrackDoc } from '../../shared/model.ts';
 import {
   ALL_PERMS, createDevice, defaultPerms, DEVICE_KINDS, deviceForToken, getDevice, hashPassword, LoginLimiter, PairingCodes,
   PERM, permMask, permNames, verifyPassword, type Device, type DeviceKind, type PermName,
 } from './auth.ts';
 import { currentSeq, openDbSync, tx, type Db } from './db.ts';
-import { bad, HttpError, isPrivateAddress, num, readJson, Router, sendJson, str } from './http.ts';
+import { bad, HttpError, isPrivateAddress, num, parseContentRange, readJson, readRaw, Router, sendJson, str } from './http.ts';
+import { MAX_CHUNK, Tracks } from './tracks.ts';
 import { cleanEntry, cleanMeta, Playlists } from './playlists.ts';
 
 export const SERVER_VERSION = '0.1.0';
@@ -34,13 +35,16 @@ export type App = {
 /** Where the PartyMix app's page comes from: Tauri serves it on localhost, and Vite in development. */
 const APP_ORIGIN = /^(?:https?:\/\/(?:localhost|127\.0\.0\.1|tauri\.localhost)(?::\d+)?|tauri:\/\/localhost)$/;
 
-const FOLDERS = ['music', 'playlists', 'covers', 'metadata', 'database', 'cache', 'cache/uploads'];
+const FOLDERS = ['music', 'playlists', 'covers', 'metadata', 'database', 'cache', 'cache/uploads', 'cache/trash'];
 
 export function createApp(opts: AppOptions): App {
   const now = opts.now ?? Date.now;
   for (const f of FOLDERS) mkdirSync(join(opts.root, f), { recursive: true });
   const db = opts.db ?? openDbSync(opts.dbFile ?? join(opts.root, 'database', 'partymix.sqlite'));
   const playlists = new Playlists(db, now);
+  const tracks = new Tracks(db, opts.root, now);
+  const dropped = tracks.cleanup();
+  if (dropped) console.log(`upload abbandonati rimossi: ${dropped}`);
   const pairing = new PairingCodes(now);
   const limiter = new LoginLimiter(now);
   const listeners = new Set<ServerResponse>();
@@ -61,6 +65,8 @@ export function createApp(opts: AppOptions): App {
     }
     publish({ seq, kind: 'playlist', id: doc.id, by: doc.updatedBy ?? undefined, summary: doc.deleted ? 'eliminata' : doc.name });
   };
+
+  tracks.onChange = (doc: TrackDoc, seq: number) => publish({ seq, kind: 'track', id: doc.id, summary: doc.deleted ? 'eliminato' : doc.title });
 
   /** The part of a playlist the merge works on. */
   const mergeView = (p: PlaylistDoc) => {
@@ -293,12 +299,76 @@ export function createApp(opts: AppOptions): App {
     sendJson(res, 200, { ok: true, version });
   });
 
+  // ---- tracks (files on the NAS) ----
+  r.on('POST', '/api/tracks/check', async ({ req, res, url }) => {
+    auth(req, url, 'READ_LIBRARY');
+    const b = await readJson(req);
+    sendJson(res, 200, tracks.check(b.sha256));
+  });
+
+  r.on('POST', '/api/tracks/upload', async ({ req, res, url }) => {
+    const d = auth(req, url, 'UPLOAD_TRACK');
+    const b = await readJson(req);
+    const out = tracks.startUpload(d.id, b);
+    sendJson(res, 'track' in out ? 200 : 201, out);
+  });
+
+  /** One piece of a file: Content-Range says which bytes; the last piece answers with the song. */
+  r.on('PUT', '/api/uploads/:id', async ({ req, res, url, params }) => {
+    const d = auth(req, url, 'UPLOAD_TRACK');
+    const range = parseContentRange(req.headers['content-range']);
+    if (range.to - range.from + 1 > MAX_CHUNK) throw new HttpError(413, 'TOO_LARGE', `Pezzi di al massimo ${MAX_CHUNK} byte`);
+    const data = await readRaw(req, MAX_CHUNK);
+    const out = await tracks.chunk(d.id, params[0], range.from, range.to, range.total, data);
+    if (out.done) sendJson(res, 201, { track: out.track }); else sendJson(res, 200, { received: out.received });
+  });
+
+  r.on('GET', '/api/library', ({ req, res, url }) => {
+    auth(req, url, 'READ_LIBRARY');
+    const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit') ?? 200) || 200));
+    sendJson(res, 200, tracks.library(url.searchParams.get('cursor'), limit, (url.searchParams.get('q') ?? '').trim().slice(0, 100)));
+  });
+
+  r.on('GET', '/api/tracks/:id', ({ req, res, url, params }) => {
+    auth(req, url, 'READ_LIBRARY');
+    const t = tracks.get(params[0]);
+    if (!t) throw new HttpError(404, 'NOT_FOUND', 'Brano non trovato');
+    sendJson(res, 200, t);
+  });
+
+  r.on('PATCH', '/api/tracks/:id', async ({ req, res, url, params }) => {
+    auth(req, url, 'UPLOAD_TRACK');
+    const b = await readJson(req);
+    sendJson(res, 200, tracks.patch(params[0], b));
+  });
+
+  r.on('DELETE', '/api/tracks/:id', ({ req, res, url, params }) => {
+    auth(req, url, 'DELETE_TRACK');
+    sendJson(res, 200, tracks.remove(params[0]));
+  });
+
+  r.on('POST', '/api/tracks/:id/cover', async ({ req, res, url, params }) => {
+    auth(req, url, 'UPLOAD_TRACK');
+    const mime = (req.headers['content-type'] ?? '').split(';')[0].trim();
+    const data = await readRaw(req, 2 << 20);
+    sendJson(res, 200, tracks.setCover(params[0], data, mime));
+  });
+
+  r.on('GET', '/api/tracks/:id/cover', ({ req, res, url, params }) => {
+    auth(req, url, 'READ_LIBRARY');
+    const c = tracks.cover(params[0]);
+    if (!c) throw new HttpError(404, 'NOT_FOUND', 'Nessuna copertina');
+    if (req.headers['if-none-match'] === `"${c.sha}"`) { res.writeHead(304); res.end(); return; }
+    res.writeHead(200, { 'content-type': c.mime, 'content-length': statSync(c.path).size, etag: `"${c.sha}"`, 'cache-control': 'private, max-age=86400' });
+    if (req.method === 'HEAD') { res.end(); return; }
+    createReadStream(c.path).pipe(res);
+  });
+
   // ---- sync ----
   r.on('GET', '/api/sync/status', ({ req, res, url }) => {
     const d = auth(req, url, 'READ_LIBRARY');
-    const tracks = (db.prepare('SELECT COUNT(*) AS n FROM track WHERE deleted_at IS NULL').get() as { n: number }).n;
     sendJson(res, 200, {
-      seq: currentSeq(db), tracks, playlists: playlists.list().length,
+      seq: currentSeq(db), tracks: tracks.count(), playlists: playlists.list().length,
       device: { lastSyncSeq: d.last_sync_seq }, serverVersion: SERVER_VERSION, at: now(),
     });
   });
@@ -308,13 +378,16 @@ export function createApp(opts: AppOptions): App {
     const d = auth(req, url, 'READ_LIBRARY');
     const since = Math.max(0, Number(url.searchParams.get('since') ?? 0) || 0);
     const limit = Math.min(1000, Math.max(1, Number(url.searchParams.get('limit') ?? 500) || 500));
-    const pls = playlists.changedSince(since, limit + 1);
-    const more = pls.length > limit;
-    const page = pls.slice(0, limit);
+    const pls = playlists.changedSince(since, limit + 1).map((p) => ({ seq: p.seq, p }));
+    const trs = tracks.changedSince(since, limit + 1).map((t) => ({ seq: t.seq, t }));
+    const all = [...pls, ...trs].sort((a, b) => a.seq - b.seq);
+    const more = all.length > limit;
+    const page = all.slice(0, limit);
     const seq = page.length ? page[page.length - 1].seq : Math.max(since, currentSeq(db));
     const seqOut = more ? seq : Math.max(seq, currentSeq(db));
     db.prepare('UPDATE device SET last_sync_seq = ? WHERE id = ?').run(seqOut, d.id);
-    sendJson(res, 200, { seq: seqOut, more, tracks: [], playlists: page.map(({ seq: _s, ...p }) => p) });
+    const strip = <T extends { seq: number }>(x: T) => { const { seq: _s, ...rest } = x; return rest; };
+    sendJson(res, 200, { seq: seqOut, more, tracks: page.filter((x) => 't' in x).map((x) => strip(x.t!)), playlists: page.filter((x) => 'p' in x).map((x) => strip(x.p!)) });
   });
 
   /** Server-Sent Events: a line for each change, so devices pull at once instead of polling. */

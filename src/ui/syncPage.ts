@@ -2,6 +2,7 @@ import type { DeviceDoc } from '../../shared/model';
 import { isPrivateHost, normalizeUrl, SyncError, type Health, type StorageDoc, type SyncApi } from '../sync/client';
 import type { NasConfig } from '../sync/config';
 import type { SyncConflict, SyncEngine } from '../sync/engine';
+import type { Uploader } from '../sync/uploader';
 import { h } from './dom';
 
 /** What the ☁ Sync and 📱 Dispositivi pages need from the app. */
@@ -17,6 +18,10 @@ export type SyncUIDeps = {
   now?: () => number;
   /** How this device is called in the texts: «questo computer» (default) or «questo telefono». */
   here?: string;
+  /** The upload queue to the NAS (when linked). */
+  uploader(): Uploader | undefined;
+  uploadAuto(): boolean;
+  setUploadAuto(on: boolean): void;
 };
 
 const FIELD_LABEL: Record<string, string> = { name: 'Nome', description: 'Descrizione', color: 'Colore', cover: 'Copertina', link: 'Link', source: 'Origine', sortOrder: 'Posizione' };
@@ -134,6 +139,29 @@ export function buildSyncUI(d: SyncUIDeps) {
       h('div', { class: 'row' }, btn('Tienila (rimettila sul NAS)', 'm-tonal', () => void eng.resolve(c, 'mine')), btn('Elimina anche qui', 'm-outlined', () => void eng.resolve(c, 'theirs'))));
   }
 
+  // ---- the files: how many are on the NAS, what is going up, what failed ----
+  const upText = h('div', {});
+  const upBtn = btn('Carica ora', 'm-tonal', () => { d.uploader()?.uploadNow(); d.status('Controllo quali brani mancano sul NAS e carico quelli che non ci sono.'); });
+  const autoBox = h('input', { type: 'checkbox', id: 'nas-upload-auto' }) as HTMLInputElement;
+  autoBox.addEventListener('change', () => { d.setUploadAuto(autoBox.checked); if (autoBox.checked) d.uploader()?.uploadNow(); d.status(autoBox.checked ? 'I brani importati vanno sul NAS da soli.' : 'I brani restano solo su questo computer finché non premi «Carica ora».'); });
+  const uploadPanel = h('section', { class: 'panel sync-files' }, h('h3', {}, 'Brani sul NAS'),
+    h('div', { class: 'sync-upload' }, upText, upBtn),
+    h('div', { class: 'sync-upload' }, h('label', { for: 'nas-upload-auto' }, autoBox, 'Carica sul NAS i brani importati')),
+    h('p', { class: 'pg-hint' }, 'Ogni file va sul NAS una volta sola: se c’è già, viene solo collegato. Un file arrivato danneggiato viene scartato e segnato come errore.'));
+  let lastUp = '';
+  function paintUpload() {
+    const up = d.uploader();
+    uploadPanel.classList.toggle('hidden', !up);
+    if (!up) return;
+    const sm = up.summary();
+    const key = JSON.stringify([sm, d.uploadAuto()]);
+    if (key === lastUp) return;
+    lastUp = key;
+    upText.replaceChildren('Brani sul NAS: ', h('b', {}, `${sm.onNas} su ${sm.total}`), ' · ⬆ in corso: ', h('b', {}, String(sm.uploading)), ' · ⚠ falliti: ', h('b', {}, String(sm.failed)));
+    upBtn.disabled = sm.total === sm.onNas && !sm.failed;
+    if (autoBox.checked !== d.uploadAuto()) autoBox.checked = d.uploadAuto();
+  }
+
   const storText = h('div', { class: 'sync-grid' });
   const storagePanel = h('section', { class: 'panel' }, h('h3', {}, 'Spazio sul NAS'), storText);
   let storage: StorageDoc | undefined, storageAt = 0;
@@ -146,7 +174,7 @@ export function buildSyncUI(d: SyncUIDeps) {
   }
 
   const syncHead = h('header', { class: 'pg-head' }, h('div', { class: 'pg-tt' }, h('h1', { class: 'pg-title' }, 'Sync'), h('div', { class: 'pg-sub' }, 'Le playlist uguali su tutti i tuoi dispositivi, con il NAS al centro')));
-  const syncPage = h('div', { class: 'pg pg-sync' }, syncHead, connectPanel, statePanel, conflictPanel, storagePanel);
+  const syncPage = h('div', { class: 'pg pg-sync' }, syncHead, connectPanel, statePanel, conflictPanel, uploadPanel, storagePanel);
 
   let lastPaint = '';
   function paintSync() {
@@ -154,7 +182,8 @@ export function buildSyncUI(d: SyncUIDeps) {
     connectPanel.classList.toggle('hidden', !!cfg);
     statePanel.classList.toggle('hidden', !cfg);
     storagePanel.classList.toggle('hidden', !cfg);
-    if (!cfg || !eng) { conflictPanel.classList.add('hidden'); return; }
+    if (!cfg || !eng) { conflictPanel.classList.add('hidden'); uploadPanel.classList.add('hidden'); return; }
+    paintUpload();
     const s = eng.status();
     const key = JSON.stringify([s.connected, s.live, s.syncing, s.lastSync, s.pending, s.error, s.lastNews, s.conflicts.length, Math.floor(now() / 30_000)]);
     if (key === lastPaint) return;

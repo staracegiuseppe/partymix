@@ -250,6 +250,74 @@ fn lib_read(app: tauri::AppHandle, path: String) -> Result<tauri::ipc::Response,
     std::fs::read(p).map(tauri::ipc::Response::new).map_err(|e| e.to_string())
 }
 
+/// SHA-256 of a file of the library, read 1 MB at a time: the identity of the song on the NAS.
+#[tauri::command]
+async fn file_sha256(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    use sha2::Digest;
+    let p = library_path(&app, &path)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::io::Read;
+        let mut f = std::fs::File::open(&p).map_err(|e| e.to_string())?;
+        let mut h = sha2::Sha256::new();
+        let mut buf = vec![0u8; 1 << 20];
+        loop {
+            let n = f.read(&mut buf).map_err(|e| e.to_string())?;
+            if n == 0 { break; }
+            h.update(&buf[..n]);
+        }
+        Ok(format!("{:x}", h.finalize()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Bytes `from`…`from+len` of a file of the library (one piece of an upload), without loading the whole file in the page.
+#[tauri::command]
+fn lib_read_range(app: tauri::AppHandle, path: String, from: u64, len: u64) -> Result<tauri::ipc::Response, String> {
+    use std::io::{Read, Seek, SeekFrom};
+    if len > 64 << 20 { return Err("pezzo troppo grande".into()); }
+    let p = library_path(&app, &path)?;
+    let mut f = std::fs::File::open(p).map_err(|e| e.to_string())?;
+    f.seek(SeekFrom::Start(from)).map_err(|e| e.to_string())?;
+    let mut out = Vec::with_capacity(len as usize);
+    f.take(len).read_to_end(&mut out).map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(out))
+}
+
+/// Free bytes on the volume of `path` (empty = the library folder); None when the system does not say.
+/// No extra crate: the system's own tool answers (df on Unix, PowerShell on Windows).
+#[tauri::command]
+async fn disk_free(app: tauri::AppHandle, path: Option<String>) -> Result<Option<u64>, String> {
+    let p = match path.filter(|s| !s.is_empty()) {
+        Some(s) => std::path::PathBuf::from(s),
+        None => library_root(&app)?,
+    };
+    let mut dir = p.clone();
+    while !dir.exists() { if !dir.pop() { return Ok(None); } }
+    Ok(tauri::async_runtime::spawn_blocking(move || free_bytes(&dir)).await.map_err(|e| e.to_string())?)
+}
+
+fn free_bytes(dir: &std::path::Path) -> Option<u64> {
+    #[cfg(unix)]
+    {
+        let o = std::process::Command::new("df").arg("-Pk").arg(dir).stdin(std::process::Stdio::null()).output().ok()?;
+        if !o.status.success() { return None; }
+        let text = String::from_utf8_lossy(&o.stdout);
+        let line = text.lines().nth(1)?;
+        let avail: u64 = line.split_whitespace().nth(3)?.parse().ok()?;
+        return Some(avail * 1024);
+    }
+    #[cfg(windows)]
+    {
+        let root = dir.components().next().map(|c| c.as_os_str().to_string_lossy().into_owned())?;
+        let script = format!("(Get-PSDrive -Name '{}').Free", root.trim_end_matches(':'));
+        let o = std::process::Command::new("powershell").args(["-NoProfile", "-Command", &script]).output().ok()?;
+        return String::from_utf8_lossy(&o.stdout).trim().parse().ok();
+    }
+    #[allow(unreachable_code)]
+    None
+}
+
 /// The computer's accent colour («#007AFF»), so the app takes the same colours as the system. None = not known.
 #[tauri::command]
 fn system_accent() -> Option<String> {
@@ -402,7 +470,7 @@ pub fn run() {
     builder
         .manage(capture::CaptureState::default())
         .plugin(tauri_plugin_localhost::Builder::new(PORT).build())
-        .invoke_handler(tauri::generate_handler![list_displays, open_projector, close_projector, http_get, capture::start_audio_capture, capture::stop_audio_capture, capture::ad_debug_log, capture::ad_debug_playlist, capture::ad_debug_spot, open_feedback, keep_awake, lib_write, lib_read, lib_root, lib_delete, download::dl_create, download::dl_create_many, download::dl_list, download::dl_get, download::dl_cancel, download::dl_remove, download::dl_config, system_accent])
+        .invoke_handler(tauri::generate_handler![list_displays, open_projector, close_projector, http_get, capture::start_audio_capture, capture::stop_audio_capture, capture::ad_debug_log, capture::ad_debug_playlist, capture::ad_debug_spot, open_feedback, keep_awake, lib_write, lib_read, lib_root, lib_delete, file_sha256, lib_read_range, disk_free, download::dl_create, download::dl_create_many, download::dl_list, download::dl_get, download::dl_cancel, download::dl_remove, download::dl_config, system_accent])
         .setup(|app| {
             // download manager: jobs in Music/PartyMix Library/metadata, started at once (interrupted downloads resume)
             match library_root(app.handle()) {
