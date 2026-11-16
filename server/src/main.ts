@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createApp, SERVER_VERSION } from './app.ts';
+import { dsmFromEnv } from './dsm.ts';
 import { openDb } from './db.ts';
 
 const root = process.env.PARTYMIX_ROOT ?? '/PartyMix';
@@ -11,7 +12,9 @@ const allowPublic = process.env.PARTYMIX_ALLOW_PUBLIC === '1';
 
 mkdirSync(join(root, 'database'), { recursive: true });
 const db = await openDb(join(root, 'database', 'partymix.sqlite'));
-const app = createApp({ root, allowPublic, db, scanAtStart: true });
+const dsm = dsmFromEnv();
+const app = createApp({ root, allowPublic, db, scanAtStart: true, dsm });
+if (dsm.url) console.log('accesso con gli utenti del NAS (DSM) attivo');
 const server = createServer(app.handle);
 server.listen(port, host, () => {
   console.log(`PartyMix server ${SERVER_VERSION} (${db.engine}, Node ${process.version}) su http://${host}:${port}, cartella ${root}${allowPublic ? ' (ATTENZIONE: accesso da internet consentito)' : ''}`);

@@ -88,7 +88,7 @@ export function buildSyncUI(d: SyncUIDeps) {
     if (u.protocol === 'http:' && !isPrivateHost(u.hostname)) throw new Error('Senza HTTPS PartyMix parla solo con indirizzi della rete di casa o della VPN.');
     health = await d.probe(url);
     probeMsg.classList.remove('err');
-    probeMsg.textContent = health.setup ? `PartyMix ${health.version} trovato. Accedi con nome e password, o con un codice da un dispositivo già collegato.` : `PartyMix ${health.version} trovato: è nuovo. Crea l’account che userai su tutti i dispositivi.`;
+    probeMsg.textContent = health.setup ? `PartyMix ${health.version} trovato. Accedi ${health.nasUsers ? 'con il tuo utente del NAS (lo stesso nome e la stessa password di DSM)' : 'con nome e password'}, o con un codice da un dispositivo già collegato.` : `PartyMix ${health.version} trovato: è nuovo. Crea l’account che userai su tutti i dispositivi.`;
   }));
   const goBtn = btn('Collega', 'm-filled', (b) => void run(b, async () => {
     const url = normalizeUrl(urlInput.value)!;

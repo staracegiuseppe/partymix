@@ -22,7 +22,7 @@ export class SyncError extends Error {
 export type OpsResult = { playlist: PlaylistDoc; merged: boolean; conflicts: Conflict[] };
 export type SyncStatusDoc = { seq: number; tracks: number; playlists: number; device: { lastSyncSeq: number }; serverVersion: string; at: number };
 export type StorageDoc = { musicBytes: number; tracks: number; freeBytes: number | null; totalBytes: number | null };
-export type Health = { app: string; version: string; setup: boolean };
+export type Health = { app: string; version: string; setup: boolean; /** Every user of the NAS (DSM) can sign in with their own name and password. */ nasUsers?: boolean };
 export type DeviceInfo = { deviceName: string; deviceKind: 'pc' | 'android' | 'ios' | 'other' };
 
 /** Everything the app asks the NAS. One implementation talks HTTP; the tests use a fake. */

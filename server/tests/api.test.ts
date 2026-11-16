@@ -100,8 +100,8 @@ describe('autenticazione e dispositivi', () => {
     assert.equal((await call('POST', '/api/auth/pair', { code: c.body.code, deviceName: 'Tardi' })).status, 401);
   });
 
-  test('il telefono non può creare codici né cambiare permessi', async () => {
-    assert.equal((await call('POST', '/api/auth/pair-code', {}, phone)).status, 403);
+  test('il telefono può creare un codice (il nuovo dispositivo avrà al massimo i suoi permessi), ma non cambiare permessi', async () => {
+    assert.equal((await call('POST', '/api/auth/pair-code', {}, phone)).status, 201);
     assert.equal((await call('PATCH', `/api/devices/${phoneId}`, { perms: ['ADMIN'] }, phone)).status, 403);
   });
 

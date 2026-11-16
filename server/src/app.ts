@@ -12,6 +12,7 @@ import { bad, HttpError, isPrivateAddress, num, parseContentRange, readJson, rea
 import { MAX_CHUNK, Tracks } from './tracks.ts';
 import { cleanEntry, cleanMeta, Playlists } from './playlists.ts';
 import { checkLink, loadStreamKey, sendFile, signLink } from './stream.ts';
+import { dsmLogin, type DsmOptions } from './dsm.ts';
 
 export const SERVER_VERSION = '1.0.0';
 
@@ -27,7 +28,12 @@ export type AppOptions = {
   allowPublic?: boolean;
   /** Look in music/ for songs copied by hand, a moment after start (the real server; tests ask with POST /api/scan). */
   scanAtStart?: boolean;
+  /** Sign in with the NAS's own users (Synology DSM): see dsm.ts. */
+  dsm?: DsmOptions;
 };
+
+/** A NAS user who is not a DSM administrator: everything but deleting songs and managing the other devices. */
+const USER_PERMS = ALL_PERMS & ~PERM.DELETE_TRACK & ~PERM.ADMIN;
 
 export type App = {
   handle: (req: IncomingMessage, res: ServerResponse) => void;
@@ -52,6 +58,7 @@ export function createApp(opts: AppOptions): App {
   // songs copied by hand while the server was off: found at start (and then on demand, POST /api/scan)
   if (opts.scanAtStart) setTimeout(() => void tracks.scan().then((s) => { if (s.found) console.log(`scansione music/: ${s.added} brani aggiunti, ${s.duplicates} doppi, ${s.failed} saltati`); }).catch(() => {}), 2000);
   const pairing = new PairingCodes(now);
+  const pairPerms = new Map<string, number>();
   const limiter = new LoginLimiter(now);
   const listeners = new Set<ServerResponse>();
 
@@ -116,7 +123,7 @@ export function createApp(opts: AppOptions): App {
   const r = new Router();
 
   r.on('GET', '/api/health', ({ res }) => {
-    sendJson(res, 200, { app: 'partymix', version: SERVER_VERSION, setup: userCount() > 0, engine: db.engine, node: process.version });
+    sendJson(res, 200, { app: 'partymix', version: SERVER_VERSION, setup: userCount() > 0, engine: db.engine, node: process.version, nasUsers: !!opts.dsm?.url });
   });
 
   // ---- authentication ----
@@ -142,19 +149,36 @@ export function createApp(opts: AppOptions): App {
     const password = str(b.password, 'password', 200)!;
     const dev = deviceInput(b);
     const u = db.prepare('SELECT id, pass_hash FROM user WHERE name = ?').get(name) as { id: number; pass_hash: string } | undefined;
-    if (!u || !verifyPassword(password, u.pass_hash)) {
-      limiter.fail(addr);
-      throw new HttpError(401, 'BAD_LOGIN', 'Nome o password sbagliati');
+    if (u && u.pass_hash !== 'dsm' && verifyPassword(password, u.pass_hash)) {
+      limiter.ok(addr);
+      const out = createDevice(db, u.id, dev.name, dev.kind, defaultPerms(dev.kind, false), now());
+      sendJson(res, 201, session(out.device, out.token));
+      return;
     }
-    limiter.ok(addr);
-    const out = createDevice(db, u.id, dev.name, dev.kind, defaultPerms(dev.kind, false), now());
-    sendJson(res, 201, session(out.device, out.token));
+    // every user of the NAS (DSM) can sign in with their own name and password: the music and playlists are shared
+    if (opts.dsm?.url) {
+      const r = await dsmLogin(opts.dsm, name, password);
+      if (r.ok) {
+        limiter.ok(addr);
+        const id = u?.id ?? Number(db.prepare('INSERT INTO user (name, pass_hash, created_at) VALUES (?, ?, ?)').run(name, 'dsm', now()).lastInsertRowid);
+        const perms = r.admin ? ALL_PERMS : USER_PERMS;
+        const out = createDevice(db, id, dev.name, dev.kind, perms, now());
+        sendJson(res, 201, session(out.device, out.token));
+        return;
+      }
+      if (r.reason !== 'wrong') { limiter.fail(addr); throw new HttpError(r.reason === 'unreachable' ? 503 : 401, r.reason === 'otp' ? 'NEEDS_CODE' : 'BAD_LOGIN', r.message); }
+    }
+    limiter.fail(addr);
+    throw new HttpError(401, 'BAD_LOGIN', opts.dsm?.url ? 'Nome o password sbagliati (usa il tuo utente del NAS)' : 'Nome o password sbagliati');
   });
 
   /** A signed-in device asks for a code to show; the new device sends it to /api/auth/pair. */
   r.on('POST', '/api/auth/pair-code', ({ req, res, url }) => {
-    const d = auth(req, url, 'ADMIN');
-    sendJson(res, 201, pairing.create(d.user_id));
+    // any signed-in device can add another one; the new device gets at most the permissions of the one that made the code
+    const d = auth(req, url);
+    const c = pairing.create(d.user_id);
+    pairPerms.set(c.code, d.perms);
+    sendJson(res, 201, c);
   });
 
   r.on('POST', '/api/auth/pair', async ({ req, res }) => {
@@ -168,7 +192,9 @@ export function createApp(opts: AppOptions): App {
       limiter.fail(addr);
       throw new HttpError(401, 'BAD_CODE', 'Codice sbagliato o scaduto');
     }
-    const out = createDevice(db, userId, dev.name, dev.kind, defaultPerms(dev.kind, false), now());
+    const from = pairPerms.get(code) ?? ALL_PERMS;
+    pairPerms.delete(code);
+    const out = createDevice(db, userId, dev.name, dev.kind, defaultPerms(dev.kind, false) & from, now());
     sendJson(res, 201, session(out.device, out.token));
   });
 
