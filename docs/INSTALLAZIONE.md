@@ -45,28 +45,9 @@ Il proiettore è fatto per andare a tutto schermo sul monitor scelto anche con W
 
 ## Il server per il NAS
 
-Facoltativo: serve solo se vuoi la stessa musica e le stesse playlist su tutti i dispositivi (vedi [GUIDA › Il NAS di casa](GUIDA.md#11-il-nas-di-casa)). Il server è il file `partymix-server-nas.zip` nella pagina Release. Non ha bisogno di internet e non va aperta nessuna porta sul router.
+Facoltativo: serve solo se vuoi la stessa musica e le stesse playlist su tutti i dispositivi. Il server è il file `partymix-server-nas.zip` nella pagina Release e funziona su Synology (anche senza Docker), QNAP, Unraid, TrueNAS o un qualsiasi Linux con Node.js 18+ o Docker.
 
-### Synology senza Docker (per esempio i modelli «j»)
-
-1. **Centro pacchetti** → installa **Node.js v18** (o più recente).
-2. **File Station** → crea la cartella condivisa **PartyMix** (la musica e il database vanno lì) e una cartella `docker/partymix` (o un'altra a tua scelta) per il programma.
-3. Copia `partymix-server-nas.zip` in `docker/partymix`, clic destro → **Estrai qui**. Deve comparire la cartella `server`.
-4. **Pannello di controllo → Utilità di pianificazione → Crea → Attività attivata → Script definito dall'utente**:
-   - Utente: il tuo utente (quello che può scrivere in PartyMix), Evento: **Avvio**.
-   - Esegui comando: `sh /volume1/docker/partymix/server/nas/partymix.sh` (con il tuo volume: `volume1`, `volume2`…). Se la cartella PartyMix non è su `/volume1`, aggiungi davanti `PARTYMIX_ROOT=/volume2/PartyMix `.
-5. Seleziona l'attività e premi **Esegui** (poi partirà da sola a ogni accensione).
-6. Da un browser di casa apri `http://IP-DEL-NAS:8788/api/health`: deve rispondere `{"app":"partymix",…}`. Il registro è in `PartyMix/server.log`.
-
-**Aggiornare il server:** estrai il nuovo zip sopra il vecchio (sovrascrivi) e premi di nuovo **Esegui**: lo script ferma la copia vecchia e avvia la nuova. Database e musica restano.
-
-### NAS con Docker (Synology Container Manager, QNAP, Unraid…)
-
-Nel repository c'è `server/docker-compose.yml`: crea un progetto con quel file, il volume `/volume1/PartyMix` viene montato su `/PartyMix`. Dettagli in [server/README.md](../server/README.md).
-
-### Fuori casa
-
-Il server risponde solo alla rete di casa e alle VPN private. Per usarlo fuori casa installa **Tailscale** (pacchetto ufficiale Synology) sul NAS e sul telefono.
+📖 **Guida passo passo: [NAS.md](NAS.md)**: installazione, avvio automatico, collegamento dell'app, utenti, aggiornamenti e problemi.
 
 ## Aggiornamento
 Scarica il nuovo installer e installalo sopra quello vecchio: impostazioni e playlist restano. Non c'è aggiornamento automatico.

@@ -68,7 +68,7 @@ export interface SyncApi {
 
 export type ScanStatus = { running: boolean; last?: { found: number; added: number; duplicates: number; failed: number; at: number } };
 
-/** `http://192.168.1.10:8787` from whatever the user typed (an address, with or without http:// and port). */
+/** `http://192.168.1.10:8788` from whatever the user typed (an address, with or without http:// and port). */
 export function normalizeUrl(input: string): string | undefined {
   let s = input.trim();
   if (!s) return undefined;
@@ -76,7 +76,7 @@ export function normalizeUrl(input: string): string | undefined {
   try {
     const u = new URL(s);
     if (!u.hostname) return undefined;
-    if (!u.port && u.protocol === 'http:') u.port = '8787';
+    if (!u.port && u.protocol === 'http:') u.port = '8788';
     u.pathname = u.pathname.replace(/\/+$/, '');
     u.search = '';
     u.hash = '';

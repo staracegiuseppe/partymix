@@ -1,6 +1,6 @@
 {
   "name": "partymix-server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "PartyMix: libreria musicale personale sul NAS (playlist, brani, dispositivi)",

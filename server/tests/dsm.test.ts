@@ -9,8 +9,8 @@ import { createApp, type App } from '../src/app.ts';
 import { openDb } from '../src/db.ts';
 import { dsmAdmins } from '../src/dsm.ts';
 
-// a fake DSM: stareis (administrator) and raffaele (normal user), lucia with two-step verification
-const USERS: Record<string, string> = { stareis: 'pw-stareis', raffaele: 'pw-raffaele', lucia: 'pw-lucia', mario: 'pw-mario' };
+// a fake DSM: anna (administrator) and marco (normal user), lucia with two-step verification
+const USERS: Record<string, string> = { anna: 'pw-anna', marco: 'pw-marco', lucia: 'pw-lucia', mario: 'pw-mario' };
 let dsm: Server, dsmUrl = '', logouts = 0;
 let root: string, app: App, server: Server, base: string;
 
@@ -24,7 +24,7 @@ before(async () => {
       if (q.get('method') === 'logout') { logouts++; res.end('{"success":true}'); return; }
       const name = q.get('account') ?? '';
       // like DSM: a normal user may not use the DSM desktop (unknown session), only File Station; «mario» may use nothing
-      if (USERS[name] === q.get('passwd') && (name === 'raffaele' || name === 'mario') && (name === 'mario' || q.get('session') !== 'FileStation')) { res.end('{"success":false,"error":{"code":402}}'); return; }
+      if (USERS[name] === q.get('passwd') && (name === 'marco' || name === 'mario') && (name === 'mario' || q.get('session') !== 'FileStation')) { res.end('{"success":false,"error":{"code":402}}'); return; }
       if (name === 'lucia' && q.get('passwd') === USERS.lucia) { res.end('{"success":false,"error":{"code":403}}'); return; }
       res.end(USERS[name] && USERS[name] === q.get('passwd') ? `{"success":true,"data":{"sid":"sid-${name}"}}` : '{"success":false,"error":{"code":400}}');
     });
@@ -33,7 +33,7 @@ before(async () => {
   dsmUrl = `http://127.0.0.1:${(dsm.address() as AddressInfo).port}/webapi/entry.cgi`;
   root = mkdtempSync(join(tmpdir(), 'partymix-dsm-'));
   const groups = join(root, 'group');
-  writeFileSync(groups, 'users:x:100:\nadministrators:x:101:admin,stareis\n');
+  writeFileSync(groups, 'users:x:100:\nadministrators:x:101:admin,anna\n');
   app = createApp({ root, db: await openDb(':memory:'), dsm: { url: dsmUrl, groupFile: groups } });
   server = createServer(app.handle);
   await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok));
@@ -54,8 +54,8 @@ const login = (name: string, password: string, kind = 'android') => call('POST',
 describe('accesso con gli utenti del NAS (DSM)', () => {
   test('il gruppo administrators da /etc/group', () => {
     const f = join(root, 'g2');
-    writeFileSync(f, 'administrators:x:101:admin, Stareis\n');
-    assert.deepEqual([...dsmAdmins(f)], ['admin', 'stareis']);
+    writeFileSync(f, 'administrators:x:101:admin, Anna\n');
+    assert.deepEqual([...dsmAdmins(f)], ['admin', 'anna']);
     assert.equal(dsmAdmins(join(root, 'nope')).size, 0);
   });
 
@@ -63,18 +63,18 @@ describe('accesso con gli utenti del NAS (DSM)', () => {
     assert.equal((await call('GET', '/api/health')).body.nasUsers, true);
   });
 
-  test('stareis (amministratore DSM): entra con la password del NAS e può tutto; la sessione DSM viene chiusa', async () => {
-    const r = await login('stareis', 'pw-stareis', 'pc');
+  test('anna (amministratore DSM): entra con la password del NAS e può tutto; la sessione DSM viene chiusa', async () => {
+    const r = await login('anna', 'pw-anna', 'pc');
     assert.equal(r.status, 201);
-    assert.equal(r.body.user.name, 'stareis');
+    assert.equal(r.body.user.name, 'anna');
     assert.ok(r.body.device.perms.includes('ADMIN'));
     assert.ok(r.body.device.perms.includes('DELETE_TRACK'));
     await new Promise((ok) => setTimeout(ok, 50));
     assert.ok(logouts >= 1);
   });
 
-  test('raffaele (utente normale): entra, ascolta, carica e modifica le playlist, ma non cancella brani né gestisce dispositivi', async () => {
-    const r = await login('raffaele', 'pw-raffaele', 'pc');
+  test('marco (utente normale): entra, ascolta, carica e modifica le playlist, ma non cancella brani né gestisce dispositivi', async () => {
+    const r = await login('marco', 'pw-marco', 'pc');
     assert.equal(r.status, 201);
     const p = r.body.device.perms as string[];
     for (const x of ['READ_LIBRARY', 'PLAY_TRACK', 'DOWNLOAD_TRACK', 'EDIT_PLAYLIST', 'UPLOAD_TRACK']) assert.ok(p.includes(x), x);
@@ -83,20 +83,20 @@ describe('accesso con gli utenti del NAS (DSM)', () => {
     const tok = r.body.token;
     const c = await call('POST', '/api/playlists', { id: 'p1', name: 'Festa', entries: [] }, tok);
     assert.equal(c.status, 201);
-    const s = await login('stareis', 'pw-stareis', 'pc');
+    const s = await login('anna', 'pw-anna', 'pc');
     assert.ok((await call('GET', '/api/playlists', undefined, s.body.token)).body.some((x: { id: string }) => x.id === 'p1'));
   });
 
-  test('raffaele può collegare il suo telefono con un codice, che non riceve più permessi dei suoi', async () => {
-    const r = await login('raffaele', 'pw-raffaele', 'pc');
+  test('marco può collegare il suo telefono con un codice, che non riceve più permessi dei suoi', async () => {
+    const r = await login('marco', 'pw-marco', 'pc');
     const code = (await call('POST', '/api/auth/pair-code', {}, r.body.token)).body.code;
-    const ph = await call('POST', '/api/auth/pair', { code, deviceName: 'Telefono di Raffaele', deviceKind: 'android' });
+    const ph = await call('POST', '/api/auth/pair', { code, deviceName: 'Telefono di Marco', deviceKind: 'android' });
     assert.equal(ph.status, 201);
     assert.ok(!ph.body.device.perms.includes('ADMIN'));
   });
 
   test('password sbagliata o utente sconosciuto: 401 con un messaggio che ricorda di usare l’utente del NAS', async () => {
-    const r = await login('raffaele', 'sbagliata');
+    const r = await login('marco', 'sbagliata');
     assert.equal(r.status, 401);
     assert.match(r.body.message, /utente del NAS/);
     assert.equal((await login('nessuno', 'x')).status, 401);

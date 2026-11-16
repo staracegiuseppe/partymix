@@ -287,11 +287,13 @@ Con un NAS in casa (per esempio un Synology) PartyMix tiene **la stessa musica e
 
 <p align="center"><img src="img/desktop-nas-files.png" alt="Libreria › Musica sul NAS: caricamenti, brani del NAS su questo computer, spazio" width="760"></p>
 
-**Installare PartyMix sul NAS.** Una volta sola: segui [INSTALLAZIONE.md › Il server per il NAS](INSTALLAZIONE.md#il-server-per-il-nas). Poi da un browser della rete di casa l'indirizzo `http://IP-DEL-NAS:8788/api/health` deve rispondere `{"app":"partymix",…}`.
+**Installare PartyMix sul NAS.** Una volta sola: segui la guida passo passo **[NAS.md](NAS.md)** (Synology anche senza Docker, QNAP, Unraid, TrueNAS, Linux). Poi da un browser della rete di casa l'indirizzo `http://IP-DEL-NAS:8788/api/health` deve rispondere `{"app":"partymix",…}`.
 
 **Collegare un dispositivo** (⚙ Impostazioni → NAS e sincronizzazione):
-1. Scrivi l'indirizzo del NAS (per esempio `192.168.1.10:8788`) e premi **Controlla**.
-2. La prima volta crei l'account (nome e password). Sugli altri dispositivi accedi con gli stessi dati, oppure con il **codice a 6 cifre** che trovi in **Dispositivi → + Aggiungi dispositivo** su un dispositivo già collegato (vale 5 minuti).
+1. Scrivi l'indirizzo del NAS (per esempio `192.168.1.10`: la porta 8788 si aggiunge da sola) e premi **Controlla**.
+2. **Synology:** accedi con il **tuo utente del NAS**, cioè il nome e la password che usi per DSM. Ogni persona di casa entra con il suo; musica e playlist sono in comune. Gli amministratori del NAS possono anche togliere brani e gestire i dispositivi di tutti (dettagli in [NAS.md › Chi può entrare](NAS.md#chi-può-entrare)).
+   **Altri NAS:** la prima volta crei l'account di PartyMix (nome e password), poi sugli altri dispositivi accedi con gli stessi dati.
+   **Sempre:** puoi entrare anche con il **codice a 6 cifre** che trovi in **Dispositivi → + Aggiungi dispositivo** su un dispositivo già collegato (vale 5 minuti).
 3. Su **Android 17** il telefono chiede il permesso **«Dispositivi nelle vicinanze / rete locale»**: rispondi **Consenti**, altrimenti l'app non vede il NAS. Se l'hai negato, PartyMix apre le impostazioni dell'app per cambiarlo.
 
 <p align="center"><img src="img/desktop-nas-settings.png" alt="Impostazioni: NAS e sincronizzazione, dispositivi" width="620"> <img src="img/android-nas-light.png" alt="Il collegamento al NAS su Android" width="200"></p>

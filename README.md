@@ -46,7 +46,7 @@ Incolli una playlist YouTube o Spotify, premi un tasto e la musica va avanti da 
 | **Windows 10/11** (64 bit) | `PartyMix_x.y.z_windows-x64.zip` | Estrai lo zip e apri `PartyMix.exe`, senza installare nulla. Se compare SmartScreen: *Ulteriori informazioni → Esegui comunque*. |
 | **Linux** x86_64 (Fedora, Ubuntu 22.04 o successivo, Debian 12…) | `PartyMix_x.y.z_linux-x86_64.rpm` · `PartyMix_x.y.z_linux-amd64.deb` · `PartyMix_x.y.z_linux-x86_64.AppImage` | Fedora: `sudo dnf install ./PartyMix_*.rpm`. Ubuntu/Debian: `sudo apt install ./PartyMix_*.deb`. Oppure l'AppImage, senza installare: `chmod +x PartyMix_*.AppImage` e aprilo. |
 | **Android** 7 o successivo | `PartyMix_x.y.z_android.apk` | Apri l'APK sul telefono e consenti l'installazione da questa fonte. Su Android 17, per il NAS, consenti «rete locale». |
-| **NAS** (facoltativo) | `partymix-server-nas.zip` | Il server per il NAS di casa: vedi [docs/INSTALLAZIONE.md › Il server per il NAS](docs/INSTALLAZIONE.md#il-server-per-il-nas). |
+| **NAS** (facoltativo) | `partymix-server-nas.zip` | Il server per il NAS di casa (Synology anche senza Docker, QNAP, Unraid, TrueNAS, Linux): guida passo passo in [docs/NAS.md](docs/NAS.md). Su Synology ogni persona entra con il suo utente del NAS. |
 
 Tutti i file sono nella pagina [**Release**](https://github.com/staracegiuseppe/partymix/releases/latest). Le app non sono firmate con un certificato a pagamento, quindi al primo avvio il sistema mostra un avviso: è normale, i dettagli sono in [docs/INSTALLAZIONE.md](docs/INSTALLAZIONE.md). Per aggiornare installa la nuova versione sopra la vecchia: impostazioni e playlist restano.
 

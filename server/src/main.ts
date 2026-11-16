@@ -6,7 +6,7 @@ import { dsmFromEnv, dsmProbe } from './dsm.ts';
 import { openDb } from './db.ts';
 
 const root = process.env.PARTYMIX_ROOT ?? '/PartyMix';
-const port = Number(process.env.PORT ?? 8787);
+const port = Number(process.env.PORT ?? 8788);
 const host = process.env.HOST ?? '0.0.0.0';
 const allowPublic = process.env.PARTYMIX_ALLOW_PUBLIC === '1';
 

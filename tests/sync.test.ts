@@ -362,8 +362,8 @@ describe('sync engine: righe e id', () => {
     expect(trackOf({ entryId: 'x' })).toBeUndefined();
   });
 
-  it('indirizzo del NAS: porta 8787 di default, solo reti private', () => {
-    expect(normalizeUrl('192.168.1.10')).toBe('http://192.168.1.10:8787');
+  it('indirizzo del NAS: porta 8788 di default, solo reti private', () => {
+    expect(normalizeUrl('192.168.1.10')).toBe('http://192.168.1.10:8788');
     expect(normalizeUrl('http://nas.local:9000/')).toBe('http://nas.local:9000');
     expect(normalizeUrl('https://nas.tail1234.ts.net')).toBe('https://nas.tail1234.ts.net');
     expect(normalizeUrl('')).toBeUndefined();

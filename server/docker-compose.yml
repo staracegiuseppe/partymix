@@ -1,5 +1,6 @@
-# PartyMix sul NAS Synology (Container Manager → Progetto → Crea → questo file).
-# Prima crea la cartella condivisa PartyMix (qui su /volume2/PartyMix) e dalle i permessi all'utente indicato in PUID/PGID.
+# PartyMix server with Docker (Synology Container Manager, QNAP Container Station, Unraid, TrueNAS, any Linux).
+# Synology: Container Manager → Progetto → Crea → percorso della cartella «server» → usa questo file.
+# Prima: crea la cartella condivisa PartyMix e sostituisci qui sotto i tre valori segnati con «←».
 services:
   partymix-server:
     build:
@@ -8,15 +9,21 @@ services:
     image: partymix-server:latest
     container_name: partymix-server
     restart: unless-stopped
-    # Rete dell'host: il server vede l'indirizzo vero di chi si collega e così rifiuta chi arriva da internet.
+    # Rete dell'host: il server vede l'indirizzo vero di chi si collega (così rifiuta chi arriva da internet)
+    # e, su Synology, raggiunge DSM per far entrare gli utenti del NAS.
     network_mode: host
-    # Utente del NAS proprietario di /volume1/PartyMix (Pannello di controllo → Utente; `id nomeutente` via SSH).
-    user: "1026:100"
+    # ← l'utente del NAS proprietario della cartella PartyMix, come «uid:gid» (via SSH: `id nomeutente`)
+    user: "1000:100"
     environment:
       PARTYMIX_ROOT: /PartyMix
-      # 8787 è la porta standard di PartyMix; su questo NAS è già usata da un altro servizio (iptv-recorder), quindi 8788.
       PORT: "8788"
       # Mai "1" senza VPN: aprirebbe la libreria a internet.
       PARTYMIX_ALLOW_PUBLIC: "0"
+      # Solo Synology: gli utenti del NAS entrano con nome e password di DSM. Altrove togli queste due righe.
+      PARTYMIX_DSM_URL: http://127.0.0.1:5000/webapi/entry.cgi
+      PARTYMIX_GROUP_FILE: /host/group
     volumes:
-      - /volume2/PartyMix:/PartyMix
+      # ← la cartella condivisa PartyMix del NAS (Synology: /volume1/PartyMix, QNAP: /share/PartyMix, Unraid: /mnt/user/PartyMix)
+      - /volume1/PartyMix:/PartyMix
+      # ← solo Synology: per sapere chi è amministratore del NAS (togli la riga altrove)
+      - /etc/group:/host/group:ro

@@ -14,7 +14,7 @@ import { cleanEntry, cleanMeta, Playlists } from './playlists.ts';
 import { checkLink, loadStreamKey, sendFile, signLink } from './stream.ts';
 import { dsmLogin, type DsmOptions } from './dsm.ts';
 
-export const SERVER_VERSION = '1.0.0';
+export const SERVER_VERSION = '1.1.0';
 
 export type AppOptions = {
   /** The PartyMix folder on the NAS (music/, playlists/, database/…). */

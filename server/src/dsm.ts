@@ -29,7 +29,7 @@ export function dsmFromEnv(env: NodeJS.ProcessEnv = process.env): DsmOptions {
   return { url, groupFile: env.PARTYMIX_GROUP_FILE || '/etc/group' };
 }
 
-/** The members of the «administrators» group, from /etc/group («administrators:x:101:admin,stareis»). */
+/** The members of the «administrators» group, from /etc/group («administrators:x:101:admin,anna»). */
 export function dsmAdmins(groupFile: string): Set<string> {
   try {
     const line = readFileSync(groupFile, 'utf8').split('\n').find((l) => l.startsWith('administrators:'));
