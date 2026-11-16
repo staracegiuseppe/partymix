@@ -456,6 +456,7 @@ export function buildDesktopPages(d: PagesDeps) {
   const TAB_KEYS = ['youtube', 'library', 'nas'] as const;
   const tabs = TAB_KEYS.map((k) => btn(k === 'youtube' ? '▶ YouTube' : k === 'library' ? '🎧 La mia musica' : '☁ NAS', 'seg-btn', () => {
     src = k; paintTabs();
+    if (k !== 'youtube') examples.open = false; // the commands are for YouTube: the results come first
     if (k === 'library') { searchQ = sInput.value; paintSearch(); }
     else if (k === 'nas') void runNas(sInput.value.trim());
     else if (sInput.value.trim() && sInput.value.trim() !== searchQ) runSearch(sInput.value); else paintSearch();

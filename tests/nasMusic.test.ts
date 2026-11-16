@@ -13,7 +13,7 @@ const doc = (id: string, title: string, extra: Partial<TrackDoc> = {}): TrackDoc
 
 function fakeApi(files: Record<string, Uint8Array>, pages: TrackDoc[][] = []) {
   return {
-    streamLink: vi.fn(async (id: string) => `http://192.168.1.87:8788/api/tracks/${id}/stream?d=x&e=1&s=y`),
+    streamLink: vi.fn(async (id: string) => `http://192.168.1.10:8788/api/tracks/${id}/stream?d=x&e=1&s=y`),
     download: vi.fn(async (id: string, onProgress?: (g: number, t: number) => void) => {
       const f = files[id];
       if (!f) throw new Error('Brano non trovato');
@@ -124,7 +124,7 @@ describe('mixer: un brano del NAS', () => {
 
   it('suona in streaming dal NAS, mai da YouTube, e lo dice', async () => {
     const a = fakeAudio(), y = yt();
-    const d = new HybridDeck(new AudioDeck(a), { localUrl: async () => 'http://192.168.1.87:8788/api/tracks/x/stream?d=1&e=2&s=3', canStream: () => true, preferYouTube: () => true }, y);
+    const d = new HybridDeck(new AudioDeck(a), { localUrl: async () => 'http://192.168.1.10:8788/api/tracks/x/stream?d=1&e=2&s=3', canStream: () => true, preferYouTube: () => true }, y);
     await d.load(ID);
     expect(a.srcs[0]).toMatch(/\/stream\?/);
     expect(y.load).not.toHaveBeenCalled();

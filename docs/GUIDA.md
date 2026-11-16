@@ -13,9 +13,9 @@
 <p align="center"><img src="img/console.png" alt="PartyMix sul computer: la pagina Player con ⏯, i due deck e la lista di riproduzione" width="860"></p>
 
 <p align="center">
-  <img src="img/android-now.png" alt="PartyMix su Android, tema scuro" width="200">
-  <img src="img/android-playlist.png" alt="PartyMix su Android, tema chiaro" width="200">
-  <img src="img/android-projector.png" alt="Il proiettore su Android" width="200">
+  <img src="img/android-player.png" alt="PartyMix su Android: il Player, tema scuro" width="200">
+  <img src="img/android-library-light.png" alt="PartyMix su Android: la Libreria, tema chiaro" width="200">
+  <img src="img/android-search.png" alt="PartyMix su Android: Cerca sul NAS" width="200">
 </p>
 
 PartyMix suona una playlist YouTube o Spotify come farebbe un DJ: mentre un brano finisce, il successivo entra con una sfumatura. Puoi mandare su una TV o un proiettore le forme che ballano a tempo con il testo da cantare, oppure il video del brano.
@@ -32,6 +32,7 @@ Questa guida vale per 💻 **computer** (macOS, Windows e Linux) e 📱 **Androi
 - [8. Pubblicità e spot](#8-pubblicità-e-spot)
 - [9. Commenti, aiuto e informazioni](#9-commenti-aiuto-e-informazioni)
 - [10. Se qualcosa non va](#10-se-qualcosa-non-va)
+- [11. Il NAS di casa](#11-il-nas-di-casa)
 - [💜 Sostieni PartyMix](#-sostieni-partymix)
 
 ## 1. Primo avvio
@@ -39,7 +40,7 @@ Questa guida vale per 💻 **computer** (macOS, Windows e Linux) e 📱 **Androi
 Al primo avvio si apre la **Configurazione guidata**, che ti fa fare tutto in ordine: caricare una playlist, aprire il proiettore, scegliere il microfono e lo stile delle transizioni. Puoi riaprirla quando vuoi:
 
 - **Computer:** pulsante «Configurazione guidata» in alto.
-- **Android:** sezione **Altro › Aiuto**.
+- **Android:** **⋮ Altro › Impostazioni › Aiuto**.
 
 Il **Tutorial** mostra una parte dell'app alla volta con una breve spiegazione. Su Android ti porta da solo nella sezione di cui parla.
 
@@ -47,48 +48,36 @@ Il **Tutorial** mostra una parte dell'app alla volta con una breve spiegazione. 
 
 ### Computer
 
-L'app è divisa in pagine, come una vera app musicale. Il **menu a sinistra** (su finestre strette diventa una colonna di icone) porta a:
+L'app è divisa in pagine (su Android sono le stesse, vedi sotto), come una vera app musicale. Il **menu a sinistra** (su finestre strette diventa una colonna di icone) porta a:
 
 - **▶ Player** — quello che suona: i due deck (A e B) con il mixer, i comandi ⏮ ⏸ ⏭, e la **lista di riproduzione**. In alto leggi da dove arriva la musica: *In riproduzione da: 🎵 Festa · 3 / 124*.
 - **📋 Playlist** — tutte le tue playlist; aprine una per vederne i brani e gestirla.
-- **🔎 Cerca** — cerca una canzone su YouTube o nella tua musica: i risultati compaiono subito sotto il campo.
+- **🔎 Cerca** — cerca una canzone su YouTube, nella tua musica o sul ☁ NAS: i risultati compaiono subito sotto il campo.
 - **⬇ Download** — i download in corso, in coda, completati e con errori.
-- **🎧 Libreria** — la tua musica sul computer: importati, scaricati, preferiti, artisti, album.
-- In fondo: **📺 Proiettore** (si apre come pannello a destra sopra il Player: proiettore e testo da cantare, senza lasciare la musica), **⚙ Impostazioni** (karaoke, pubblicità, aggiornamento playlist, chiave YouTube, aiuto) e **💜 Info e dona** (crediti e donazione facoltativa con PayPal, anche dal ♥ in alto).
+- **🎧 Libreria** — la tua musica sul computer: importati, scaricati, preferiti, artisti, album. In fondo «☁ Musica sul NAS» con i caricamenti, brano per brano.
+- In fondo: **📺 Proiettore** (si apre come pannello a destra sopra il Player: proiettore e testo da cantare, senza lasciare la musica), **⚙ Impostazioni** (karaoke, pubblicità, aggiornamento playlist, chiave YouTube, aiuto e, in fondo, il collegamento al NAS e i dispositivi) e **💜 Info e dona** (crediti e donazione facoltativa con PayPal, anche dal ♥ in alto).
 - I colori seguono il computer: il colore di evidenziazione scelto nelle impostazioni di sistema (Mac, Windows, Linux GNOME) e il tema chiaro o scuro.
 
 Ogni brano ha il menu **⋮** (o clic destro) con le azioni che ha senso fare in quel momento: suona adesso, suona dopo, metti in coda, aggiungi a playlist, scarica, preferiti, togli.
 
 ### Android
 
-L'app segue lo stile Material Design e ha quattro sezioni nella barra in basso:
+Su Android ci sono **le stesse pagine del computer**: Player, Playlist, Cerca e Libreria. Le trovi nella **barra in basso**. La quinta voce, **⋮ Altro**, apre un pannello con Proiettore e testo, Impostazioni (dove ci sono anche il NAS e i dispositivi), Info e dona e **Scegli dalle app**.
 
 <table>
 <tr>
-<td align="center"><img src="img/android-playlist.png" alt="Sezione Playlist, tema chiaro" width="190"><br><b>① Playlist</b> (tema chiaro)</td>
-<td align="center"><img src="img/android-now.png" alt="Sezione In onda" width="190"><br><b>② In onda</b></td>
-<td align="center"><img src="img/android-projector.png" alt="Sezione Proiettore" width="190"><br><b>Proiettore</b></td>
+<td align="center"><img src="img/android-player.png" alt="Il Player su Android, tema scuro" width="190"><br><b>Player</b></td>
+<td align="center"><img src="img/android-playlists-light.png" alt="Le playlist su Android, tema chiaro" width="190"><br><b>Playlist</b> (tema chiaro)</td>
+<td align="center"><img src="img/android-search.png" alt="Cerca sul NAS da Android" width="190"><br><b>Cerca</b> (☁ NAS)</td>
+<td align="center"><img src="img/android-more.png" alt="Il pannello Altro" width="190"><br><b>⋮ Altro</b></td>
 </tr>
 </table>
 
-| Sezione | Cosa contiene |
-|---|---|
-| **① Playlist** | Il menu delle playlist (tutte quelle che vuoi), il nome, il link, «Carica playlist», «Scegli dalle app» e la coda dei brani |
-| **② In onda** | Il brano che si sente (copertina, titolo, tempo, barra per spostarsi), **Avvia/Ferma automix**, Pausa, Mix ora, Prossimo, volume e stile delle transizioni. Più sotto la scheda «Poi» con il brano già pronto |
-| **Proiettore** | Karaoke o Video YouTube, «Trasmetti alla TV», microfono e la scheda «Testo da cantare» per mettere il testo a tempo |
-| **Altro** | Karaoke automatico, brani brevi (spot), aiuto, commenti, informazioni, brani già suonati e problemi |
-
-**Prima la playlist, poi In onda.** Le sezioni sono in ordine: si sceglie la musica e poi la si fa partire.
-- Finché non c'è una playlist, l'app si apre su **Playlist** e la voce Playlist ha un **pallino colorato**. Se apri In onda, trovi la scheda «Prima scegli la musica» con il pulsante per tornare a Playlist.
-- Quando la playlist è pronta, in Playlist compare il grande pulsante **▶ Vai a In onda e avvia la musica**: ti porta in In onda e fa partire l'automix. Il pallino passa sulla voce In onda.
-- Se all'apertura c'è già una playlist salvata, l'app si apre direttamente su In onda.
-
-<p align="center"><img src="img/android-start.png" alt="In onda senza playlist: «Prima scegli la musica» e il pallino su Playlist" width="240"></p>
-
 - L'icona **Trasmetti** in alto a destra apre subito il proiettore sulla TV.
-- Il tasto **Indietro** chiude un pannello aperto, poi torna a «In onda». Da «In onda» manda l'app in secondo piano senza chiuderla, quindi la musica continua.
+- Il tasto **Indietro** chiude un pannello aperto, poi torna al Player. Dal Player manda l'app in secondo piano senza chiuderla, quindi la musica continua.
 - I messaggi dell'app compaiono in basso per qualche secondo; toccali per farli sparire.
 - I **colori seguono il tuo telefono**: tema chiaro o scuro come l'hai impostato. Da Android 12 l'app usa anche i colori Material You presi dallo sfondo.
+- Su un telefono non c'è la pagina Download: per avere un brano anche senza rete lo salvi dal NAS (vedi [11. Il NAS di casa](#11-il-nas-di-casa)).
 
 ## 3. Le playlist
 
@@ -110,7 +99,7 @@ Puoi tenere **tutte le playlist che vuoi**: non c'è più il limite di quattro. 
 - Prima di ogni download l'app chiede il formato: **🎵 Audio MP3** (solo musica, file piccoli) oppure **🎬 Video MP4** (con le immagini: è quello giusto per le versioni *lyrics* e karaoke, dove il testo è nel video), anche in 720p più leggero. L'ultima scelta viene proposta per prima.
 - Una playlist contiene solo riferimenti ai brani: lo stesso brano in più playlist non occupa spazio due volte.
 
-**Android e iPhone:** scegli la playlist dal **menu a tendina**, che mostra il nome e quanti brani ha salvato, oppure «vuota».
+**Android:** la stessa pagina Playlist del computer. **iPhone:** scegli la playlist dal **menu a tendina**, che mostra il nome e quanti brani ha salvato, oppure «vuota».
 
 **Aggiungere una playlist da YouTube o Spotify**
 
@@ -118,7 +107,7 @@ Puoi tenere **tutte le playlist che vuoi**: non c'è più il limite di quattro. 
 2. Dalle un nome, per esempio «Festa», «Karaoke» o «Just Dance».
 3. Incolla il link di una playlist YouTube, oppure di una playlist o di un album Spotify pubblici, e premi **Carica playlist**.
 
-Su Android c'è un modo più comodo: **Scegli dalle app**.
+Su Android c'è un modo più comodo: **⋮ Altro › Scegli dalle app**.
 1. Apri la playlist in YouTube o in Spotify.
 2. Tocca **Condividi › PartyMix**: la playlist si carica da sola.
 
@@ -133,7 +122,7 @@ Con Spotify l'app prende solo l'elenco dei brani e li suona da YouTube, perché 
 
 ## 4. Far partire la musica
 
-<p align="center"><img src="img/android-now.png" alt="In onda: brano, Avvia automix, Pausa, Mix ora, Prossimo" width="260"></p>
+<p align="center"><img src="img/android-player.png" alt="Il Player: brano in onda, avvia, pausa, mix ora, prossimo" width="260"></p>
 
 Premi **Avvia automix**. Parte il primo brano e da lì l'app va avanti da sola: un deck suona e l'altro prepara il brano dopo, così non c'è mai silenzio.
 
@@ -162,15 +151,7 @@ Sul computer funzionano anche i tasti rapidi:
 - Dopo l'ultimo brano la musica si ferma, a meno che tu non scelga **Ripeti: tutta la playlist** (oppure **Ripeti: questo brano**): il ritorno al primo brano è una scelta del player, scritta anche in fondo alla lista.
 - **◎ Brano in onda** riporta in vista il brano che suona. La lista non salta mai da sola: resta dov'eri anche quando cambia brano, e ogni playlist ricorda il suo punto.
 
-**Android.** Tocca un brano e si apre un pannello dal basso con:
-
-<p align="center"><img src="img/android-sheet.png" alt="Le azioni su un brano in un pannello dal basso" width="260"></p>
-
-- **Suona adesso**
-- **Suona dopo quello in onda**
-- **Sposta su** / **Sposta giù**
-- **Blocca**: un brano bloccato non viene saltato con «Prossimo».
-- **Togli dalla playlist**
+**Android.** La stessa lista del computer: tocca **▶** per suonare un brano, **⋮** per il menu (si apre dal basso), e trascina la maniglia **⋮⋮** per cambiare ordine.
 
 **Comandi comuni**
 - **Casuale**, **Rimescola ora** e **Ripeti** (no, tutta la playlist, solo questo brano).
@@ -178,7 +159,7 @@ Sul computer funzionano anche i tasti rapidi:
 - Il brano in onda non si può togliere: passa al successivo e poi toglilo.
 - Se un brano non si può riprodurre, compare un avviso. Lì incolli il link di un brano sostitutivo e l'app ti dice subito se va bene.
 
-## 5b. Libreria, ricerca e download (computer)
+## 5b. Libreria, ricerca e download
 
 **Aggiungere la tua musica.** Nella pagina **🎧 Libreria** premi **+ Importa musica** → «Scegli file» (anche tanti insieme) o «Scegli una cartella». Puoi anche trascinare i file nella pagina. Non c'è un limite al numero di file; alla fine leggi per esempio «✓ Importati 25 brani».
 - I file vanno nella cartella *Musica › PartyMix Library*, divisi per artista.
@@ -187,7 +168,7 @@ Sul computer funzionano anche i tasti rapidi:
 
 **Senza rete.** I brani ✓ della libreria suonano anche senza internet. Se la rete manca compare l'avviso 📴: PartyMix suona i brani ✓ e salta quelli ☁ (solo online), senza riprovarli di continuo. Quando la rete torna, li suona di nuovo.
 
-**⬇ Download.** Nella pagina **⬇ Download** incolla l'indirizzo di un contenuto che hai il diritto di scaricare (o premi **⬇** / «Scarica» nel menu ⋮ di un brano).
+**⬇ Download (solo computer).** Nella pagina **⬇ Download** incolla l'indirizzo di un contenuto che hai il diritto di scaricare (o premi **⬇** / «Scarica» nel menu ⋮ di un brano).
 - Scegli **Audio** (MP3, M4A, Opus o Originale) o **Video** (MP4 o WebM, qualità Best, 1080p, 720p, 480p, 360p: se una qualità non esiste si prende la più vicina) e, se vuoi, la **playlist** in cui metterlo.
 - La pagina divide i download in **In corso**, **In coda**, **Completati** ed **Errori**. Ogni download ha la sua barra con percentuale, velocità, tempo che manca e MB scaricati, e **Annulla**. Ne partono al massimo 2 alla volta (puoi cambiarlo).
 - Finito: **▶ Play**, **＋ Playlist**, **📚 Apri libreria**. Il brano è già nella Libreria e suona senza rete.
@@ -199,7 +180,7 @@ Sul computer funzionano anche i tasti rapidi:
 
 <p align="center"><img src="img/desktop-search.png" alt="La ricerca: i risultati compaiono sotto il campo" width="420"> <img src="img/desktop-library.png" alt="La libreria con i filtri e dove si trova ogni brano" width="420"></p>
 
-**🔎 Cerca.** Nella pagina **🔎 Cerca** scegli dove cercare, **▶ YouTube** o **🎧 La mia musica**, scrivi titolo, artista o tutti e due (per esempio «The Weeknd Blinding Lights») e premi Invio: i risultati compaiono subito sotto il campo, senza cambiare pagina.
+**🔎 Cerca.** Nella pagina **🔎 Cerca** scegli dove cercare, **▶ YouTube**, **🎧 La mia musica** o **☁ NAS** (quando il NAS è collegato, vedi il capitolo 11), scrivi titolo, artista o tutti e due (per esempio «The Weeknd Blinding Lights») e premi Invio: i risultati compaiono subito sotto il campo, senza cambiare pagina.
 - Con **La mia musica** l'app cerca tra tutti i brani della libreria e di tutte le playlist (anche per nome della playlist), anche senza rete. Ogni risultato mostra, solo come informazione, **in quali playlist** si trova (📂) e **dove è il file sul PC** (💾).
 - Su YouTube vedi copertina, titolo, canale e durata; i video che non si possono riprodurre sono segnalati con il motivo.
 - Su ogni risultato: **▶** lo suona subito; **⋮** → suona dopo quello in onda, metti in coda (in fondo), aggiungi a playlist (una finestra con le tue playlist e «Nuova playlist»), preferiti.
@@ -299,6 +280,43 @@ Le pubblicità che YouTube inserisce nel suo player non si possono saltare né n
 - **Android: sulla TV vedo il telefono invece del proiettore:** il dispositivo copia lo schermo ma non riceve uno «schermo wireless». Prova un'app ricevitore Miracast sulla TV, oppure un cavo HDMI.
 - **Android: la musica si ferma con lo schermo spento.** Dalla versione 1.6.2 la musica continua a schermo spento (provato su un Realme con Android 16), e la notifica «La festa continua anche a schermo spento» tiene viva l'app. Se il tuo telefono la ferma lo stesso, togli PartyMix dall'ottimizzazione della batteria nelle impostazioni di Android.
 - Per tutto il resto scrivimi da **💬 Commenti**.
+
+## 11. Il NAS di casa
+
+Con un NAS in casa (per esempio un Synology) PartyMix tiene **la stessa musica e le stesse playlist su tutti i tuoi dispositivi**: computer e telefono. Il NAS è il centro: ogni dispositivo manda lì le sue modifiche e riceve quelle degli altri, anche in tempo reale.
+
+<p align="center"><img src="img/desktop-nas-files.png" alt="Libreria › Musica sul NAS: caricamenti, brani del NAS su questo computer, spazio" width="760"></p>
+
+**Installare PartyMix sul NAS.** Una volta sola: segui [INSTALLAZIONE.md › Il server per il NAS](INSTALLAZIONE.md#il-server-per-il-nas). Poi da un browser della rete di casa l'indirizzo `http://IP-DEL-NAS:8788/api/health` deve rispondere `{"app":"partymix",…}`.
+
+**Collegare un dispositivo** (⚙ Impostazioni → NAS e sincronizzazione):
+1. Scrivi l'indirizzo del NAS (per esempio `192.168.1.10:8788`) e premi **Controlla**.
+2. La prima volta crei l'account (nome e password). Sugli altri dispositivi accedi con gli stessi dati, oppure con il **codice a 6 cifre** che trovi in **Dispositivi → + Aggiungi dispositivo** su un dispositivo già collegato (vale 5 minuti).
+3. Su **Android 17** il telefono chiede il permesso **«Dispositivi nelle vicinanze / rete locale»**: rispondi **Consenti**, altrimenti l'app non vede il NAS. Se l'hai negato, PartyMix apre le impostazioni dell'app per cambiarlo.
+
+<p align="center"><img src="img/desktop-nas-settings.png" alt="Impostazioni: NAS e sincronizzazione, dispositivi" width="620"> <img src="img/android-nas-light.png" alt="Il collegamento al NAS su Android" width="200"></p>
+
+**Le playlist.** Ogni modifica (aggiungi, togli, sposta, rinomina) arriva sugli altri dispositivi da sola. Se lavori senza NAS, le modifiche aspettano e partono quando torna. Se due dispositivi cambiano la stessa cosa in modi diversi, PartyMix te lo chiede in Impostazioni → NAS («Usa questo computer» / «Usa il NAS»): niente viene perso in silenzio.
+
+**La musica sul NAS** (🎧 Libreria, in fondo: «☁ Musica sul NAS»):
+- **Carica ora** manda sul NAS i file della tua libreria (con «Carica sul NAS i brani importati» succede da solo). Ogni file va sul NAS una volta sola; un file arrivato danneggiato viene scartato.
+- **Avanzamento dei file**: una riga per brano con la sua barra (⏳ in attesa, ⬆ caricamento con la percentuale, ✓ sul NAS, ⚠ non riuscito con il motivo e **Riprova**). Filtri: Tutti, In corso, Non riusciti.
+- **🔄 Aggiorna dalla cartella music del NAS**: se copi dei file a mano nella cartella `PartyMix/music` del NAS (File Station, cartella condivisa), entrano nell'elenco. Titolo e artista vengono dal nome: «Artista/Album/03 Titolo.mp3» oppure «Artista - Titolo.mp3».
+- **Spazio sul NAS**: quanta musica c'è e quanto spazio resta.
+
+**Ascoltare dal NAS.** In **🔎 Cerca** scegli **☁ NAS** e scrivi titolo, artista o album: i risultati arrivano mentre scrivi. **▶** suona subito in streaming dal NAS (sul deck leggi «🗄 Dal NAS di casa»); **⋮** lo mette in coda, in una playlist o lo salva su questo dispositivo. I brani del NAS compaiono anche in Libreria con ☁.
+
+<p align="center"><img src="img/desktop-search-nas.png" alt="Cerca › NAS: i brani del NAS, da ascoltare in streaming" width="620"></p>
+
+**Senza NAS (fuori casa, in aereo).** In Libreria → «Musica del NAS su questo dispositivo»:
+- **⬇ Salva i brani delle playlist**: copia sul dispositivo i brani del NAS che stanno nelle tue playlist.
+- **⬇ Salva tutta la musica del NAS**: copia tutto.
+
+Prima di cominciare l'app controlla che ci sia spazio; copia due brani alla volta e mostra l'avanzamento. I brani salvati (✓) suonano anche senza NAS; «Elimina download» toglie solo la copia.
+
+**Dispositivi.** In Impostazioni → Dispositivi vedi chi usa la tua libreria e quando si è visto l'ultima volta. Puoi rinominare un dispositivo o togliergli l'accesso (**Revoca**): da quel momento non può più leggere niente, nemmeno i link di ascolto già dati.
+
+**Sicurezza.** Il server risponde solo dalla rete di casa (o da una VPN come Tailscale); non va aperta nessuna porta sul router. La password è salvata cifrata e ogni dispositivo ha una chiave sua, revocabile.
 
 ## 💜 Sostieni PartyMix
 

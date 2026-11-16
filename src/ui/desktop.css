@@ -494,7 +494,7 @@ body.md.desk .m-nav .m-nav-item.on { color: var(--md-on-secondary-container); }
   .desk .m-nav-item.on .m-ind { background: var(--md-secondary-container) !important; }
   .desk .m-nav-item .m-nav-label { font-size: 11px !important; line-height: 14px !important; text-align: center; white-space: nowrap; }
   .desk .m-nav-badge { display: none; }
-  .desk .m-main { margin-left: 0 !important; padding: calc(64px + var(--sys-top, 0px)) 12px calc(96px + var(--sys-bottom, 0px)) !important; max-width: 100% !important; }
+  .desk .m-main { margin-left: 0 !important; padding: calc(72px + var(--sys-top, 0px)) 12px calc(96px + var(--sys-bottom, 0px)) !important; max-width: 100% !important; }
   .desk .pg-head { flex-wrap: wrap; gap: 8px; }
   .desk .pg-title { font-size: 24px !important; line-height: 32px !important; }
   .desk .pg-row > input { flex: 1 1 100% !important; }
