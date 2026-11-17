@@ -1,5 +1,5 @@
 import type { Conflict, Op } from '../../shared/merge';
-import type { Changes, ChunkResult, DeviceDoc, Entry, LibraryPage, PlaylistDoc, PlaylistMeta, ServerEvent, SessionDoc, TrackDoc, UploadStart, UploadStarted } from '../../shared/model';
+import type { Changes, ChunkResult, CueDoc, DeviceDoc, Entry, LibraryPage, PlaylistDoc, PlaylistMeta, ServerEvent, SessionDoc, TrackDoc, UploadStart, UploadStarted } from '../../shared/model';
 
 /** The NAS answered with an error (`status` 0 = could not be reached at all). */
 export class SyncError extends Error {
@@ -40,6 +40,9 @@ export interface SyncApi {
   ops(id: string, baseVersion: number, ops: Op[]): Promise<OpsResult>;
   putPlaylist(id: string, baseVersion: number, meta: PlaylistMeta, entries: Entry[]): Promise<PlaylistDoc>;
   deletePlaylist(id: string, baseVersion?: number): Promise<void>;
+  /** Start/End of the songs of the user of this device (nobody else's). */
+  cues(): Promise<CueDoc[]>;
+  putCue(song: string, body: { startTime: number | null; endTime: number | null; title?: string }): Promise<CueDoc | null>;
   devices(): Promise<DeviceDoc[]>;
   renameDevice(id: string, name: string): Promise<DeviceDoc>;
   revokeDevice(id: string): Promise<DeviceDoc>;
@@ -162,6 +165,8 @@ export class HttpSyncClient implements SyncApi {
   ops(id: string, baseVersion: number, ops: Op[]) { return this.call<OpsResult>('POST', `/api/playlists/${encodeURIComponent(id)}/ops`, { baseVersion, ops }); }
   putPlaylist(id: string, baseVersion: number, meta: PlaylistMeta, entries: Entry[]) { return this.call<PlaylistDoc>('PUT', `/api/playlists/${encodeURIComponent(id)}`, { baseVersion, ...meta, entries }); }
   async deletePlaylist(id: string, baseVersion?: number) { await this.call('DELETE', `/api/playlists/${encodeURIComponent(id)}${baseVersion != null ? `?baseVersion=${baseVersion}` : ''}`); }
+  async cues() { return (await this.call<{ cues: CueDoc[] }>('GET', '/api/cues')).cues; }
+  async putCue(song: string, body: { startTime: number | null; endTime: number | null; title?: string }) { return (await this.call<{ cue: CueDoc | null }>('PUT', `/api/cues/${encodeURIComponent(song)}`, body)).cue; }
   devices() { return this.call<DeviceDoc[]>('GET', '/api/devices'); }
   renameDevice(id: string, name: string) { return this.call<DeviceDoc>('PATCH', `/api/devices/${encodeURIComponent(id)}`, { name }); }
   revokeDevice(id: string) { return this.call<DeviceDoc>('DELETE', `/api/devices/${encodeURIComponent(id)}`); }

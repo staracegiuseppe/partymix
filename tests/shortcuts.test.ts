@@ -44,3 +44,16 @@ describe('bindShortcuts', () => {
     off();
   });
 });
+
+describe('bindShortcuts: cue points', () => {
+  it('S = SET START, E = SET END, Shift+S = Stop', () => {
+    const h = { ...handlers(), setStart: vi.fn(), setEnd: vi.fn() };
+    const off = bindShortcuts(window, h);
+    press('s'); press('e'); press('E');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'S', shiftKey: true }));
+    expect(h.setStart).toHaveBeenCalledTimes(1);
+    expect(h.setEnd).toHaveBeenCalledTimes(2);
+    expect(h.stop).toHaveBeenCalledTimes(1);
+    off();
+  });
+});

@@ -52,6 +52,8 @@ export type EngineDeps = {
   localIdOf?: (sha256: string) => string | undefined;
   /** Songs of the NAS changed after the last pull (new, changed, deleted): the library shows them (see NasMusic). */
   onTracks?: (tracks: TrackDoc[]) => Promise<void> | void;
+  /** Every live event from the NAS (Start/End of this user's songs arrive this way). */
+  onEvent?: (ev: ServerEvent) => void;
 };
 
 const YT_ID = /^[\w-]{6,20}$/;
@@ -123,6 +125,7 @@ export class SyncEngine {
   private nasIdOf: (videoId: string) => string | undefined;
   private localIdOf: (sha256: string) => string | undefined;
   private onTracks: (tracks: TrackDoc[]) => Promise<void> | void;
+  private evHook?: (ev: ServerEvent) => void;
   private viewOfLocal = (p: Playlist) => ({ meta: metaOf(p), entries: p.tracks.map((t) => entryOf(t, this.nasIdOf)) });
 
   constructor(store: PlaylistStore, kv: KV, api: SyncApi, deps: EngineDeps = {}) {
@@ -137,6 +140,7 @@ export class SyncEngine {
     this.nasIdOf = deps.nasIdOf ?? (() => undefined);
     this.localIdOf = deps.localIdOf ?? (() => undefined);
     this.onTracks = deps.onTracks ?? (() => {});
+    this.evHook = deps.onEvent;
   }
 
   status(): SyncStatus { return { ...this.st, conflicts: [...this.conflicts], pending: this.pendingCount() }; }
@@ -193,6 +197,8 @@ export class SyncEngine {
   }
 
   private onEvent(ev: ServerEvent) {
+    this.evHook?.(ev);
+    if (ev.kind === 'cue') return; // not a playlist change: CueSync reads it
     if (ev.seq > this.lastSeq) void this.syncNow();
   }
 

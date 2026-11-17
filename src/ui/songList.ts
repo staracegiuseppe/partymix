@@ -3,6 +3,20 @@ import { VirtualList } from './virtualList';
 import type { OfflineState } from '../library/library';
 
 /** One song as every list of the app shows it (queue, playlist, library, search). */
+/** The row tapped once (phone): its title, when longer than the row, slides left and back so it can be read whole. */
+function marquee(box: HTMLElement, inner: HTMLElement, on: boolean) {
+  box.classList.remove('mq');
+  if (!on) return;
+  requestAnimationFrame(() => {
+    if (!inner.isConnected) return;
+    const over = box.scrollWidth - box.clientWidth; // the title box clips (overflow hidden): what does not fit
+    if (over <= 4) return;
+    inner.style.setProperty('--mq', `-${over + 12}px`);
+    inner.style.setProperty('--mqd', `${Math.min(20, 5 + over / 25).toFixed(1)}s`); // about 25 px a second, pauses at both ends
+    box.classList.add('mq');
+  });
+}
+
 export type SongVM = {
   id: string; title: string; artist: string;
   /** Second line instead of the artist (e.g. «Artista · Album · 📂 Festa»). */
@@ -20,6 +34,9 @@ export type SongVM = {
   fmt?: 'audio' | 'video' | 'both';
   fav?: boolean;
   dur?: number;
+  /** Start/End scelti dall'utente: «✂ 00:42.317 → 03:48.650»; `cueTip` le durate. */
+  cue?: string;
+  cueTip?: string;
   /** The song on air is paused. */
   paused?: boolean;
   /** Offline and no local copy (or not playable): skipped. */
@@ -84,6 +101,8 @@ export function buildSongList(o: SongListOpts) {
   let rows: SongVM[] = [];
   let dragFrom = -1;
   let selecting = false;
+  /** Phone: the row tapped once (a second tap on it opens its menu). */
+  let tappedId: string | undefined;
   const sel = new Set<string>();
   let anchor = -1;
   const changed = () => { list.refresh(); o.onSelectionChange?.([...sel]); };
@@ -118,7 +137,7 @@ export function buildSongList(o: SongListOpts) {
     },
     paint(el, r, i) {
       const q = (s: string) => el.querySelector(s) as HTMLElement;
-      el.className = 'item song' + (r.current ? ' cur' : '') + (r.bad ? ' bad' : '') + (r.skip ? ' skip' : '');
+      el.className = 'item song' + (r.current ? ' cur' : '') + (r.bad ? ' bad' : '') + (r.skip ? ' skip' : '') + (tappedId === r.id ? ' tapped' : '');
       el.setAttribute('aria-label', `${i + 1}. ${r.title}${r.artist ? `, ${r.artist}` : ''}${r.current ? (r.paused ? ', in pausa' : ', in riproduzione') : ''}`);
       el.title = r.skip ? (r.reason ?? 'Non si può riprodurre adesso (sei offline e il brano è solo online).') : '';
       const lead = q('.lead');
@@ -135,8 +154,13 @@ export function buildSongList(o: SongListOpts) {
         r.fmt ? [`tag fmt ${r.fmt}`, FMT_TAG[r.fmt][0], FMT_TAG[r.fmt][1]] : null,
         r.bad ? ['tag', 'non riproducibile'] : null, r.fav ? ['tag fav', '♥'] : null,
         r.nas ? [`tag nas ${r.nas}`, NAS_TAG[r.nas][0], r.nasTip ?? NAS_TAG[r.nas][1]] : null].filter((x): x is string[] => !!x);
-      q('.t').replaceChildren(r.title, ...tags.map(([c, s, tip]) => h('span', { class: c, ...(tip ? { title: tip } : {}) }, s)));
-      q('.s').textContent = r.sub ?? r.artist;
+      const tEl = q('.t'), tin = h('span', { class: 'tin' }, r.title, ...tags.map(([c, s, tip]) => h('span', { class: c, ...(tip ? { title: tip } : {}) }, s)));
+      tEl.replaceChildren(tin);
+      marquee(tEl, tin, tappedId === r.id);
+      const sub = r.sub ?? r.artist;
+      // Start/End chosen by the user on the second line (the title is cut first in narrow lists)
+      if (r.cue) q('.s').replaceChildren(h('span', { class: 'cue-tag', title: r.cueTip ?? 'Start/End scelti da te: il file resta intero' }, r.cue), sub ? ` · ${sub}` : '');
+      else q('.s').textContent = sub;
       q('.dur').textContent = r.dur ? fmtTime(r.dur) : '';
       const st = q('.st');
       if (r.off) {
@@ -173,7 +197,12 @@ export function buildSongList(o: SongListOpts) {
     const b = t.closest('button');
     if (b?.classList.contains('play')) { if (canPlay(row)) o.onPlay?.(row, i); return; }
     if (b?.classList.contains('more')) { o.onMore(row, i, b as HTMLElement); return; }
-    if (!b && touch() && r) o.onMore(row, i, r); // phone: a tap opens the song's menu
+    // phone: the first tap picks the row (its title scrolls to show the whole name), a second tap on it opens the menu
+    if (!b && touch() && r) {
+      if (tappedId === row.id) { o.onMore(row, i, r); return; }
+      tappedId = row.id;
+      list.refresh(); // the old row stops, the new one is marked and scrolls
+    }
   });
   el.addEventListener('keydown', (e) => {
     const { row, i, el: r } = rowOf(document.activeElement);

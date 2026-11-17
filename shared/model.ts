@@ -102,7 +102,15 @@ export type Changes = {
   playlists: PlaylistSummary[];
 };
 
-export type ServerEvent = { seq: number; kind: 'track' | 'playlist' | 'device'; id: string; by?: string; summary?: string };
+export type ServerEvent = { seq: number; kind: 'track' | 'playlist' | 'device' | 'cue'; id: string; by?: string; summary?: string };
+
+/**
+ * Start/End of a song chosen by one NAS user (SET START / SET END). Personal: every account has its own, the other
+ * users of the NAS never see them. `song` is the song's id everywhere: a YouTube id, the SHA-256 of a NAS file, or
+ * `local:<hash>` for a file not on the NAS yet. The audio file itself is never changed.
+ */
+export type CueDoc = { song: string; startTime?: number; endTime?: number; title?: string; updatedAt: number; deviceName?: string };
+export const CUE_SONG = /^(?:[\w-]{6,20}|[0-9a-f]{64}|local:[0-9a-f]{8,64})$/;
 
 export const PERM_NAMES = ['READ_LIBRARY', 'PLAY_TRACK', 'DOWNLOAD_TRACK', 'EDIT_PLAYLIST', 'UPLOAD_TRACK', 'DELETE_TRACK', 'ADMIN'] as const;
 export type PermName = (typeof PERM_NAMES)[number];

@@ -31,8 +31,11 @@ export type AutomixDeps = {
   log: typeof Log;
   /** Network state; when offline, load failures are retried instead of marking tracks unplayable. */
   online?: () => boolean;
-  /** Where a song's music really starts and ends (silence and near-silent intro skipped), when known. */
-  cues?: (videoId: string) => { start: number; end: number } | undefined;
+  /**
+   * Where a song's music really starts and ends (silence and near-silent intro skipped), when known; `manualStart`/
+   * `manualEnd` when the user chose them (SET START / SET END): those are obeyed to the millisecond, also without a fade.
+   */
+  cues?: (videoId: string) => { start: number; end: number; manualStart?: boolean; manualEnd?: boolean } | undefined;
 };
 
 const TICK_MS = 250;
@@ -63,6 +66,8 @@ export class Automix {
   private dueSince?: number;
   private pending?: { ms: number };
   private applied: [number, number] = [-1, -1];
+  /** The user moved the song on this deck past its End (or the measured silent tail): it plays to its real end. */
+  private endOff?: { deck: DeckIdx; id: string };
 
   constructor(private d: AutomixDeps) {
     d.decks.forEach((deck, i) => {
@@ -72,6 +77,23 @@ export class Automix {
   }
 
   state(): AutomixState { return this.st; }
+
+  /**
+   * The user dragged the position bar of deck `i` to `sec`. Moving back and forth inside a song must never end it:
+   * when the new position is past the song's End (chosen or measured) that End is ignored for this play, and the
+   * song goes on to its real end; moving back before it again brings the End back.
+   */
+  userSeek(i: DeckIdx, sec: number): void {
+    const id = i === this.active ? this.d.queue.current()?.videoId : this.preparedId;
+    if (!id) return;
+    const cue = this.d.cues?.(id);
+    const end = cue && cue.end > 0 ? cue.end : 0;
+    const mix = profileSeconds(this.d.profile()) ?? 0;
+    if (end && sec >= end - mix - 0.5) this.endOff = { deck: i, id };
+    else if (this.endOff?.deck === i) this.endOff = undefined;
+    this.dueSince = undefined;
+  }
+  private endIgnored(i: DeckIdx, id?: string): boolean { return !!id && this.endOff?.deck === i && this.endOff.id === id; }
   activeDeck(): DeckIdx { return this.active; }
 
   /**
@@ -152,6 +174,8 @@ export class Automix {
       }
       if (tok !== this.token) return;
       this.applied = [-1, -1];
+      this.endOff = undefined;
+      this.seekStart(this.active, cur.videoId, true);
       this.d.decks[this.active].play();
       this.st = 'playing';
       this.lastNow = this.d.now();
@@ -277,8 +301,8 @@ export class Automix {
     this.mixDur = dur;
     this.lastNow = this.d.now();
     this.dueSince = undefined;
-    const cue = this.preparedId ? this.d.cues?.(this.preparedId) : undefined;
-    if (cue && cue.start >= 1) this.d.decks[this.mixIn].seekTo?.(cue.start); // straight to where the music starts
+    if (this.endOff?.deck === this.mixIn) this.endOff = undefined;
+    const cue = this.seekStart(this.mixIn, this.preparedId, false);
     this.d.decks[this.mixIn].play();
     this.applyVolumes();
     this.d.log('info', 'automix.crossfade_start', { ms: dur, skipIntro: cue?.start ?? 0 });
@@ -300,11 +324,21 @@ export class Automix {
     this.prepare();
   }
 
+  /**
+   * Puts deck `i` where the song should start: the user's Start (any value), or the measured end of a silent intro
+   * (at least 1 s, and only when mixing in: the first song of the party plays from where the user asked).
+   */
+  private seekStart(i: DeckIdx, id: string | undefined, first: boolean) {
+    const cue = id ? this.d.cues?.(id) : undefined;
+    if (cue && (cue.manualStart ? cue.start > 0 : !first && cue.start >= 1)) this.d.decks[i].seekTo?.(cue.start); // straight to where the music starts
+    return cue;
+  }
+
   /** Where the song on deck `i` really ends: its duration, or earlier when its tail is silence or a long fade. */
   private endOf(i: DeckIdx): number {
     const dur = this.d.decks[i].duration();
     const id = i === this.active ? this.d.queue.current()?.videoId : this.preparedId;
-    const end = id ? this.d.cues?.(id)?.end : undefined;
+    const end = id && !this.endIgnored(i, id) ? this.d.cues?.(id)?.end : undefined;
     return end && end > 0 && end < dur ? end : dur;
   }
 
@@ -367,6 +401,13 @@ export class Automix {
     }
     const deck = this.d.decks[this.active];
     const dur = deck.duration();
+    const curId = this.d.queue.current()?.videoId;
+    const cue = curId ? this.d.cues?.(curId) : undefined;
+    // the user's End: the song is over there, whatever the transition style (the fade, if any, already started before it)
+    if (cue?.manualEnd && cue.end > 0 && !this.endIgnored(this.active, curId) && deck.position() >= cue.end - 0.05) {
+      if (!this.pending) { this.d.log('info', 'automix.user_end', { videoId: curId, end: cue.end }); this.switchWhenReady(0); }
+      return;
+    }
     const mixSec = profileSeconds(this.d.profile());
     if (mixSec === null || dur <= 0 || this.nextState === 'none') return;
     const remaining = this.endOf(this.active) - deck.position(); // before the silence at the tail

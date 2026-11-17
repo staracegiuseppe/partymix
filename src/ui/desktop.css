@@ -544,3 +544,24 @@ body.md.desk .m-nav .m-nav-item.on { color: var(--md-on-secondary-container); }
 @keyframes np-in { from { opacity: 0; transform: translateX(14px) scale(.9); } to { opacity: 1; transform: none; } }
 @keyframes np-out { to { opacity: 0; transform: scale(.92); } }
 @media (prefers-reduced-motion: reduce) { .nav-pointer, .nav-pointer .np-arrow, .dl-badge, .nav-attn .m-ind { animation: none !important; } }
+
+/* Phone in portrait (≤720 px): the state column is hidden there, so every list (also the reorderable queue, whose
+   rules are more specific) keeps only the columns it shows and the title gets the rest of the row. */
+@media (max-width: 720px) {
+  .desk .songlist .song, .desk .songlist.with-cover .song { grid-template-columns: 32px minmax(0, 1fr) 44px 36px 36px; gap: 6px; padding: 0 4px 0 6px; }
+  .desk .songlist.reorder .song, .desk .songlist.with-cover.reorder .song, .desk .queue-panel .songlist.reorder .song { grid-template-columns: 18px 30px minmax(0, 1fr) 44px 36px 36px; gap: 6px; padding: 0 4px 0 4px; }
+  .desk .songlist .song .st { display: none; }
+  .desk .songlist.with-cover .song .cover { display: none; }
+}
+@media (max-width: 480px) {
+  .desk .songlist .song .dur { display: none; }
+  .desk .songlist .song, .desk .songlist.with-cover .song { grid-template-columns: 28px minmax(0, 1fr) 36px 36px; }
+  .desk .songlist.reorder .song, .desk .songlist.with-cover.reorder .song, .desk .queue-panel .songlist.reorder .song { grid-template-columns: 16px 28px minmax(0, 1fr) 36px 36px; }
+}
+
+/* Phone: the row tapped once is marked, and its title, if longer than the row, slides to show its end and back */
+.desk .song .t.mq { text-overflow: clip; }
+.desk .song .t.mq .tin { display: inline-block; animation: pm-marquee var(--mqd, 8s) ease-in-out infinite; will-change: transform; }
+.desk .song.tapped:not(.cur) { background: color-mix(in srgb, var(--md-primary) 10%, transparent); }
+@keyframes pm-marquee { 0%, 18% { transform: translateX(0); } 62%, 80% { transform: translateX(var(--mq, 0)); } 100% { transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) { .desk .song .t.mq .tin { animation: none; } }

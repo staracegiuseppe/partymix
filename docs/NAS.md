@@ -187,7 +187,8 @@ Un utente con la **verifica in due passaggi** di DSM entra con il codice a 6 cif
 
 ## Aggiornare, fare il backup, fuori casa
 
-- **Aggiornare (Synology senza Docker):** estrai il nuovo `partymix-server-nas.zip` sopra il vecchio (sovrascrivi), poi **Utilità di pianificazione → PartyMix server → Esegui**. Musica, playlist e account restano.
+- **Aggiornare (Synology senza Docker):** estrai il nuovo `partymix-server-nas.zip` sopra il vecchio scegliendo **Sovrascrivi i file esistenti** (se no restano i file vecchi e il server non si aggiorna), poi **Utilità di pianificazione → PartyMix server → Esegui**. Controlla in `http://indirizzo-del-NAS:8788/api/health` che `version` sia quella nuova. Musica, playlist e account restano.
+- **Server 1.2.0 (app 1.9):** aggiunge Start/End dei brani personali per utente, in `PartyMix/users/<n>-<utente>/cues/<brano>.json`. Serve per avere i tagli su tutti i dispositivi.
 - **Aggiornare (Docker):** sostituisci i file e ricrea il progetto (`docker compose up -d --build`).
 - **Backup:** basta copiare la cartella **PartyMix** (Synology: Hyper Backup). Per una copia sicura del database, ferma prima il server.
 - **Fuori casa:** il server non risponde da internet, per scelta. Installa **Tailscale** (sul Synology c'è il pacchetto ufficiale) sul NAS e sul telefono: PartyMix lo riconosce come rete di casa.

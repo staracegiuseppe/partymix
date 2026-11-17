@@ -57,7 +57,13 @@ class FakeDeck implements Deck {
   stop() { this.stops++; this.halt(); this.pos = 0; }
   setVolume(v: number) { this.vols.push(v); }
   seeks: number[] = [];
-  seekTo(sec: number) { this.seeks.push(sec); this.pos = sec; }
+  seekTo(sec: number) {
+    this.seeks.push(sec);
+    const was = this.playing;
+    this.halt();
+    this.pos = sec;
+    if (was) { this.playCalls--; this.play(); } // a real player keeps playing from the new position
+  }
   position() { return this.playing ? this.pos + (this.clock.now - this.startedAt) / 1000 : this.pos; }
   duration() { return this.dur; }
   onEnded(cb: () => void) { this.endCb = cb; }
@@ -67,7 +73,7 @@ class FakeDeck implements Deck {
 
 const tr = (id: string): Track => ({ videoId: id, status: 'ok' });
 
-function setup(opts: { ids?: string[]; profile?: Profile; master?: number; never?: string[]; dur?: number; cues?: Record<string, { start: number; end: number }> } = {}) {
+function setup(opts: { ids?: string[]; profile?: Profile; master?: number; never?: string[]; dur?: number; cues?: Record<string, { start: number; end: number; manualStart?: boolean; manualEnd?: boolean }> } = {}) {
   const clock = new Clock();
   const never = new Set(opts.never ?? []);
   const decks: [FakeDeck, FakeDeck] = [new FakeDeck(clock, never, opts.dur), new FakeDeck(clock, never, opts.dur)];
@@ -94,6 +100,78 @@ describe('Automix: silence and near-silent intros', () => {
     expect(s.decks[1].seeks).toEqual([5]);
     await s.clock.advance(10_000);
     expect(s.queue.current()?.videoId).toBe('B');
+  });
+});
+
+describe('Automix: Start/End chosen by the user (SET START / SET END)', () => {
+  it('the first song starts from its Start, even under 1 s', async () => {
+    const s = setup({ cues: { A: { start: 0.42, end: 0, manualStart: true } } });
+    s.am.start(); await s.clock.advance(100);
+    expect(s.decks[0].seeks).toEqual([0.42]);
+    expect(s.am.state()).toBe('playing');
+  });
+  it('the first song ignores a measured silent intro (only the user decides where the party starts)', async () => {
+    const s = setup({ cues: { A: { start: 5, end: 60 } } });
+    s.am.start(); await s.clock.advance(100);
+    expect(s.decks[0].seeks).toEqual([]);
+  });
+  it('fades out so that the song is over at its End, and the next comes in at its Start', async () => {
+    const s = setup({ cues: { A: { start: 0, end: 30, manualEnd: true }, B: { start: 12.345, end: 0, manualStart: true } } });
+    s.am.start(); await s.clock.advance(100);
+    await s.clock.advance(20_000);
+    expect(s.am.state()).toBe('playing');
+    await s.clock.advance(3_000); // 23 s: inside the 8 s window before End (30 s)
+    expect(s.am.state()).toBe('crossfading');
+    expect(s.decks[1].seeks).toEqual([12.345]);
+    await s.clock.advance(10_000);
+    expect(s.queue.current()?.videoId).toBe('B');
+  });
+  it('with «Manuale» (no automatic fades) the End still moves on to the next song', async () => {
+    const s = setup({ profile: 'manuale', cues: { A: { start: 0, end: 20, manualEnd: true } } });
+    s.am.start(); await s.clock.advance(100);
+    await s.clock.advance(19_000);
+    expect(s.queue.current()?.videoId).toBe('A');
+    await s.clock.advance(1_500);
+    expect(s.queue.current()?.videoId).toBe('B');
+    expect(s.am.state()).toBe('playing');
+  });
+  it('dragging the bar past the End does not jump to the next song: it plays on to its real end', async () => {
+    const s = setup({ dur: 120, cues: { A: { start: 0, end: 30, manualEnd: true } } });
+    s.am.start(); await s.clock.advance(100);
+    await s.clock.advance(5_000);
+    s.decks[0].seekTo(60); s.am.userSeek(0, 60);
+    await s.clock.advance(2_000);
+    expect(s.queue.current()?.videoId).toBe('A');
+    expect(s.am.state()).toBe('playing');
+    await s.clock.advance(40_000); // 102 s: still A, the mix starts only near the real end (120 s)
+    expect(s.queue.current()?.videoId).toBe('A');
+    await s.clock.advance(20_000);
+    expect(s.queue.current()?.videoId).toBe('B');
+  });
+  it('dragging back before the End brings it back', async () => {
+    const s = setup({ dur: 120, profile: 'manuale', cues: { A: { start: 0, end: 30, manualEnd: true } } });
+    s.am.start(); await s.clock.advance(100);
+    s.decks[0].seekTo(60); s.am.userSeek(0, 60);
+    await s.clock.advance(1_000);
+    expect(s.queue.current()?.videoId).toBe('A');
+    s.decks[0].seekTo(10); s.am.userSeek(0, 10);
+    await s.clock.advance(15_000);
+    expect(s.queue.current()?.videoId).toBe('A');
+    await s.clock.advance(6_000); // past 30 s
+    expect(s.queue.current()?.videoId).toBe('B');
+  });
+  it('without any End, dragging forward and back never changes song', async () => {
+    const s = setup({ dur: 120 });
+    s.am.start(); await s.clock.advance(100);
+    for (const t of [90, 20, 100, 5]) { s.decks[0].seekTo(t); s.am.userSeek(0, t); await s.clock.advance(1_000); }
+    expect(s.queue.current()?.videoId).toBe('A');
+    expect(s.am.state()).toBe('playing');
+  });
+  it('End of the last song with repeat off: the party stops there', async () => {
+    const s = setup({ ids: ['A'], profile: 'manuale', cues: { A: { start: 0, end: 10, manualEnd: true } } });
+    s.am.start(); await s.clock.advance(100);
+    await s.clock.advance(11_000);
+    expect(s.am.state()).toBe('idle');
   });
 });
 

@@ -151,7 +151,18 @@ Sul computer funzionano anche i tasti rapidi:
 - Dopo l'ultimo brano la musica si ferma, a meno che tu non scelga **Ripeti: tutta la playlist** (oppure **Ripeti: questo brano**): il ritorno al primo brano è una scelta del player, scritta anche in fondo alla lista.
 - **◎ Brano in onda** riporta in vista il brano che suona. La lista non salta mai da sola: resta dov'eri anche quando cambia brano, e ogni playlist ricorda il suo punto.
 
-**Android.** La stessa lista del computer: tocca **▶** per suonare un brano, **⋮** per il menu (si apre dal basso), e trascina la maniglia **⋮⋮** per cambiare ordine.
+**Android.** La stessa lista del computer: tocca **▶** per suonare un brano, **⋮** per il menu (si apre dal basso), e trascina la maniglia **⋮⋮** per cambiare ordine. **Un tocco sulla riga** la seleziona e, se il titolo è più lungo della riga, lo fa scorrere per leggerlo tutto; **un secondo tocco** sulla stessa riga apre il menu del brano.
+
+### Start ed End del brano (tagli da DJ)
+
+Mentre un brano suona, sotto i tasti del player ci sono **⏱ SET START** e **⏱ SET END**:
+- **SET START** (tasto **S** sul computer): da adesso il brano parte da qui. Prende la posizione del player nell'istante in cui premi, al millesimo (es. 00:37.420). Premerlo di nuovo sostituisce il valore.
+- **SET END** (tasto **E**): il brano finisce qui e parte il successivo (con la sfumatura scelta, anche in «Manuale»). L'End deve venire dopo lo Start, altrimenti compare un avviso e non viene salvato.
+- **🎧 DJ Edit** mostra posizione attuale, Start, End, durata originale/effettiva/tolta, **▶ Preview** (torna allo Start) e **↺ Reset** (il brano torna originale).
+- Il file **non viene mai tagliato**: sono solo due numeri legati al brano. Nella lista compare «✂ 00:42.317 → 03:48.650».
+- **Nessun tasto Salva:** tutto si salva da solo, subito. Con il NAS collegato i tagli vanno sul NAS **solo per il tuo utente** (gli altri utenti del NAS non li vedono) e arrivano sugli altri tuoi dispositivi; se il NAS non è raggiungibile restano in attesa e partono appena torna.
+- Se trascini la barra del player oltre l'End, l'End viene ignorato per quell'ascolto: puoi sempre andare avanti e indietro nel brano.
+- Sul computer **Ferma** ora è **Maiusc+S** (la S da sola è SET START).
 
 **Comandi comuni**
 - **Casuale**, **Rimescola ora** e **Ripeti** (no, tutta la playlist, solo questo brano).

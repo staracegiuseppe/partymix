@@ -36,6 +36,8 @@ class FakeNas implements SyncApi {
   }
   private summary(d: PlaylistDoc): PlaylistSummary { const { entries, ...rest } = d; return { ...rest, count: entries.length }; }
   by = 'nas';
+  async cues() { return []; }
+  async putCue() { return null; }
   async health() { this.guard('health'); return { app: 'partymix', version: 'test', setup: true }; }
   async setup(name: string, _p: string, dev: DeviceInfo) { this.guard('setup'); return { token: 't', device: { id: 'd1', name: dev.deviceName, kind: dev.deviceKind, perms: [], createdAt: 0, lastSeen: 0, current: true, revoked: false } as DeviceDoc, user: { name } }; }
   login = this.setup;

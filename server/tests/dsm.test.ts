@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -113,5 +113,47 @@ describe('accesso con gli utenti del NAS (DSM)', () => {
     assert.equal(r.status, 401);
     assert.equal(r.body.error, 'NEEDS_CODE');
     assert.match(r.body.message, /codice a 6 cifre/);
+  });
+});
+
+describe('Start/End dei brani: personali per ogni utente del NAS', () => {
+  test('anna e marco hanno ciascuno i propri: l’uno non vede né cambia quelli dell’altro', async () => {
+    const anna = (await login('anna', 'pw-anna', 'pc')).body.token;
+    const marco = (await login('marco', 'pw-marco', 'pc')).body.token;
+    const annaTel = (await login('anna', 'pw-anna', 'android')).body.token;
+    const put = await call('PUT', '/api/cues/b2GlV6Ap-3g', { startTime: 42.3171, endTime: 228.65, title: '50 Special' }, anna);
+    assert.equal(put.status, 200);
+    assert.equal(put.body.cue.startTime, 42.317);
+    // marco: niente, poi i suoi sullo stesso brano
+    assert.deepEqual((await call('GET', '/api/cues', undefined, marco)).body.cues, []);
+    await call('PUT', '/api/cues/b2GlV6Ap-3g', { startTime: 5 }, marco);
+    // il telefono di anna vede quelli di anna, non quelli di marco
+    const tel = (await call('GET', '/api/cues', undefined, annaTel)).body.cues;
+    assert.equal(tel.length, 1);
+    assert.equal(tel[0].startTime, 42.317);
+    assert.equal(tel[0].endTime, 228.65);
+    // un file per brano nella cartella di ciascun utente
+    const users = readdirSync(join(root, 'users'));
+    const annaDir = users.find((u) => u.endsWith('-anna'))!, marcoDir = users.find((u) => u.endsWith('-marco'))!;
+    const f = JSON.parse(readFileSync(join(root, 'users', annaDir, 'cues', 'b2GlV6Ap-3g.json'), 'utf8'));
+    assert.equal(f.startTime, 42.317);
+    assert.equal(f.user, 'anna');
+    assert.equal(JSON.parse(readFileSync(join(root, 'users', marcoDir, 'cues', 'b2GlV6Ap-3g.json'), 'utf8')).startTime, 5);
+    // seconda SET START: sostituisce
+    await call('PUT', '/api/cues/b2GlV6Ap-3g', { startTime: 51.8, endTime: 228.65 }, annaTel);
+    assert.equal((await call('GET', '/api/cues', undefined, anna)).body.cues[0].startTime, 51.8);
+    // Reset: tolto dal database e il file sparisce
+    await call('PUT', '/api/cues/b2GlV6Ap-3g', { startTime: null, endTime: null }, anna);
+    assert.deepEqual((await call('GET', '/api/cues', undefined, anna)).body.cues, []);
+    assert.equal(existsSync(join(root, 'users', annaDir, 'cues', 'b2GlV6Ap-3g.json')), false);
+    assert.equal((await call('GET', '/api/cues', undefined, marco)).body.cues[0].startTime, 5);
+  });
+
+  test('valori non validi rifiutati; senza accesso: 401', async () => {
+    const t = (await login('anna', 'pw-anna', 'pc')).body.token;
+    assert.equal((await call('PUT', '/api/cues/b2GlV6Ap-3g', { startTime: 180, endTime: 120 }, t)).status, 400);
+    assert.equal((await call('PUT', '/api/cues/..%2Fpasswd', { startTime: 1 }, t)).status, 400);
+    assert.equal((await call('PUT', '/api/cues/b2GlV6Ap-3g', { startTime: -1 }, t)).status, 400);
+    assert.equal((await call('GET', '/api/cues')).status, 401);
   });
 });

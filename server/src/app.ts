@@ -13,8 +13,9 @@ import { MAX_CHUNK, Tracks } from './tracks.ts';
 import { cleanEntry, cleanMeta, Playlists } from './playlists.ts';
 import { checkLink, loadStreamKey, sendFile, signLink } from './stream.ts';
 import { dsmLogin, type DsmOptions } from './dsm.ts';
+import { Cues } from './cues.ts';
 
-export const SERVER_VERSION = '1.1.0';
+export const SERVER_VERSION = '1.2.0';
 
 export type AppOptions = {
   /** The PartyMix folder on the NAS (music/, playlists/, database/…). */
@@ -52,6 +53,7 @@ export function createApp(opts: AppOptions): App {
   const db = opts.db ?? openDbSync(opts.dbFile ?? join(opts.root, 'database', 'partymix.sqlite'));
   const playlists = new Playlists(db, now);
   const tracks = new Tracks(db, opts.root, now);
+  const cues = new Cues(db, opts.root, now);
   const dropped = tracks.cleanup();
   if (dropped) console.log(`upload abbandonati rimossi: ${dropped}`);
   const streamKey = loadStreamKey(join(opts.root, 'database', 'stream.key'));
@@ -60,11 +62,13 @@ export function createApp(opts: AppOptions): App {
   const pairing = new PairingCodes(now);
   const pairPerms = new Map<string, number>();
   const limiter = new LoginLimiter(now);
-  const listeners = new Set<ServerResponse>();
+  /** Open event streams, each with the NAS user of its device. */
+  const listeners = new Map<ServerResponse, number>();
 
-  const publish = (ev: ServerEvent) => {
+  /** To every device, or (`onlyUser`) to that user's devices alone: personal changes never reach the others. */
+  const publish = (ev: ServerEvent, onlyUser?: number) => {
     const line = `id: ${ev.seq}\nevent: change\ndata: ${JSON.stringify(ev)}\n\n`;
-    for (const r of listeners) r.write(line);
+    for (const [r, uid] of listeners) if (onlyUser === undefined || uid === onlyUser) r.write(line);
   };
 
   // A readable copy of every playlist next to the database: easy to back up and to look at.
@@ -208,6 +212,20 @@ export function createApp(opts: AppOptions): App {
     const d = auth(req, url);
     const u = db.prepare('SELECT name FROM user WHERE id = ?').get(d.user_id) as { name: string };
     sendJson(res, 200, { device: deviceDoc(d, d), user: { name: u.name } });
+  });
+
+  // ---- Start/End of the songs: personal to each NAS user ----
+  r.on('GET', '/api/cues', ({ req, res, url }) => {
+    const d = auth(req, url, 'READ_LIBRARY');
+    sendJson(res, 200, { cues: cues.list(d.user_id) });
+  });
+
+  r.on('PUT', '/api/cues/:song', async ({ req, res, url, params }) => {
+    const d = auth(req, url, 'READ_LIBRARY');
+    const u = db.prepare('SELECT id, name FROM user WHERE id = ?').get(d.user_id) as { id: number; name: string };
+    const doc = cues.set(u, params[0], await readJson(req), d.name);
+    publish({ seq: currentSeq(db), kind: 'cue', id: params[0], by: d.id }, d.user_id);
+    sendJson(res, 200, { cue: doc });
   });
 
   // ---- devices ----
@@ -460,10 +478,10 @@ export function createApp(opts: AppOptions): App {
 
   /** Server-Sent Events: a line for each change, so devices pull at once instead of polling. */
   r.on('GET', '/api/events', ({ req, res, url }) => {
-    auth(req, url, 'READ_LIBRARY');
+    const d = auth(req, url, 'READ_LIBRARY');
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
     res.write(`event: hello\ndata: ${JSON.stringify({ seq: currentSeq(db) })}\n\n`);
-    listeners.add(res);
+    listeners.set(res, d.user_id);
     const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
     req.on('close', () => { clearInterval(ping); listeners.delete(res); });
   });
@@ -518,7 +536,7 @@ export function createApp(opts: AppOptions): App {
     handle,
     db,
     close: () => {
-      for (const l of listeners) l.end();
+      for (const l of listeners.keys()) l.end();
       listeners.clear();
       db.close();
     },

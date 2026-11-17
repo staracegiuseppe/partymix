@@ -133,7 +133,7 @@ describe('🎧 Libreria page', () => {
     const chip = [...ui.pages.library.querySelectorAll<HTMLButtonElement>('.chip')].find((c) => c.textContent === 'Preferiti')!;
     chip.click();
     expect(chip.getAttribute('aria-pressed')).toBe('true');
-    expect(shown(ui.pages.library).map((r) => r.querySelector('.t')!.firstChild!.textContent)).toEqual(['Solo in libreria']);
+    expect(shown(ui.pages.library).map((r) => r.querySelector('.t .tin')!.firstChild!.textContent)).toEqual(['Solo in libreria']);
   });
 });
 

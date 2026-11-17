@@ -6,6 +6,7 @@ import { fmtTime, h, paintWords } from './dom';
 import { showAppPicker, showFeedback, showInfo, startTour, startWizard, TourStep } from './guide';
 import { UNAVAILABLE_WITH_YOUTUBE } from './unavailable';
 import { APP_VERSION, AUTHOR, PAYPAL_QR } from '../info';
+import { fmtCue } from '../cueEdit';
 import { buildQueueList, QueueRowVM } from './queueList';
 import type { SheetItem as MenuItem } from './material';
 import { applyPhoneTheme, applySystemInsets, buildShell, icon, materialUI, setLabel, SheetItem, withIcon } from './material';
@@ -66,7 +67,15 @@ export type Actions = {
   prev?(): void;
   /** Computer only: «Aggiungi a playlist» on a song of the queue. */
   addToPlaylist?(videoId: string): void;
+  /** ⏱ SET START / SET END: the song on air starts/ends at the player's position right now (no dialog). */
+  setCue?(kind: 'start' | 'end'): { ok: boolean; message: string };
+  /** ▶ Preview: back to the Start of the song on air. */
+  previewCue?(): { ok: boolean; message: string };
+  /** ↺ Reset: Start and End taken away. */
+  resetCue?(): { ok: boolean; message: string };
 };
+/** Start/End of the song on air (seconds); `available` false when nothing plays. */
+export type CueVM = { available: boolean; current: number; duration: number; start?: number; end?: number; label: string; stats: string; saved?: string };
 
 /** The computer's pages (built by the app with the shell's menu and navigation). */
 export type DesktopPages = {
@@ -106,6 +115,7 @@ export type ViewModel = {
   playing?: { from: string; pos: number; total: number };
   history: string[];
   problems: string[];
+  cue?: CueVM;
 };
 
 const PROFILES: { id: Profile; label: string; hint: string }[] = [
@@ -419,6 +429,53 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
   const stopBtn = h('button', { type: 'button', title: 'Ferma l’automix e riporta la lista all’inizio', onClick: () => a.stop() }, 'Ferma');
   let emptyNowRef: HTMLElement | undefined;
   const prevBtn = h('button', { class: 'icon-btn', onClick: () => a.prev?.() }, '⏮');
+  // ---- Cue point runtime: ⏱ SET START / SET END while listening, 🎧 DJ Edit with current/start/end ----
+  const cueFlash = h('div', { class: 'cue-flash', role: 'status', 'aria-live': 'polite' });
+  let cueTimer = 0;
+  function flashCue(msg: string, ok = true) {
+    cueFlash.textContent = msg;
+    cueFlash.className = 'cue-flash on' + (ok ? '' : ' warn');
+    clearTimeout(cueTimer);
+    cueTimer = window.setTimeout(() => cueFlash.classList.remove('on'), ok ? 2500 : 5000);
+  }
+  const runCue = (fn: () => { ok: boolean; message: string } | undefined) => () => { const r = fn(); if (r) flashCue(r.message, r.ok); };
+  const cueBtn = (text: string, title: string, run: () => void) => {
+    const v = h('small', { class: 'cue-val' });
+    return { btn: h('button', { type: 'button', class: 'cue-btn', title, onClick: run }, h('span', {}, text), v), v };
+  };
+  const cueS = cueBtn('⏱ SET START', 'Il brano parte da qui: prende la posizione del player adesso (tasto S)', runCue(() => a.setCue?.('start')));
+  const cueE = cueBtn('⏱ SET END', 'Il brano finisce qui e parte il successivo (tasto E)', runCue(() => a.setCue?.('end')));
+  let djOn = false;
+  try { djOn = localStorage.getItem('partymix.djEdit') === '1'; } catch { /* private window: off */ }
+  const cueEdit = h('div', { class: 'cue-edit' });
+  const djBtn = h('button', { type: 'button', class: 'cue-dj', title: 'Mostra posizione, Start, End e anteprima', onClick: () => {
+    djOn = !djOn;
+    try { localStorage.setItem('partymix.djEdit', djOn ? '1' : '0'); } catch { /* not remembered */ }
+    paintDj();
+  } }, '🎧 DJ Edit');
+  const paintDj = () => { cueEdit.classList.toggle('hidden', !djOn); djBtn.setAttribute('aria-pressed', String(djOn)); };
+  const cell = (k: string) => { const v = h('b', { class: 'cue-num' }, '—'); return { el: h('div', { class: 'cue-cell' }, h('span', { class: 'cue-k' }, k), v), v }; };
+  const cCur = cell('CURRENT'), cStart = cell('START'), cEnd = cell('END');
+  const cueStatsEl = h('div', { class: 'cue-stats' });
+  const cueSaved = h('div', { class: 'cue-saved', 'aria-live': 'polite' });
+  const cuePrev = h('button', { type: 'button', class: 'cue-small', title: 'Torna allo Start e ascolta', onClick: runCue(() => a.previewCue?.()) }, '▶ Preview');
+  const cueReset = h('button', { type: 'button', class: 'cue-small', title: 'Toglie Start ed End: il brano torna originale', onClick: runCue(() => a.resetCue?.()) }, '↺ Reset');
+  cueEdit.append(h('div', { class: 'cue-grid' }, cCur.el, cStart.el, cEnd.el), cueStatsEl, cueSaved, h('div', { class: 'cue-acts' }, cuePrev, cueReset));
+  paintDj();
+  const cueBar = h('div', { class: 'cue-bar' }, h('div', { class: 'cue-main' }, cueS.btn, cueE.btn, djBtn), cueFlash, cueEdit);
+  const paintCue = (c: CueVM | undefined) => {
+    const on = !!c?.available;
+    cueBar.classList.toggle('off', !on);
+    for (const b of [cueS.btn, cueE.btn, cuePrev] as HTMLButtonElement[]) b.disabled = !on;
+    cueReset.disabled = !on || (c?.start === undefined && c?.end === undefined);
+    cueS.v.textContent = on && c!.start !== undefined ? `${fmtCue(c!.start)} ✓` : '';
+    cueE.v.textContent = on && c!.end !== undefined ? `${fmtCue(c!.end)} ✓` : '';
+    cCur.v.textContent = on ? fmtCue(c!.current) : '—';
+    cStart.v.textContent = on && c!.start !== undefined ? `${fmtCue(c!.start)} ✓` : on ? 'inizio brano' : '—';
+    cEnd.v.textContent = on && c!.end !== undefined ? `${fmtCue(c!.end)} ✓` : on ? 'fine brano' : '—';
+    cueSaved.textContent = on ? c!.saved ?? '' : '';
+    cueStatsEl.textContent = on ? `${c!.label}${c!.stats ? ` · ${c!.stats}` : ''}` : 'Avvia la riproduzione: Start ed End si prendono dal brano in onda.';
+  };
   /** «In riproduzione da: 🎵 Party · 3 / 124». */
   const nowFrom = h('div', { class: 'pg-sub now-from', 'aria-live': 'polite' });
   if (md) {
@@ -437,6 +494,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     withIcon(dA.duck, 'volumeDown'); withIcon(dB.duck, 'volumeDown');
     master.parentElement?.prepend(withIcon(h('span', { class: 'm-vol-ic' }), 'volume', true));
     nextBtn.parentElement?.append(nextBtn); // Pausa · Mix ora · Prossimo, like a player
+    mixer.append(cueBar);
     status.classList.add('hidden');
     projModeHint.after(lyShow.parentElement!, lyHl.parentElement!); // projector settings, also before any lyrics are found
     syncBar.prepend(h('h3', {}, 'Testo da cantare'));
@@ -475,6 +533,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
       h('div', { class: 'np-status' }, mixText),
       h('div', { class: 'np-xf' }, xlabels, xfade),
       h('div', { class: 'transport' }, prevBtn, playMain, nextBtn),
+      cueBar,
       h('div', { class: 'np-actions' }, mixBtn, stopBtn),
       h('label', { class: 'np-vol' }, withIcon(h('span', { class: 'np-vol-ic' }), 'volume', true), master),
       h('div', { class: 'np-trans' }, h('span', { class: 'np-label' }, 'Transizione'), seg));
@@ -516,6 +575,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     deskTour = () => [
       { target: () => root.querySelector('.m-nav') as HTMLElement, title: 'Il menu', text: 'Da qui vai alle pagine: ▶ Player (quello che suona), 📋 Playlist, 🔎 Cerca, ⬇ Download, 🎧 Libreria (con i file del NAS in fondo). In fondo 📺 Proiettore, ⚙ Impostazioni (anche il collegamento al NAS e i dispositivi) e 💜 Info e dona.' },
       { target: () => playMain, title: 'Avvia, pausa, riprendi', text: 'Il tasto grande avvia l’automix: parte il primo brano e la musica va avanti da sola, con le sfumature. Poi mette in pausa e riprende. ⏮ e ⏭ passano al brano prima o dopo.' },
+      { target: () => cueBar, title: 'Start ed End del brano', text: 'Mentre ascolti, premi «⏱ SET START» (tasto S) nel punto da cui il brano deve partire e «⏱ SET END» (tasto E) dove deve finire: vengono presi dalla posizione del player in quel momento e salvati nella playlist, il file resta intero. «🎧 DJ Edit» mostra posizione, Start, End, anteprima e Reset. Ferma ora è Maiusc+S.' },
       { target: () => mixBtn.parentElement as HTMLElement, title: 'Mix ora e Ferma', text: '«Mix ora» sfuma subito nel brano già pronto; «Ferma» ferma tutto e riporta la lista all’inizio.' },
       { target: () => seg.parentElement as HTMLElement, title: 'Stile delle transizioni', text: 'Morbida (circa 12 secondi), Standard (8), Energica (4) o Manuale (il cambio solo quando lo chiedi tu).' },
       { target: () => queuePanel, title: 'La lista di riproduzione', text: 'I brani in ordine, con un inizio e una fine ben visibili. ▶ o doppio clic suona un brano; ⋮ (o clic destro) apre le altre azioni; trascina ⋮⋮ per cambiare ordine. «Ripeti» decide cosa succede dopo l’ultimo brano.' },
@@ -681,6 +741,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
 
   function update(vm: ViewModel) {
     lastVm = vm;
+    paintCue(vm.cue);
     if (!md) {
       const p = vm.playing;
       nowFrom.textContent = p && p.total ? `In riproduzione da: 🎵 ${p.from} · ${p.pos > 0 ? p.pos : '–'} / ${p.total}` : 'Nessuna playlist in riproduzione';
@@ -838,5 +899,5 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
     statusListeners.forEach((fn) => fn(msg, error));
   }
 
-  return { openWizard, openTutorial, setSource, mounts: [dA.mount, dB.mount] as [HTMLElement, HTMLElement], update, setStatus, setRefreshInfo, setAutoRefreshValue, setDisplays, setInputs, setSensitivity, setPlaylists, setProjectorMode, queuePanel, queueView: ql, setProjectorInfo, linkInput: link, loadBtn, go: (id: string) => shell?.go(id) };
+  return { flashCue, openWizard, openTutorial, setSource, mounts: [dA.mount, dB.mount] as [HTMLElement, HTMLElement], update, setStatus, setRefreshInfo, setAutoRefreshValue, setDisplays, setInputs, setSensitivity, setPlaylists, setProjectorMode, queuePanel, queueView: ql, setProjectorInfo, linkInput: link, loadBtn, go: (id: string) => shell?.go(id) };
 }

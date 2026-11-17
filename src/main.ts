@@ -28,6 +28,8 @@ import { MusicLibrary, probeWithAudio } from './library/library';
 import { KvBlobStore, NativeBlobStore } from './library/blobStore';
 import { AudioDeck, HybridDeck, sourceText } from './audioDeck';
 import { Cues, cuePoints } from './cues';
+import { checkEnd, checkStart, cueLabel, cueStats, fmtCue, fmtDur, hasCue, mergeCues, type MixCues, type UserCue } from './cueEdit';
+import { CueStore, CueSync, cuesFromPlaylists, LOCAL_ACCOUNT } from './cueStore';
 import { buildDesktopPages } from './ui/desktopPages';
 import type { DesktopParts } from './ui/console';
 import { materialUI } from './ui/material';
@@ -90,6 +92,23 @@ const phoneUI = !isIOSApp() && materialUI();
 /** The pages of the computer (Playlist, Cerca, Libreria, Impostazioni): computer and Android alike. */
 const desktopUI = !isIOSApp();
 const plStore = new PlaylistStore(kv);
+/** Start/End of the songs, personal to the NAS user linked here (or to this device without a NAS). */
+const cueStore = new CueStore({ storage: store });
+let cueSync: CueSync | undefined;
+/**
+ * 1.9.0-beta1 kept Start/End inside the playlist lines. Read once from the saved playlists as they are on disk
+ * (before loading them, which drops those fields) and moved to this device's cues: linking the NAS later makes them the user's.
+ */
+async function migrateBeta1Cues() {
+  try {
+    if (store?.getItem('partymix.cues.migrated') === '1') return;
+    const n = cuesFromPlaylists(await kv.getAll('playlists'), cueStore);
+    store?.setItem('partymix.cues.migrated', '1');
+    if (n) log('info', 'cue.migrated_beta1', { count: n });
+  } catch (e) { log('warn', 'cue.migrate_failed', { error: String(e) }); }
+}
+// cuts waiting for the NAS (it was off, out of reach, or still an old server) go again every minute until they arrive
+window.setInterval(() => { if (cueStore.pending().length) void cueSync?.syncNow(); }, 60_000);
 const library = new MusicLibrary({
   kv,
   blobs: computerApp && tauriInvoke ? new NativeBlobStore((c, a, o) => tauriInvoke(c, a, o), convertFileSrc) : new KvBlobStore(kv),
@@ -353,7 +372,13 @@ function startSync(cfg: NasConfig) {
     nasIdOf: (id) => library.nasIdOf(id),
     localIdOf: (sha) => { const id = library.idForNas(sha); return id && !id.startsWith('nas:') ? id : undefined; },
     onTracks: (t) => nasMusic?.applyTracks(t),
+    onEvent: (ev) => { if (ev.kind === 'cue') cueSync?.soon(); },
   });
+  // Start/End: this NAS user's own (the ones set here before linking become theirs), never another user's
+  cueStore.useAccount(cfg.userName || cfg.url, { adoptLocal: true });
+  cueSync?.stop();
+  cueSync = new CueSync(cueStore, syncApi, (m) => log('info', 'sync.cues', { m }));
+  void cueSync.syncNow();
   // first link of this device (or after an update): the whole NAS library once, then only the changes
   void (async () => {
     try {
@@ -370,7 +395,7 @@ function startSync(cfg: NasConfig) {
   let wasConnected = false;
   syncEngine.onChange(() => {
     const s = syncEngine?.status();
-    if (s?.connected && !wasConnected) uploader?.resume();
+    if (s?.connected && !wasConnected) { uploader?.resume(); void cueSync?.syncNow(); } // back in reach of the NAS: the waiting cuts go now
     wasConnected = !!s?.connected;
     if (s?.lastNews && s.lastNews !== lastNews) { lastNews = s.lastNews; ui.setStatus(`☁ ${s.lastNews}`); }
     if (s?.conflicts.length && !document.body.classList.contains('sync-asked')) { document.body.classList.add('sync-asked'); ui.setStatus(`☁ Due dispositivi hanno cambiato la stessa playlist in modi diversi: decidi in Impostazioni → NAS.`, true); }
@@ -378,7 +403,7 @@ function startSync(cfg: NasConfig) {
   void syncEngine.start();
   uploader?.start();
 }
-window.addEventListener('online', () => void syncEngine?.syncNow());
+window.addEventListener('online', () => { void syncEngine?.syncNow(); void cueSync?.syncNow(); });
 /** Android 17+: without the «local network» permission the NAS at home cannot be reached at all. */
 async function needLocalNetwork() {
   if ((await ensureLocalNetwork()) === 'granted') return;
@@ -415,6 +440,9 @@ const syncDeps = !isIOSApp() ? {
     nasMusic?.stop();
     await kv.delete('sync', 'nasLibrary').catch(() => {});
     syncEngine = undefined; syncApi = undefined; nasConfig = undefined; uploader = undefined; nasMusic = undefined;
+    // this user's Start/End stay on the NAS, not on this device: whoever links next must not find them
+    cueSync?.stop(); cueSync = undefined;
+    cueStore.useAccount(LOCAL_ACCOUNT, { forget: true });
     saveNasConfig(store, undefined);
     log('info', 'sync.unlinked', {});
   },
@@ -577,7 +605,7 @@ const ui: ReturnType<typeof buildConsole> & { selectById(id: string): void } = O
   playNow: (id) => am?.playNow(id),
   setProfile: (p) => { settings.profile = p; save(); },
   setMaster: (v) => { settings.master = v; save(); },
-  seek: (i, sec) => decks?.[i].seekTo(sec),
+  seek: (i, sec) => { decks?.[i].seekTo(sec); am?.userSeek(i, sec); },
   setDeckVolume: (i, v) => { sliders[i] = v; },
   toggleDuck: (i) => { ducked[i] = !ducked[i]; },
   setSpotMode(m) { settings.spotMode = m; save(); syncAutoDuck(); },
@@ -658,6 +686,9 @@ const ui: ReturnType<typeof buildConsole> & { selectById(id: string): void } = O
   toggleFavorite(id) { const t = trackOf(id); const on = library.toggleFavorite(id, t); ui.setStatus(on ? `♥ «${titleOf(t)}» nei preferiti.` : `«${titleOf(t)}» tolto dai preferiti.`); },
   makeOffline(id) { libUI?.offline(id); },
   addToPlaylist(id) { libUI?.pickPlaylist([id]); },
+  setCue,
+  previewCue,
+  resetCue,
   prev() {
     const i = queue.currentIndex();
     const t = i > 0 ? queue.all()[i - 1] : undefined;
@@ -801,7 +832,26 @@ function levelsOf(id: string): Promise<number[] | null> {
 }
 /** Mix cue points (music start/end) of a song with a file on the computer; measured in the background the first time. */
 const cueCache = new Map<string, Cues | null>();
-function cuesFor(id: string): Cues | undefined {
+/** Where the mix starts and ends a song: the user's Start/End (this playlist) over the measured silence. */
+function cuesFor(id: string): MixCues | undefined {
+  return mergeCues(cueOf(id), autoCuesFor(id));
+}
+/** The id a song has on every device: YouTube id, the SHA-256 of its NAS file, or its local id until it is uploaded. */
+function songKey(videoId: string): string {
+  if (videoId.startsWith('nas:')) return videoId.slice(4);
+  if (videoId.startsWith('local:')) return library.nasIdOf(videoId) ?? videoId;
+  return videoId;
+}
+/** This user's Start/End of a song (a local file now on the NAS takes its cues along). */
+function cueOf(videoId: string): UserCue | undefined {
+  const key = songKey(videoId);
+  const c = cueStore.get(key);
+  if (c || key === videoId) return c;
+  const old = cueStore.get(videoId);
+  if (old) cueStore.rename(videoId, key);
+  return old;
+}
+function autoCuesFor(id: string): Cues | undefined {
   if (!cueCache.has(id)) {
     cueCache.set(id, null);
     void levelsOf(id).then((l) => {
@@ -898,6 +948,68 @@ function mixNote(id: string): string {
   return parts.length ? ` · ⏩ Mix: ${parts.join(', ')}` : '';
 }
 
+// --- Start/End del brano in onda, presi dalla posizione del player nel momento del tasto (SET START / SET END). ---
+/** The deck being heard and its song: the current one of the queue (also during a fade, until the next takes over). */
+function heard(): { deck: HybridDeck; track: Track } | undefined {
+  const t = queue.current();
+  if (!am || am.state() === 'idle' || !t) return undefined;
+  const deck = decks[am.activeDeck()];
+  return deck.currentVideoId() === t.videoId ? { deck, track: t } : undefined;
+}
+
+/** Saves the song's Start/End at once (this device), then to the NAS for this user only: there is no «Salva» to press. */
+function storeCue(t: Track, patch: { startTime?: number | null; endTime?: number | null }) {
+  cueStore.set(songKey(t.videoId), patch, titleOf(t));
+  log('info', 'cue.set', { videoId: t.videoId, ...patch, account: cueStore.isLocal() ? 'device' : 'nas' });
+}
+/** Where the Start/End of this song are kept, said in the DJ Edit panel. */
+function savedText(videoId: string): string {
+  const st = cueStore.state(songKey(videoId));
+  if (!st) return 'Nessuno Start/End: il brano è originale.';
+  if (st === 'local') return '💾 Salvato in automatico su questo dispositivo (NAS non collegato).';
+  const who = cueStore.accountName();
+  return st === 'pending' ? `💾 Salvato qui, lo mando al NAS per ${who}…` : `☁ Salvato in automatico sul NAS, solo per ${who} ✓`;
+}
+
+function setCue(kind: 'start' | 'end'): { ok: boolean; message: string } {
+  const h = heard();
+  if (!h) return { ok: false, message: '⚠ Avvia la riproduzione: Start ed End si prendono dal brano in onda' };
+  const pos = h.deck.position(); // read now, at the press: not the last value the screen showed
+  const dur = h.deck.duration(), t = h.track, c = cueOf(t.videoId) ?? {};
+  const r = kind === 'start' ? checkStart(pos, dur, c.endTime) : checkEnd(pos, dur, c.startTime);
+  if (!r.ok) { log('info', 'cue.refused', { kind, pos, error: r.error }); return { ok: false, message: r.error }; }
+  storeCue(t, kind === 'start' ? { startTime: r.value } : { endTime: r.value });
+  return { ok: true, message: `✓ ${kind === 'start' ? 'Start' : 'End'} impostato a ${fmtCue(r.value)} · salvato` };
+}
+
+function previewCue(): { ok: boolean; message: string } {
+  const h = heard();
+  if (!h) return { ok: false, message: '⚠ Avvia la riproduzione per ascoltare l’anteprima' };
+  const s = cueOf(h.track.videoId)?.startTime ?? 0;
+  h.deck.seekTo(s);
+  if (am?.state() === 'paused') am.resume();
+  return { ok: true, message: `▶ Dallo Start ${fmtCue(s)}` };
+}
+
+function resetCue(): { ok: boolean; message: string } {
+  const h = heard();
+  if (!h) return { ok: false, message: '⚠ Nessun brano in onda' };
+  if (!hasCue(cueOf(h.track.videoId) ?? {})) return { ok: true, message: 'Il brano è già originale' };
+  storeCue(h.track, { startTime: null, endTime: null });
+  return { ok: true, message: '↺ Start ed End tolti: il brano torna originale' };
+}
+
+function cueVM(): ViewModel['cue'] {
+  const h = heard();
+  if (!h) return { available: false, current: 0, duration: 0, label: '', stats: '' };
+  const c = cueOf(h.track.videoId) ?? {}, dur = h.deck.duration();
+  const s = cueStats(dur, c);
+  return {
+    available: true, current: h.deck.position(), duration: dur, start: c.startTime, end: c.endTime, label: cueLabel(c), saved: savedText(h.track.videoId),
+    stats: dur > 0 ? `Durata ${fmtDur(s.original)} · Effettiva ${fmtDur(s.effective)} · Tolti ${fmtDur(s.removed)}` : '',
+  };
+}
+
 function deckVM(i: 0 | 1): DeckVM {
   const d = decks?.[i];
   const t = d ? trackOf(d.currentVideoId()) : undefined;
@@ -959,7 +1071,7 @@ let rowsCache: { sig: string; rows: ViewModel['queue'] } = { sig: '', rows: [] }
 function queueRows(cur: number): { sig: string; rows: ViewModel['queue'] } {
   const st = am?.state() ?? 'idle';
   const net = netOk();
-  const sig = `${queue.version}|${cur}|${st === 'idle' ? 'i' : st === 'paused' ? 'p' : 'r'}|${karaoke.state().done}|${library.version}|${net}`;
+  const sig = `${queue.version}|${cur}|${st === 'idle' ? 'i' : st === 'paused' ? 'p' : 'r'}|${karaoke.state().done}|${library.version}|${net}|${cueStore.version}`;
   if (sig === rowsCache.sig) return rowsCache;
   const rows = queue.all().map((t, i) => {
     const off = library.stateOf(t.videoId);
@@ -968,10 +1080,22 @@ function queueRows(cur: number): { sig: string; rows: ViewModel['queue'] } {
       current: i === cur && st !== 'idle', paused: st === 'paused', lyr: lyricsStore.status(t.videoId),
       off, pct: off === 'downloading' ? library.progressOf(t.videoId) : undefined, fav: !!library.get(t.videoId)?.favorite,
       dur: t.durationSec || library.get(t.videoId)?.durationSec, skip: !net && off !== 'offline',
+      ...cueRow(t),
     };
   });
   rowsCache = { sig, rows };
   return rowsCache;
+}
+
+function cueRow(t: Track): { cue?: string; cueTip?: string } {
+  const c = cueOf(t.videoId);
+  if (!c || !hasCue(c)) return {};
+  const d = t.durationSec || library.get(t.videoId)?.durationSec || 0;
+  const s = cueStats(d, c);
+  return { cue: cueLabel(c), cueTip: cueTipOf(d, s) };
+}
+function cueTipOf(d: number, s: ReturnType<typeof cueStats>): string {
+  return `Start/End scelti da te (il file resta intero)${d ? ` · originale ${fmtDur(s.original)}, effettiva ${fmtDur(s.effective)}, tolti ${fmtDur(s.removed)}` : ''}`;
 }
 
 function viewModel(): ViewModel {
@@ -993,6 +1117,7 @@ function viewModel(): ViewModel {
     playing: { from: plStore.get(loadedId)?.name ?? (queue.length() ? 'Coda' : ''), pos: (am?.state() ?? 'idle') !== 'idle' ? cur + 1 : 0, total: queue.length() },
     history: queue.history().map((t) => titleOf(t)),
     problems,
+    cue: cueVM(),
   };
 }
 
@@ -1032,6 +1157,8 @@ bindShortcuts(window, {
   pause: () => (am?.state() === 'paused' ? am.resume() : am?.pause()),
   stop: () => am?.stop(),
   mixNow: () => am?.mixNow(),
+  setStart: () => { const r = setCue('start'); ui.flashCue(r.message, r.ok); },
+  setEnd: () => { const r = setCue('end'); ui.flashCue(r.message, r.ok); },
   volumeUp: () => { settings.master = Math.min(100, settings.master + 5); save(); },
   volumeDown: () => { settings.master = Math.max(0, settings.master - 5); save(); },
 });
@@ -1066,6 +1193,7 @@ window.setInterval(() => { if (navigator.onLine && !ytReady) void bootYouTube();
 (async () => {
   // 1. the library and the playlists (from the disk: no network needed)
   try {
+    await migrateBeta1Cues();
     await Promise.all([plStore.load(), library.load()]);
     void downloads?.start().catch((e) => log('warn', 'downloads.start_failed', { error: String(e) }));
     const migrated = migrateLegacy(plStore, settings, store);

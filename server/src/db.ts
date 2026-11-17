@@ -143,6 +143,17 @@ const MIGRATIONS: string[] = [
   `,
   // A playlist line can point to a file that is only on one device (not uploaded yet): other devices show it as missing.
   `ALTER TABLE playlist_entry ADD COLUMN local_id TEXT;`,
+  // Start/End of a song, personal to each NAS user (never shared with the others)
+  `CREATE TABLE cue (
+    user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+    song TEXT NOT NULL,
+    start_time REAL,
+    end_time REAL,
+    title TEXT,
+    updated_at INTEGER NOT NULL,
+    device_name TEXT,
+    PRIMARY KEY (user_id, song)
+  );`,
 ];
 
 /**

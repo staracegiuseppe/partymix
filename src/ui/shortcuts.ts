@@ -3,6 +3,10 @@ export type ShortcutHandlers = {
   pause(): void;
   stop(): void;
   mixNow(): void;
+  /** S: the song starts here (current position of the player). */
+  setStart?(): void;
+  /** E: the song ends here. */
+  setEnd?(): void;
   volumeUp(): void;
   volumeDown(): void;
 };
@@ -16,11 +20,11 @@ export function bindShortcuts(root: Window, h: ShortcutHandlers): () => void {
   const onKey = (e: Event) => {
     const k = e as KeyboardEvent;
     if (k.ctrlKey || k.metaKey || k.altKey || isTyping(k.target)) return;
-    const map: Record<string, () => void> = {
-      ArrowRight: h.next, ' ': h.pause, s: h.stop, S: h.stop, m: h.mixNow, M: h.mixNow,
-      ArrowUp: h.volumeUp, ArrowDown: h.volumeDown,
-    };
-    const fn = map[k.key];
+    // S = SET START and E = SET END (DJ cue points); Stop moved to Shift+S so S never stops the party by mistake
+    const sKey = k.key === 's' || k.key === 'S';
+    const fn = sKey ? (k.shiftKey ? h.stop : h.setStart ?? h.stop)
+      : k.key === 'e' || k.key === 'E' ? h.setEnd
+      : ({ ArrowRight: h.next, ' ': h.pause, m: h.mixNow, M: h.mixNow, ArrowUp: h.volumeUp, ArrowDown: h.volumeDown } as Record<string, (() => void) | undefined>)[k.key];
     if (!fn) return;
     k.preventDefault();
     fn();
