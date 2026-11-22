@@ -132,6 +132,39 @@ describe('mixer: un brano del NAS', () => {
     expect(sourceText(d.source(), false)).toMatch(/NAS/);
     expect(d.videoIdForProjector()).toBe('');
   });
+  it('volume uguale: il fattore del brano si applica, ma non cambia mentre il brano si sente già', async () => {
+    const y = yt();
+    let resolve!: (v: number) => void;
+    const later = new Promise<number>((r) => { resolve = r; });
+    const d = new HybridDeck(new AudioDeck(fakeAudio()), { localUrl: async () => undefined, canStream: () => true, levelGain: (_id, src) => ({ now: src === 'youtube' ? 0.5 : 1, later }) }, y);
+    await d.load('aaaaaaaaaaa');
+    d.setVolume(80);
+    expect(y.setVolume).toHaveBeenLastCalledWith(40);
+    d.play();
+    resolve(0.25);
+    await later; await Promise.resolve();
+    expect(y.setVolume).toHaveBeenLastCalledWith(40); // already heard: no jump
+    // the next song is prepared silent: its measure arrives in time and is used
+    let r2!: (v: number) => void;
+    const l2 = new Promise<number>((r) => { r2 = r; });
+    const d2 = new HybridDeck(new AudioDeck(fakeAudio()), { localUrl: async () => undefined, canStream: () => true, levelGain: () => ({ now: 0.7, later: l2 }) }, y);
+    await d2.load('bbbbbbbbbbb');
+    d2.setVolume(0);
+    r2(0.3); await l2; await Promise.resolve();
+    d2.setVolume(100);
+    expect(y.setVolume).toHaveBeenLastCalledWith(30);
+  });
+  it('volume uguale: un caricamento lento superato da uno nuovo non impone il suo volume', async () => {
+    let finishA!: () => void;
+    const y = { ...yt(), load: vi.fn((id: string) => id === 'aaaaaaaaaaa' ? new Promise<void>((r) => { finishA = r; }) : Promise.resolve()) } as unknown as YouTubeDeck;
+    const d = new HybridDeck(new AudioDeck(fakeAudio()), { localUrl: async () => undefined, canStream: () => true, levelGain: (id) => ({ now: id === 'aaaaaaaaaaa' ? 0.2 : 0.9 }) }, y);
+    const a = d.load('aaaaaaaaaaa');
+    await Promise.resolve(); await Promise.resolve();
+    await d.load('bbbbbbbbbbb');
+    finishA(); await a;
+    d.setVolume(100);
+    expect(y.setVolume).toHaveBeenLastCalledWith(90);
+  });
   it('salvato qui: suona dal file; NAS spento e nessuna copia: «offline», non «rotto»', async () => {
     const a = fakeAudio();
     const d = new HybridDeck(new AudioDeck(a), { localUrl: async () => 'blob:copia', canStream: () => false }, yt());

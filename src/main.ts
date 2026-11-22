@@ -38,6 +38,7 @@ import { tauriDownloadClient } from './download/client';
 import { DownloadCoordinator } from './download/manager';
 import { listen } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { fileLufs, gainFactor, LoudnessStore, parseYouTubeLoudness, serial } from './loudness';
 import { followSystemTheme } from './ui/systemTheme';
 import { listInputs } from './projector/mic';
 import { createYouTubeDeck } from './youtubeDeck';
@@ -128,7 +129,24 @@ const mkAudio = () => {
   return new AudioDeck(a);
 };
 // a song of the NAS without a copy here plays in streaming from the NAS (a short signed link)
-const hybridDeps = { localUrl: async (id: string) => (await library.urlFor(id)) ?? (id.startsWith('nas:') ? await nasMusic?.streamUrl(id) : undefined), canStream: netOk, preferYouTube: () => settings.projectorMode === 'video' };
+// «Volume uguale tra i brani»: see loudness.ts
+const loudness = new LoudnessStore(store);
+const oneAtATime = serial();
+async function youtubeLoudness(id: string): Promise<number | undefined> {
+  const invoke = tauriInvoke;
+  if (!invoke) return undefined; // in the plain browser the page cannot be read
+  return oneAtATime(async () => parseYouTubeLoudness((await invoke('http_get', { url: `https://www.youtube.com/watch?v=${encodeURIComponent(id)}` })) as string));
+}
+function levelGain(id: string, source: 'youtube' | 'file'): { now: number; later?: Promise<number> } {
+  if (!settings.levelVolume) return { now: 1 };
+  const key = source === 'youtube' ? id : `f:${songKey(id)}`;
+  const known = loudness.get(key);
+  if (known != null) return { now: gainFactor(known, source) };
+  const later = loudness.ensure(key, source === 'youtube' ? () => youtubeLoudness(id) : () => oneAtATime(() => fileLoudness(id)), source === 'youtube' ? 6 * 3_600_000 : 10 * 60_000)
+    .then((v) => { if (v != null) log('info', 'mix.loudness', { videoId: id, source, lufs: v, gain: Math.round(gainFactor(v, source) * 100) / 100 }); return gainFactor(v, source); });
+  return { now: gainFactor(undefined, source), later };
+}
+const hybridDeps = { levelGain, localUrl: async (id: string) => (await library.urlFor(id)) ?? (id.startsWith('nas:') ? await nasMusic?.streamUrl(id) : undefined), canStream: netOk, preferYouTube: () => settings.projectorMode === 'video' };
 const decks: [HybridDeck, HybridDeck] = [new HybridDeck(mkAudio(), hybridDeps), new HybridDeck(mkAudio(), hybridDeps)];
 let queue = new Queue([]);
 let listId: string | undefined;
@@ -609,6 +627,8 @@ const ui: ReturnType<typeof buildConsole> & { selectById(id: string): void } = O
   setDeckVolume: (i, v) => { sliders[i] = v; },
   toggleDuck: (i) => { ducked[i] = !ducked[i]; },
   setSpotMode(m) { settings.spotMode = m; save(); syncAutoDuck(); },
+  levelVolume: () => settings.levelVolume,
+  setLevelVolume(on) { settings.levelVolume = on; save(); },
   setAdGuard(on) { settings.adGuard = on; save(); void (on ? guard.enable() : guard.disable()).then(syncAutoDuck); },
   setAdThreshold(t) { settings.adThreshold = t; save(); guard.setThreshold(t); },
   toggleLock(id) {
@@ -813,22 +833,42 @@ function levelsOf(id: string): Promise<number[] | null> {
   if (!p) {
     p = (async () => {
       const url = await library.urlFor(id);
-      if (!url) return null;
-      const data = await (await fetch(url)).arrayBuffer();
-      const pcm = await new OfflineAudioContext(1, 1, 22050).decodeAudioData(data);
-      const ch = pcm.getChannelData(0), per = Math.floor(pcm.sampleRate * 0.25);
-      const levels: number[] = [];
-      for (let i = 0; i + per <= ch.length; i += per) {
-        let e = 0;
-        for (let k = i; k < i + per; k += 4) e += ch[k] * ch[k];
-        levels.push(20 * Math.log10(Math.sqrt(e / (per / 4)) * 32768 + 1));
-      }
-      return levels;
+      return url ? decodeLevels(url) : null;
     })().catch((e) => { log('warn', 'audio.levels_failed', { videoId: id, error: String(e) }); return null; });
     levelCache.set(id, p);
     if (levelCache.size > 40) levelCache.delete(levelCache.keys().next().value!);
   }
   return p;
+}
+/**
+ * Loudness of a file, one value every 0.25 s. The whole file is decoded in memory, so a long one (a DJ set of an hour
+ * is hundreds of MB once decoded) is not measured: null.
+ */
+const MAX_DECODE_BYTES = 40 << 20;
+async function decodeLevels(url: string): Promise<number[] | null> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`risposta ${res.status}`);
+  if (Number(res.headers.get('content-length') ?? 0) > MAX_DECODE_BYTES) { void res.body?.cancel(); return null; }
+  const data = await res.arrayBuffer();
+  if (data.byteLength > MAX_DECODE_BYTES) return null;
+  const pcm = await new OfflineAudioContext(1, 1, 22050).decodeAudioData(data);
+  const ch = pcm.getChannelData(0), per = Math.floor(pcm.sampleRate * 0.25);
+  const levels: number[] = [];
+  for (let i = 0; i + per <= ch.length; i += per) {
+    let e = 0;
+    for (let k = i; k < i + per; k += 4) e += ch[k] * ch[k];
+    levels.push(20 * Math.log10(Math.sqrt(e / (per / 4)) * 32768 + 1));
+  }
+  return levels;
+}
+/** Loudness of a song as a file: the copy on this device, else (a NAS song) read once from the NAS. */
+async function fileLoudness(id: string): Promise<number | undefined> {
+  const local = await levelsOf(id);
+  if (local) return fileLufs(local);
+  if (!id.startsWith('nas:')) return undefined;
+  const url = await nasMusic?.streamUrl(id);
+  const l = url ? await decodeLevels(url) : null;
+  return l ? fileLufs(l) : undefined;
 }
 /** Mix cue points (music start/end) of a song with a file on the computer; measured in the background the first time. */
 const cueCache = new Map<string, Cues | null>();

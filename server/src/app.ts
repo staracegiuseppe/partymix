@@ -15,7 +15,7 @@ import { checkLink, loadStreamKey, sendFile, signLink } from './stream.ts';
 import { dsmLogin, type DsmOptions } from './dsm.ts';
 import { Cues } from './cues.ts';
 
-export const SERVER_VERSION = '1.2.0';
+export const SERVER_VERSION = '1.2.1';
 
 export type AppOptions = {
   /** The PartyMix folder on the NAS (music/, playlists/, database/…). */
@@ -479,7 +479,7 @@ export function createApp(opts: AppOptions): App {
   /** Server-Sent Events: a line for each change, so devices pull at once instead of polling. */
   r.on('GET', '/api/events', ({ req, res, url }) => {
     const d = auth(req, url, 'READ_LIBRARY');
-    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'x-accel-buffering': 'no' }); // behind DSM's reverse proxy (nginx): send each event at once
     res.write(`event: hello\ndata: ${JSON.stringify({ seq: currentSeq(db) })}\n\n`);
     listeners.set(res, d.user_id);
     const ping = setInterval(() => res.write(': ping\n\n'), 25_000);

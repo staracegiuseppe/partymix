@@ -126,7 +126,18 @@ export class SyncEngine {
   private localIdOf: (sha256: string) => string | undefined;
   private onTracks: (tracks: TrackDoc[]) => Promise<void> | void;
   private evHook?: (ev: ServerEvent) => void;
-  private viewOfLocal = (p: Playlist) => ({ meta: metaOf(p), entries: p.tracks.map((t) => entryOf(t, this.nasIdOf)) });
+  /** Playlists the NAS refused, with what was sent: not sent again until they change or the wait is over. */
+  private rejected = new Map<string, { sig: string; until: number; tries: number; msg: string }>();
+  /** Playlists that did not go in this run (shown to the user). */
+  private failed: string[] = [];
+  /** NAS changes that could not be taken in (the run went on past them): taken again at every run until they go. */
+  private retake = new Map<string, PlaylistSummary>();
+  private viewOfLocal = (p: Playlist) => {
+    // the NAS refuses two lines with the same id (the same song twice): the first one goes
+    const seen = new Set<string>();
+    const entries = p.tracks.map((t) => entryOf(t, this.nasIdOf)).filter((e) => !seen.has(e.entryId) && !!seen.add(e.entryId));
+    return { meta: metaOf(p), entries };
+  };
 
   constructor(store: PlaylistStore, kv: KV, api: SyncApi, deps: EngineDeps = {}) {
     this.store = store;
@@ -221,10 +232,13 @@ export class SyncEngine {
     this.st.error = undefined;
     this.changed();
     try {
+      this.failed = [];
       await this.push();
       await this.pull();
       this.st.connected = true;
       this.st.lastSync = this.now();
+      const failed = this.failed;
+      if (failed.length) this.st.error = `Non inviate al NAS: ${failed.slice(0, 2).join(' · ')}${failed.length > 2 ? ` (+${failed.length - 2})` : ''}`;
     } catch (e) {
       const err = e as SyncError;
       this.st.connected = !(err instanceof SyncError && err.offline);
@@ -237,13 +251,49 @@ export class SyncEngine {
   }
 
   // ---- this device → NAS ----
-  private async push() {
+  /**
+   * One playlist the NAS refuses must not stop the others, nor stop this device from getting what changed elsewhere:
+   * every playlist goes on its own, and only a NAS out of reach (or a device no longer allowed) stops the run.
+   */
+  private async push(): Promise<void> {
     for (const p of this.store.list()) {
       const base = this.bases.get(p.id);
-      if (!base) await this.create(p);
-      else await this.pushOps(p, base);
+      if (!base && this.conflicts.some((c) => c.kind === 'deleted' && c.playlistId === p.id)) continue; // waits for the user
+      if (base && !diff(base, this.viewOfLocal(p)).length) continue; // nothing to send
+      await this.guarded(p.id, p.name, this.sigOf(p), () => (base ? this.pushOps(p, base) : this.create(p)));
     }
-    for (const id of [...this.bases.keys()]) if (!this.store.get(id)) await this.pushDelete(id);
+    for (const id of [...this.bases.keys()]) if (!this.store.get(id)) await this.guarded(id, this.bases.get(id)!.meta.name, 'delete', () => this.pushDelete(id));
+  }
+
+  /**
+   * One playlist the NAS refuses must not stop the others, nor stop this device from getting what changed elsewhere:
+   * only a NAS out of reach (or a device no longer allowed) stops the run. A refused playlist is not sent again, as it
+   * is, before a wait that doubles every time (1 min … 1 h); changed here, it goes again at once.
+   */
+  private async guarded(id: string, name: string, sig: string, fn: () => Promise<void>): Promise<boolean> {
+    const r = this.rejected.get(id);
+    if (r && r.sig === sig && this.now() < r.until) { this.failed.push(`«${name}»: ${r.msg}`); return false; }
+    try {
+      await fn();
+      this.rejected.delete(id);
+      return true;
+    } catch (e) {
+      if (e instanceof SyncError && (e.offline || e.unauthorized)) throw e;
+      const msg = (e as Error).message;
+      const tries = r && r.sig === sig ? r.tries + 1 : 1;
+      this.rejected.set(id, { sig, tries, msg, until: this.now() + Math.min(3_600_000, 60_000 * 2 ** (tries - 1)) });
+      this.failed.push(`«${name}»: ${msg}`);
+      this.log(`sync: «${name}» non inviata: ${msg}`);
+      return false;
+    }
+  }
+
+  /** A short fingerprint of what this device would send for a playlist. */
+  private sigOf(p: Playlist): string {
+    const str = JSON.stringify(this.viewOfLocal(p));
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 0x01000193);
+    return `${str.length}:${(h >>> 0).toString(36)}`;
   }
 
   private async create(p: Playlist) {
@@ -255,7 +305,16 @@ export class SyncEngine {
     } catch (e) {
       if (!(e instanceof SyncError && e.code === 'EXISTS')) throw e;
       // created on the NAS with this id already (an earlier push that did not answer): merge on top of it
-      const doc = await this.api.playlist(p.id);
+      let doc: PlaylistDoc;
+      try { doc = await this.api.playlist(p.id); } catch (e2) {
+        if (!(e2 instanceof SyncError && e2.status === 404)) throw e2;
+        // the NAS has it, but deleted (by another device, before this one was linked): the user decides
+        if (!this.conflicts.some((c) => c.kind === 'deleted' && c.playlistId === p.id)) {
+          this.conflicts.push({ kind: 'deleted', playlistId: p.id, name: p.name, version: -1 });
+          await this.saveConflicts();
+        }
+        return;
+      }
       const base = baseOf({ ...doc, entries: [] });
       base.meta = { name: doc.name, sortOrder: doc.sortOrder };
       await this.saveBase(p.id, base);
@@ -318,11 +377,17 @@ export class SyncEngine {
   private async pull() {
     let more = true;
     const news: string[] = [];
+    const takeOne = async (s: PlaylistSummary) => {
+      const local = this.store.get(s.id);
+      if (await this.guarded(s.id, local?.name ?? s.name, local ? this.sigOf(local) : 'none', () => this.take(s, news))) this.retake.delete(s.id);
+      else this.retake.set(s.id, s);
+    };
+    for (const s of [...this.retake.values()]) await takeOne(s);
     while (more) {
       const ch = await this.api.changes(this.lastSeq);
       // songs first: a playlist that just got a NAS song finds it in the library
       if (ch.tracks?.length) { try { await this.onTracks(ch.tracks); } catch (e) { this.log(`brani del NAS non aggiornati: ${(e as Error).message}`); } }
-      for (const s of ch.playlists) await this.take(s, news);
+      for (const s of ch.playlists) await takeOne(s);
       await this.saveSeq(ch.seq);
       more = ch.more;
     }
@@ -405,7 +470,11 @@ export class SyncEngine {
     }
     // deleted elsewhere, changed here
     const local = this.store.get(c.playlistId);
-    if (choice === 'mine' && local) {
+    if (choice === 'mine' && local && c.version < 0) {
+      // its id is taken on the NAS by the deleted one: it goes back as a new playlist (same name and songs)
+      this.store.create(local.name, { tracks: local.tracks.map((t) => ({ ...t })), removed: local.removed, description: local.description, color: local.color, cover: local.cover, link: local.link, source: local.source });
+      this.store.remove(local.id);
+    } else if (choice === 'mine' && local) {
       const v = this.viewOfLocal(local);
       const doc = await this.api.putPlaylist(local.id, c.version, v.meta, v.entries);
       await this.saveBase(local.id, baseOf(doc));

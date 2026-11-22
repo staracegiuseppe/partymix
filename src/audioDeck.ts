@@ -65,6 +65,11 @@ type HybridDeps = {
   canStream: () => boolean;
   /** Projector on «Video YouTube»: sound and video both from YouTube (in sync), even when there is a local copy. */
   preferYouTube?: () => boolean;
+  /**
+   * «Volume uguale tra i brani»: the volume factor of a song as it plays here (YouTube or a file). `now` at once,
+   * `later` when its loudness is still being read; it is taken only if the song is not heard yet (no jump mid-song).
+   */
+  levelGain?: (id: string, source: 'youtube' | 'file') => { now: number; later?: Promise<number> };
 };
 
 /**
@@ -120,7 +125,28 @@ export class HybridDeck implements Deck {
   youtube(): YouTubeDeck | undefined { return this.yt; }
   playingLocal(): boolean { return this.mode === 'audio' && !!this.id; }
 
+  private gain = 1;
+  private gainTok = 0;
+  /** The song is loaded (and its source known): its own volume factor. */
+  private regain(id: string): void {
+    const tok = ++this.gainTok;
+    const g = this.deps.levelGain?.(id, this.mode === 'yt' ? 'youtube' : 'file');
+    this.gain = g?.now ?? 1;
+    this.on.setVolume(this.vol * this.gain);
+    void g?.later?.then((v) => {
+      if (tok !== this.gainTok || (this.playing && this.vol > 0)) return; // already heard: it keeps its volume
+      this.gain = v;
+      this.on.setVolume(this.vol * this.gain);
+    });
+  }
+
   async load(id: string): Promise<void> {
+    const mine = this.token + 1; // loadSource takes this token at once
+    await this.loadSource(id);
+    if (this.token === mine) this.regain(id); // a newer load (or a stop) came meanwhile: its song, its volume
+  }
+
+  private async loadSource(id: string): Promise<void> {
     const tok = ++this.token;
     this.id = id;
     // «Video YouTube» on the projector and the internet is there: the song plays from YouTube, sound and picture together
@@ -165,7 +191,7 @@ export class HybridDeck implements Deck {
   play(): void { this.playing = true; this.on.play(); }
   pause(): void { this.playing = false; this.on.pause(); }
   stop(): void { this.playing = false; this.token++; this.audio.stop(); this.yt?.stop(); }
-  setVolume(v: number): void { this.vol = v; this.on.setVolume(v); }
+  setVolume(v: number): void { this.vol = v; this.on.setVolume(v * this.gain); }
 
   /**
    * The projector mode changed (the user's rule):

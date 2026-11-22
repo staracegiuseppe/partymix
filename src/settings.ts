@@ -40,6 +40,8 @@ export type Settings = {
   showLyrics: boolean;
   /** The words of the line being sung light up one by one (karaoke style); off = the whole line stays plain. */
   lyricsHighlight: boolean;
+  /** «Volume uguale tra i brani»: every song at the same loudness (see loudness.ts). */
+  levelVolume: boolean;
   /** Minutes between automatic playlist refreshes; 0 = manual only. */
   playlistRefreshMin: number;
   /** Per-video lyrics alignment chosen by the user (karaoke and other versions). */
@@ -62,6 +64,7 @@ export const DEFAULT_SETTINGS: Settings = {
   locked: [],
   showLyrics: true,
   lyricsHighlight: true,
+  levelVolume: true,
   playlistRefreshMin: 5,
   lyricsAlign: {},
   nasUploadAuto: true,
@@ -116,6 +119,7 @@ export function loadSettings(store: Storage): Settings {
       spotMode: j.spotMode === 'duck' || j.spotMode === 'skip' ? j.spotMode : 'off',
       showLyrics: j.showLyrics !== false,
       lyricsHighlight: j.lyricsHighlight !== false,
+      levelVolume: j.levelVolume !== false,
       playlistRefreshMin: REFRESH_CHOICES.includes(j.playlistRefreshMin) ? j.playlistRefreshMin : DEFAULT_SETTINGS.playlistRefreshMin,
       lyricsAlign: cleanAlign(j.lyricsAlign),
       nasUploadAuto: j.nasUploadAuto !== false,

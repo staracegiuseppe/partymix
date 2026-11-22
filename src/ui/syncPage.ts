@@ -153,7 +153,7 @@ export function buildSyncUI(d: SyncUIDeps) {
         h('div', { class: 'row' }, btn(`Usa ${here}`, 'm-tonal', () => void eng.resolve(c, 'mine')), btn('Usa il NAS', 'm-outlined', () => void eng.resolve(c, 'theirs'))));
     }
     return h('div', { class: 'conflict' },
-      h('div', { class: 'conflict-t' }, `«${c.name}» è stata eliminata su un altro dispositivo, ma qui l’hai modificata.`),
+      h('div', { class: 'conflict-t' }, c.version < 0 ? `«${c.name}» è stata eliminata sul NAS da un altro dispositivo, ma qui c’è ancora.` : `«${c.name}» è stata eliminata su un altro dispositivo, ma qui l’hai modificata.`),
       h('div', { class: 'row' }, btn('Tienila (rimettila sul NAS)', 'm-tonal', () => void eng.resolve(c, 'mine')), btn('Elimina anche qui', 'm-outlined', () => void eng.resolve(c, 'theirs'))));
   }
 

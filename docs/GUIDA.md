@@ -142,6 +142,8 @@ Sul computer funzionano anche i tasti rapidi:
 - S: ferma l'automix.
 - ↑ e ↓ (frecce su e giù): volume.
 
+**Volume uguale tra i brani** (Impostazioni, acceso di serie): ogni brano suona allo stesso volume percepito, così tra una canzone e l'altra la musica non salta. Per i video PartyMix usa la misura del volume che YouTube pubblica per ogni video; per i file la misura da solo. Per poter alzare i brani più deboli, tutto suona un po' sotto il cursore del volume: se serve, alza l'amplificatore. Vale dal brano successivo.
+
 ## 5. La coda dei brani
 
 **Computer.** La lista di riproduzione, nella pagina Player, ha un inizio e una fine ben visibili: in cima «▲ Inizio · IN RIPRODUZIONE: nome · N brani», in fondo «■ Fine della lista di riproduzione · N brani» con **↑ Torna all'inizio**. Va bene anche con migliaia di brani.
@@ -290,6 +292,7 @@ Le pubblicità che YouTube inserisce nel suo player non si possono saltare né n
 - **Linux: i brani non partono o il video è nero:** mancano i plugin di GStreamer (Fedora: `gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-plugin-openh264`; Ubuntu/Debian: `gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav`).
 - **Android: sulla TV vedo il telefono invece del proiettore:** il dispositivo copia lo schermo ma non riceve uno «schermo wireless». Prova un'app ricevitore Miracast sulla TV, oppure un cavo HDMI.
 - **Android: la musica si ferma con lo schermo spento.** Dalla versione 1.6.2 la musica continua a schermo spento (provato su un Realme con Android 16), e la notifica «La festa continua anche a schermo spento» tiene viva l'app. Se il tuo telefono la ferma lo stesso, togli PartyMix dall'ottimizzazione della batteria nelle impostazioni di Android.
+- **NAS: una playlist non arriva sugli altri dispositivi:** apri Impostazioni › NAS e guarda «Ultima sincronizzazione». Se c'è una riga «Da decidere» (per esempio una playlist eliminata su un altro dispositivo ma ancora qui), scegli cosa fare: finché non decidi, solo quella playlist resta ferma, le altre vanno avanti.
 - Per tutto il resto scrivimi da **💬 Commenti**.
 
 ## 11. Il NAS di casa

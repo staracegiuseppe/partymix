@@ -295,6 +295,119 @@ describe('sync engine: conflitti', () => {
     expect(titles(pc.store.get(p.id))).toEqual(['Song A', 'Song B']);
   });
 
+  it('telefono ricollegato con una playlist eliminata sul NAS: non blocca la sync, riceve le altre e chiede cosa fare', async () => {
+    const nas = new FakeNas();
+    const pc = device(nas, 'PC'), phone = device(nas, 'Telefono', { events: false });
+    await pc.engine.start();
+    const vecchia = pc.store.create('Justdance', { tracks: [A] });
+    await pc.engine.syncNow();
+    pc.store.remove(vecchia.id);
+    await pc.engine.syncNow();
+    expect(nas.docs.get(vecchia.id)!.deleted).toBe(true);
+    const nuova = pc.store.create('Cantautori', { tracks: [B, C] });
+    await pc.engine.syncNow();
+    // the phone still has the old one (same id) and was linked again: no memory of the NAS
+    phone.store.upsert({ ...vecchia, tracks: [A, D] });
+    const mia = phone.store.create('Solo telefono', { tracks: [E] });
+    await phone.engine.start(); await phone.engine.syncNow();
+    expect(titles(phone.store.get(nuova.id))).toEqual(['Song B', 'Song C']);
+    expect(nas.docs.get(mia.id)?.name).toBe('Solo telefono');
+    expect(phone.engine.status().error).toBeUndefined();
+    const c = phone.engine.status().conflicts;
+    expect(c).toHaveLength(1);
+    expect(c[0]).toMatchObject({ kind: 'deleted', name: 'Justdance' });
+    await phone.engine.resolve(c[0], 'mine');
+    await tick(); await phone.engine.syncNow();
+    const back = [...nas.docs.values()].find((d) => d.name === 'Justdance' && !d.deleted);
+    expect(back?.entries.map((e) => e.title)).toEqual(['Song A', 'Song D']);
+    await pc.engine.syncNow();
+    expect(titles(pc.store.get(back!.id))).toEqual(['Song A', 'Song D']);
+  });
+
+  it('una playlist rifiutata dal NAS non ferma le altre e il motivo si vede', async () => {
+    const nas = new FakeNas();
+    const pc = device(nas, 'PC'), phone = device(nas, 'Telefono', { events: false });
+    await pc.engine.start(); await phone.engine.start();
+    const ok = pc.store.create('Arriva', { tracks: [A] });
+    await pc.engine.syncNow();
+    phone.store.create('Rotta', { tracks: [B] });
+    const orig = nas.createPlaylist.bind(nas);
+    nas.createPlaylist = async (id, meta, entries) => { if (meta.name === 'Rotta') throw new SyncError(400, 'BAD_REQUEST', 'riga non valida'); return orig(id, meta, entries); };
+    await phone.engine.syncNow();
+    expect(phone.store.get(ok.id)?.name).toBe('Arriva');
+    expect(phone.engine.status().connected).toBe(true);
+    expect(phone.engine.status().error).toContain('Rotta');
+  });
+
+  it('cambiata su entrambi i lati e rifiutata dal NAS: la ricezione delle altre va avanti', async () => {
+    const nas = new FakeNas();
+    const pc = device(nas, 'PC'), phone = device(nas, 'Telefono', { events: false });
+    await pc.engine.start(); await phone.engine.start();
+    const p = pc.store.create('Rotta', { tracks: [A] });
+    await pc.engine.syncNow(); await phone.engine.syncNow();
+    pc.store.addTracks(p.id, [B]); await pc.engine.syncNow();
+    phone.store.addTracks(p.id, [C]);
+    const orig = nas.ops.bind(nas);
+    nas.ops = async (id, v, ops) => { if (id === p.id) throw new SyncError(400, 'BAD_REQUEST', 'riga non valida'); return orig(id, v, ops); };
+    const q = pc.store.create('Dopo', { tracks: [D] }); await pc.engine.syncNow();
+    await phone.engine.syncNow();
+    expect(phone.store.get(q.id)?.name).toBe('Dopo');
+    expect(phone.engine.status().error).toContain('Rotta');
+    // the NAS takes it again: the change of the PC and the one of the phone both arrive
+    nas.ops = orig;
+    clock += 3_600_001;
+    await phone.engine.syncNow();
+    expect(titles(phone.store.get(p.id))?.sort()).toEqual(['Song A', 'Song B', 'Song C']);
+    expect(phone.engine.status().error).toBeUndefined();
+  });
+
+  it('una playlist rifiutata non viene re-inviata a ogni giro: attesa crescente, subito se cambia', async () => {
+    const nas = new FakeNas();
+    const phone = device(nas, 'Telefono');
+    await phone.engine.start();
+    const p = phone.store.create('Rotta', { tracks: [A] });
+    let tries = 0;
+    nas.createPlaylist = async () => { tries++; throw new SyncError(400, 'BAD_REQUEST', 'riga non valida'); };
+    await tick(); await phone.engine.syncNow();
+    await phone.engine.syncNow(); await phone.engine.syncNow();
+    expect(tries).toBe(1);
+    expect(phone.engine.status().error).toContain('Rotta');
+    clock += 60_001;
+    await phone.engine.syncNow();
+    expect(tries).toBe(2);
+    await phone.engine.syncNow();
+    expect(tries).toBe(2); // now 2 minutes
+    phone.store.addTracks(p.id, [B]);
+    await tick(); await phone.engine.syncNow();
+    expect(tries).toBe(3); // changed: at once
+  });
+
+  it('una modifica del NAS che non si riesce a leggere viene ripresa al giro dopo', async () => {
+    const nas = new FakeNas();
+    const pc = device(nas, 'PC'), phone = device(nas, 'Telefono', { events: false });
+    await pc.engine.start(); await phone.engine.start();
+    const p = pc.store.create('Lenta', { tracks: [A] });
+    await pc.engine.syncNow();
+    const orig = nas.playlist.bind(nas);
+    nas.playlist = async () => { throw new SyncError(503, 'BUSY', 'NAS occupato'); };
+    await phone.engine.syncNow();
+    expect(phone.store.get(p.id)).toBeUndefined();
+    nas.playlist = orig;
+    clock += 60_001;
+    await phone.engine.syncNow();
+    expect(titles(phone.store.get(p.id))).toEqual(['Song A']);
+  });
+
+  it('lo stesso brano due volte nella playlist: va sul NAS una volta sola', async () => {
+    const nas = new FakeNas();
+    const phone = device(nas, 'Telefono');
+    await phone.engine.start();
+    const p = phone.store.create('Doppia');
+    phone.store.upsert({ ...phone.store.get(p.id)!, tracks: [A, B, A] });
+    await tick(); await phone.engine.syncNow();
+    expect(nas.docs.get(p.id)?.entries.map((e) => e.title)).toEqual(['Song A', 'Song B']);
+  });
+
   it('eliminata sul PC, intatta sul telefono: sparisce anche lì', async () => {
     const nas = new FakeNas();
     const pc = device(nas, 'PC'), phone = device(nas, 'Telefono');

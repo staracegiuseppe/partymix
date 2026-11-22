@@ -56,6 +56,9 @@ export type Actions = {
   markWelcomed(): void;
   retryKaraoke(): void;
   setAdGuard(on: boolean): void;
+  /** «Volume uguale tra i brani». */
+  levelVolume(): boolean;
+  setLevelVolume(on: boolean): void;
   setAdThreshold(t: number): void;
   setSpotMode(m: 'off' | 'duck' | 'skip'): void;
   setKaraokeAuto(on: boolean): void;
@@ -294,6 +297,11 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
   const karaokePanel = h('section', { class: 'panel' }, h('h3', {}, 'Karaoke automatico'),
     h('div', { class: 'artist wrap' }, 'In sottofondo cerco i testi di tutti i brani, così sono pronti quando partono. «a tempo» = tempi esatti; «stimato» = testo trovato ma tempi calcolati: regolali con i due tasti ① ② ' + (md ? 'in «Proiettore › Testo da cantare».' : 'della barra in basso.')),
     kBar, kText, h('div', { class: 'row' }, kRetry), h('label', { class: 'row' }, kAuto, 'Cerca i testi in automatico'));
+  const lvOn = h('input', { type: 'checkbox', 'aria-label': 'Volume uguale tra i brani', onChange: () => a.setLevelVolume(lvOn.checked) }) as HTMLInputElement;
+  lvOn.checked = a.levelVolume();
+  const levelPanel = h('section', { class: 'panel' }, h('h3', {}, 'Volume uguale tra i brani'),
+    h('div', { class: 'artist wrap' }, 'Ogni brano suona allo stesso volume percepito, così tra una canzone e l’altra la musica non sale e non scende. Per i video uso la misura che pubblica YouTube, per i file la misuro io. Per poter alzare i brani più deboli tutto suona un po’ sotto il cursore del volume: alza l’amplificatore se serve. Vale dal brano successivo.'),
+    h('label', { class: 'row' }, lvOn, 'Volume uguale tra i brani'));
   const adOn = h('input', { type: 'checkbox', 'aria-label': 'Abbassa il volume durante le pubblicità', onChange: () => a.setAdGuard(adOn.checked) });
   const adMeter = h('div', { class: 'kbar' }, h('i'));
   const adText = h('div', { class: 'status' });
@@ -310,7 +318,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
   const adPanel = h('section', { class: 'panel' }, h('h3', {}, 'Pubblicità'), adListen,
     h('div', { class: 'artist wrap' }, 'Gli spot nelle playlist sono clip brevi, le canzoni durano minuti: un brano sotto i 75 secondi lo considero uno spot. Funziona anche senza ascoltare l’audio e anche quando sotto la voce c’è solo musica.'),
     h('div', { class: 'row' }, h('label', {}, 'Brani brevi (spot)'), adSpot));
-  const side = h('div', { class: 'side' }, warnPanel, projPanel, adPanel, karaokePanel, lyricsPanel,
+  const side = h('div', { class: 'side' }, warnPanel, projPanel, levelPanel, adPanel, karaokePanel, lyricsPanel,
     histPanel, probPanel,
     h('section', { class: 'panel' }, unav));
 
@@ -508,7 +516,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
         { id: 'list', label: 'Playlist', icon: 'queue', body: [loadRow, warnPanel, queuePanel] },
         { id: 'now', label: 'In onda', icon: 'nowPlaying', body: [emptyNow, h('div', { class: 'm-now' }, dA.card, mixer, dB.card)] },
         { id: 'proj', label: 'Proiettore', icon: 'cast', body: [projPanel, syncBar, lyricsPanel] },
-        { id: 'more', label: 'Altro', icon: 'tune', body: [karaokePanel, adPanel, helpPanel, histPanel, probPanel, h('section', { class: 'panel' }, unav)] },
+        { id: 'more', label: 'Altro', icon: 'tune', body: [levelPanel, karaokePanel, adPanel, helpPanel, histPanel, probPanel, h('section', { class: 'panel' }, unav)] },
       ],
     });
   } else {
@@ -589,7 +597,7 @@ export function buildConsole(root: HTMLElement, a: Actions, opts: { hasMusic?: b
       { target: () => helpDesk, title: 'Aiuto', text: 'Qui ritrovi questo tutorial, la configurazione guidata e i commenti. Buona festa!' },
     ];
     const settingsGrid = h('div', { class: 'settings-page' }, helpDesk,
-      h('div', { class: 'settings-grid' }, refreshCard, desk?.settingsCard ?? null, karaokePanel, adPanel, histPanel, probPanel, h('section', { class: 'panel' }, h('h3', {}, 'Limiti di YouTube'), unav)));
+      h('div', { class: 'settings-grid' }, refreshCard, desk?.settingsCard ?? null, levelPanel, karaokePanel, adPanel, histPanel, probPanel, h('section', { class: 'panel' }, h('h3', {}, 'Limiti di YouTube'), unav)));
     shell = buildShell(root, {
       title: h('div', { class: 'logo' }, 'Party', h('b', {}, 'Mix')),
       actions: [pill, heartTop, castTop],
