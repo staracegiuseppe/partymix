@@ -71,6 +71,7 @@ class MainActivity : TauriActivity() {
       requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
     }
     PartyService.start(this)
+    PartyMedia.session(this) // Android Auto and the media controls of the phone
     cast = CastProjector(this, ALWAYS_VISIBLE)
   }
 
@@ -90,6 +91,10 @@ class MainActivity : TauriActivity() {
   override fun onWebViewCreate(webView: WebView) {
     this.webView = webView
     webView.addJavascriptInterface(Bridge(), "PartyMixAndroid")
+    // Android Auto: the car's commands reach the page as `partymix-auto` events (src/androidAuto.ts)
+    PartyMedia.attach { json ->
+      webView.post { webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('partymix-auto',{detail:$json}))", null) }
+    }
     ViewCompat.setOnApplyWindowInsetsListener(webView) { v, insets ->
       val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
       val d = resources.displayMetrics.density
@@ -142,6 +147,7 @@ class MainActivity : TauriActivity() {
 
   override fun onDestroy() {
     cast?.destroy()
+    PartyMedia.detach()
     if (isFinishing) stopService(Intent(this, PartyService::class.java))
     super.onDestroy()
   }
@@ -206,6 +212,16 @@ class MainActivity : TauriActivity() {
     fun openAppSettings() {
       runOnUiThread { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName"))) }
     }
+
+    /** Android Auto: the playlists (id, name, count), the songs of one asked by the car, the song on air. */
+    @JavascriptInterface
+    fun autoPlaylists(json: String) { PartyMedia.setPlaylists(json.take(500_000)) }
+
+    @JavascriptInterface
+    fun autoTracks(req: Int, json: String) { PartyMedia.tracksAnswer(req, json.take(2_000_000)) }
+
+    @JavascriptInterface
+    fun autoNow(json: String) { PartyMedia.setNow(json.take(10_000)) }
 
     @JavascriptInterface
     fun insets(): String = insetsJson

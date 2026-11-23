@@ -1,5 +1,6 @@
 import { isIOSApp, isTablet } from './platform';
 import { canCast, castMessage, castState, ensureLocalNetwork, isAndroidApp, onSharedLink, openAppSettings } from './androidBridge';
+import { nowOf, startAndroidAuto } from './androidAuto';
 import './ui/style.css';
 import './ui/material.css';
 import './ui/desktop.css';
@@ -325,6 +326,21 @@ function playTrack(t: Track) {
 }
 
 /**
+ * «Solo questo brano»: the queue becomes this song alone (no playlist, nothing after it). It plays once and the
+ * music stops, or plays again and again with «Ripeti».
+ */
+function playOnly(t: Track) {
+  if (!netOk() && !library.isOffline(t.videoId)) { ui.setStatus('Sei offline: questo brano è solo online. Suonano i brani ✓ della libreria.', true); return; }
+  setQueue([{ ...t }]);
+  loadedId = undefined;
+  if (!am) return;
+  queue.setCurrent(t.videoId);
+  am.start();
+  showSlots();
+  ui.setStatus(`▶ Solo «${titleOf(t)}»: dopo non suona nient’altro${settings.repeat !== 'off' ? ' (con «Ripeti» lo risuona)' : ''}.`);
+}
+
+/**
  * «Metti in coda»: the song goes at the end of the play queue, or right after the song on air (`next`).
  * Like «Riproduci», it joins the queue only: the playlist itself does not change.
  */
@@ -502,6 +518,7 @@ const desktopPages = desktopUI ? (parts: DesktopParts) => (libUI = buildDesktopP
     showSlots();
   },
   playTrack,
+  playOnly,
   enqueue,
   trackById,
   search: (q, page, max) => searchYouTube(q, { apiKey: settings.ytApiKey, getText: hasNativeDisplays() ? nativeGet : undefined, pageToken: page, max }),
@@ -1230,6 +1247,33 @@ window.addEventListener('online', onNetChange);
 window.addEventListener('offline', onNetChange);
 window.setInterval(() => { if (navigator.onLine && !ytReady) void bootYouTube(); }, 60_000);
 
+/** Android Auto: the car browses the playlists and drives the automix; it is told the song on air. */
+function connectAndroidAuto() {
+  startAndroidAuto({
+    state: () => am?.state() ?? 'idle',
+    hasQueue: () => !!am && queue.length() > 0,
+    currentPlaylist: () => plStore.get(settings.currentPlaylistId)?.id ?? plStore.list(settings.playlistSort)[0]?.id,
+    start: () => am?.start(),
+    resume: () => am?.resume(),
+    pause: () => am?.pause(),
+    next: () => am?.next(),
+    prev: () => {
+      const i = queue.currentIndex();
+      const t = i > 0 ? queue.all()[i - 1] : undefined;
+      if (t && am && t.status !== 'unplayable') am.playNow(t.videoId);
+    },
+    playPlaylist,
+    playlists: () => plStore.list(settings.playlistSort),
+    playlist: (id) => plStore.get(id),
+    onPlaylistsChange: (fn) => plStore.onChange(fn),
+    now: () => {
+      const st = am?.state() ?? 'idle';
+      const d = am && st !== 'idle' ? decks[am.activeDeck() as 0 | 1] : undefined;
+      return nowOf(st, queue.current(), d?.position() ?? 0, d?.duration() ?? 0, plStore.get(loadedId)?.name ?? '');
+    },
+  });
+}
+
 (async () => {
   // 1. the library and the playlists (from the disk: no network needed)
   try {
@@ -1245,6 +1289,7 @@ window.setInterval(() => { if (navigator.onLine && !ytReady) void bootYouTube();
     ui.setStatus('Non riesco a leggere le playlist salvate: riavvia l’app. Se succede ancora, scrivimi da «💬 Commenti».', true);
   }
   showSlots();
+  if (isAndroidApp()) connectAndroidAuto();
   const current = plStore.get(settings.currentPlaylistId);
   if (current) ui.linkInput.value = current.link ?? '';
   const openedSaved = openSaved(settings.currentPlaylistId);

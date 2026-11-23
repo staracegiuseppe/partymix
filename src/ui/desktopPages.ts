@@ -37,6 +37,8 @@ export type PagesDeps = {
   edited(id: string): void;
   deleted(id: string): void;
   playTrack(t: Track): void;
+  /** This song alone: the queue is emptied, nothing plays after it. */
+  playOnly(t: Track): void;
   enqueue(t: Track, next: boolean): void;
   trackById(id: string): Track | undefined;
   search(q: string, pageToken?: string, max?: number): Promise<SearchResult>;
@@ -259,6 +261,7 @@ export function buildDesktopPages(d: PagesDeps) {
     const saveNas = () => { const m = d.sync?.nasMusic?.(); if (!m) { d.status('Collega il NAS in Impostazioni → NAS per salvare i suoi brani.', true); return; } m.save([id]).then(() => d.status(`⬇ Salvo «${t.title}» su questo computer.`), (err) => d.status((err as Error).message, true)); };
     const items: SheetItem[] = [
       { label: 'Riproduci adesso', icon: 'play', disabled: !playable, run: () => d.playTrack(t) },
+      { label: 'Solo questo brano (nient’altro dopo)', icon: 'play', disabled: !playable, run: () => d.playOnly(t) },
       { label: 'Suona dopo quello in onda', icon: 'playNext', disabled: !playable, run: () => d.enqueue(t, true) },
       { label: 'Metti in coda (in fondo)', icon: 'queue', disabled: !playable, run: () => d.enqueue(t, false) },
       { label: 'Aggiungi a playlist…', icon: 'add', run: () => pickPlaylist([id]) },

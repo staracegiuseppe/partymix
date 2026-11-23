@@ -466,6 +466,33 @@ describe('playNow (double click on a queue track)', () => {
     expect(s.am.state()).toBe('playing');
     expect(s.queue.current()?.videoId).toBe('A');
   });
+  it('in pausa: il brano scelto parte subito (non resta fermo)', async () => {
+    const s = setup({ ids: ['A', 'B', 'C', 'D'] });
+    s.am.start(); await s.clock.advance(1_000);
+    s.am.pause(); await s.clock.advance(500);
+    s.am.playNow('C'); await s.clock.advance(200);
+    expect(s.am.state()).toBe('playing');
+    expect(s.queue.current()?.videoId).toBe('C');
+    expect(s.decks.some((d) => d.playing && d.loads.at(-1) === 'C')).toBe(true);
+    expect(s.decks.filter((d) => d.playing)).toHaveLength(1); // the paused song does not come back
+  });
+  it('in pausa durante una transizione: parte solo il brano scelto', async () => {
+    const s = setup({ ids: ['A', 'B', 'C', 'D'] });
+    s.am.start(); await s.clock.advance(1_000);
+    s.am.mixNow(); await s.clock.advance(1_000);
+    s.am.pause();
+    s.am.playNow('D'); await s.clock.advance(200);
+    expect(s.am.state()).toBe('playing');
+    expect(s.queue.current()?.videoId).toBe('D');
+    expect(s.decks.filter((d) => d.playing)).toHaveLength(1);
+  });
+  it('mentre il primo brano sta ancora caricando: vince quello scelto', async () => {
+    const s = setup({ ids: ['A', 'B', 'C'] });
+    s.am.start();
+    s.am.playNow('C'); await s.clock.advance(500);
+    expect(s.am.state()).toBe('playing');
+    expect(s.queue.current()?.videoId).toBe('C');
+  });
   it('during a crossfade: finishes it first, then fades to the picked track', async () => {
     const s = setup({ ids: ['A', 'B', 'C', 'D'] });
     s.am.start(); await s.clock.advance(1_000);

@@ -144,6 +144,17 @@ Sul computer funzionano anche i tasti rapidi:
 
 **Volume uguale tra i brani** (Impostazioni, acceso di serie): ogni brano suona allo stesso volume percepito, così tra una canzone e l'altra la musica non salta. Per i video PartyMix usa la misura del volume che YouTube pubblica per ogni video; per i file la misura da solo. Per poter alzare i brani più deboli, tutto suona un po' sotto il cursore del volume: se serve, alza l'amplificatore. Vale dal brano successivo.
 
+**Un solo brano, senza playlist.** Nel menu **⋮** di un brano (in Cerca, Libreria o in una playlist) scegli **«Solo questo brano (nient'altro dopo)»**: la coda diventa solo quel brano, suona una volta e poi la musica si ferma. Con **Ripeti** acceso risuona lo stesso brano, e nessun altro. «Riproduci» invece lo mette in coda e dopo continua la playlist.
+
+### Android Auto
+
+In auto, con il telefono collegato ad Android Auto, PartyMix compare tra le app musicali. Sullo schermo dell'auto vedi le tue playlist e i loro brani, il brano in onda con la copertina, e i comandi **play, pausa, successivo e precedente** (anche dai tasti del volante). Tocchi una playlist o un brano e parte. È una versione «light»: la musica la suona sempre l'app sul telefono, che deve restare aperta (anche in secondo piano); il mix, il proiettore e le impostazioni restano sul telefono.
+
+Android Auto mostra solo le app scaricate dal Play Store. Se hai installato PartyMix dall'APK, la prima volta abilitalo così:
+1. Apri le impostazioni di Android Auto sul telefono e tocca più volte **Versione** finché non si attivano le impostazioni sviluppatore.
+2. Dal menu **⋮ › Impostazioni sviluppatore**, attiva **Fonti sconosciute**.
+3. Ricollega il telefono all'auto.
+
 ## 5. La coda dei brani
 
 **Computer.** La lista di riproduzione, nella pagina Player, ha un inizio e una fine ben visibili: in cima «▲ Inizio · IN RIPRODUZIONE: nome · N brani», in fondo «■ Fine della lista di riproduzione · N brani» con **↑ Torna all'inizio**. Va bene anche con migliaia di brani.

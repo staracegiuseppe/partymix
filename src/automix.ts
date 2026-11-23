@@ -53,6 +53,8 @@ const SPARE_TIMEOUT_MS = 12000;
 export class Automix {
   private st: AutomixState = 'idle';
   private pausedFrom: AutomixState = 'idle';
+  /** The first song is still loading (startCurrent): nothing is heard yet. */
+  private starting = false;
   private active: DeckIdx = 0;
   private mixIn: DeckIdx = 1;
   private nextState: NextState = 'none';
@@ -151,6 +153,11 @@ export class Automix {
 
   private async startCurrent(tok: number): Promise<void> {
     this.st = 'preparing';
+    this.starting = true;
+    try { await this.startLoop(tok); } finally { if (tok === this.token) this.starting = false; }
+  }
+
+  private async startLoop(tok: number): Promise<void> {
     for (;;) {
       const cur = this.d.queue.current();
       if (!cur) { this.goIdle('queue.empty'); return; }
@@ -228,7 +235,20 @@ export class Automix {
   playNow(videoId: string): void {
     const q = this.d.queue;
     if (this.st === 'idle') { if (q.setCurrent(videoId)) this.start(); return; }
-    if (this.st === 'paused' || this.st === 'preparing') return;
+    // paused, or the first song still loading: nothing is heard, so the picked song simply starts (no fade over
+    // a silent deck, and the paused song does not come back)
+    if (this.st === 'paused' || (this.st === 'preparing' && this.starting)) {
+      if (!q.setCurrent(videoId)) return;
+      const tok = ++this.token;
+      this.clearTick();
+      this.d.decks.forEach((k) => { k.stop(); k.setVolume(0); });
+      this.applied = [-1, -1];
+      this.resetNext();
+      this.mixIn = (1 - this.active) as DeckIdx;
+      this.d.log('info', 'automix.play_now_from_pause', { videoId });
+      void this.startCurrent(tok);
+      return;
+    }
     if (this.st === 'crossfading') this.finishMix();
     if (q.current()?.videoId === videoId || !q.cueNext(videoId)) return;
     this.resetNext();

@@ -16,7 +16,7 @@ function setup(extra: Partial<PagesDeps> = {}) {
   const party = playlists.create('Festa di Marco', { tracks: [tr('aaaaaaaaaaa', 'Blinding Lights', 'The Weeknd'), tr('bbbbbbbbbbb', 'Volare', 'Modugno')] });
   playlists.create('Karaoke', { tracks: [tr('aaaaaaaaaaa', 'Blinding Lights', 'The Weeknd'), ...Array.from({ length: 3000 }, (_, i) => tr(`k${String(i).padStart(10, '0')}`, `Canzone ${i}`, 'Vari'))] });
   library.addOnline(tr('ccccccccccc', 'Solo in libreria', 'X'));
-  const fns = { playTrack: vi.fn(), enqueue: vi.fn(), playPlaylist: vi.fn(), menu: vi.fn(), go: vi.fn(), status: vi.fn(), edited: vi.fn(), deleted: vi.fn(), loadLink: vi.fn(), search: vi.fn(async () => ({ hits: [{ videoId: 'ddddddddddd', title: 'Blinding Lights (Live)', channel: 'TheWeekndVEVO', seconds: 260, thumb: 't.jpg', available: true }, { videoId: 'eeeeeeeeeee', title: 'Bloccato', channel: 'X', seconds: 100, thumb: 'u.jpg', available: false, reason: 'Video privato' }], via: 'api' as const })) };
+  const fns = { playTrack: vi.fn(), playOnly: vi.fn(), enqueue: vi.fn(), playPlaylist: vi.fn(), menu: vi.fn(), go: vi.fn(), status: vi.fn(), edited: vi.fn(), deleted: vi.fn(), loadLink: vi.fn(), search: vi.fn(async () => ({ hits: [{ videoId: 'ddddddddddd', title: 'Blinding Lights (Live)', channel: 'TheWeekndVEVO', seconds: 260, thumb: 't.jpg', available: true }, { videoId: 'eeeeeeeeeee', title: 'Bloccato', channel: 'X', seconds: 100, thumb: 'u.jpg', available: false, reason: 'Video privato' }], via: 'api' as const })) };
   const deps: PagesDeps = {
     playlists, library, playingId: () => party.id, sort: () => 'custom', setSort: vi.fn(), apiKey: () => '', setApiKey: vi.fn(), online: () => true,
     trackById: () => undefined, ...fns, ...extra,
@@ -91,6 +91,8 @@ describe('🔎 Cerca page: results right under the field', () => {
     rows[0].querySelector<HTMLButtonElement>('.more')!.click();
     const items = (fns.menu.mock.calls.at(-1) as [string, string, { label: string; run(): void }[]])[2];
     expect(items.map((i) => i.label)).toEqual(expect.arrayContaining(['Riproduci adesso', 'Suona dopo quello in onda', 'Metti in coda (in fondo)', 'Aggiungi a playlist…']));
+    items.find((i) => i.label.startsWith('Solo questo brano'))!.run();
+    expect(fns.playOnly).toHaveBeenCalledWith(expect.objectContaining({ videoId: 'ddddddddddd' }));
     items.find((i) => i.label === 'Metti in coda (in fondo)')!.run();
     expect(fns.enqueue).toHaveBeenCalledWith(expect.objectContaining({ videoId: 'ddddddddddd' }), false);
   });
@@ -121,7 +123,7 @@ describe('🎧 Libreria page', () => {
   it('shows an empty state with Importa musica / Cerca musica when empty', () => {
     document.body.innerHTML = '';
     const kv = new MemoryKV();
-    const ui = buildDesktopPages({ playlists: new PlaylistStore(kv), library: new MusicLibrary({ kv, blobs: new KvBlobStore(kv) }), playingId: () => undefined, sort: () => 'custom', setSort: vi.fn(), apiKey: () => '', setApiKey: vi.fn(), online: () => true, playPlaylist: vi.fn(), loadLink: vi.fn(), edited: vi.fn(), deleted: vi.fn(), playTrack: vi.fn(), enqueue: vi.fn(), trackById: () => undefined, search: vi.fn(), status: vi.fn(), menu: vi.fn(), go: vi.fn() });
+    const ui = buildDesktopPages({ playlists: new PlaylistStore(kv), library: new MusicLibrary({ kv, blobs: new KvBlobStore(kv) }), playingId: () => undefined, sort: () => 'custom', setSort: vi.fn(), apiKey: () => '', setApiKey: vi.fn(), online: () => true, playPlaylist: vi.fn(), loadLink: vi.fn(), edited: vi.fn(), deleted: vi.fn(), playTrack: vi.fn(), playOnly: vi.fn(), enqueue: vi.fn(), trackById: () => undefined, search: vi.fn(), status: vi.fn(), menu: vi.fn(), go: vi.fn() });
     const es = ui.pages.library.querySelector('.empty-state')!;
     expect(es.classList.contains('hidden')).toBe(false);
     expect(es.textContent).toContain('La tua libreria è vuota');

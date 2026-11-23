@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Microphone for the projector shapes -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -47,6 +48,19 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <!-- Android Auto: the playlists and the controls in the car (the music still plays in the app) -->
+        <service
+          android:name=".AutoService"
+          android:exported="true"
+          tools:ignore="ExportedService">
+          <intent-filter>
+            <action android:name="android.media.browse.MediaBrowserService" />
+          </intent-filter>
+        </service>
+        <meta-data
+          android:name="com.google.android.gms.car.application"
+          android:resource="@xml/automotive_app_desc" />
 
         <service
           android:name=".PartyService"

@@ -2789,7 +2789,7 @@ dependencies = [
 
 [[package]]
 name = "partymix-ai"
-version = "1.9.1"
+version = "1.9.2"
 dependencies = [
  "cpal",
  "gtk",
